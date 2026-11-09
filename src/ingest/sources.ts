@@ -41,8 +41,10 @@ export interface SourceDef {
   /**
    * How to read the unpacked source. Absent: its `.usfm` files. `sblgnt-xml`:
    * upstream SBLGNT's per-book XML under `path`, converted by sblgnt-xml.ts.
+   * `oshb-xml`: upstream OSHB's per-book OSIS under `path`, converted with its
+   * qere readings by oshb-xml.ts.
    */
-  readonly format?: { readonly kind: 'sblgnt-xml'; readonly path: string };
+  readonly format?: { readonly kind: 'sblgnt-xml' | 'oshb-xml'; readonly path: string };
   /**
    * Opt-in to the versified-\d → \qd grammar-gap rewrite (parse.ts). Only set
    * after eyeballing the source's \d+\v constructs — parse fails loudly when
@@ -95,11 +97,13 @@ export const SOURCES: readonly SourceDef[] = [
       scheme: 'org',
       edition: '',
     },
-    // OSHB's WLC. Its \w strong and x-morph attributes (OSHB data, CC BY 4.0)
-    // are counted and dropped by normalize.ts, so only the text is stored.
-    url: 'https://ebible.org/Scriptures/hboWLC_usfm.zip',
-    sha256: '464225e119973cb7e12a30777c2d5e7f543f083529b00b909d620c617dbd1df7',
-    dir: 'wlc',
+    // Upstream OSHB, not ebible's hboWLC: ebible's copy dropped every qere and
+    // leaked markup into 11 words (ADR-0007). The converter keeps the text and
+    // the qere words' ids, and drops OSHB's lemma and morphology (CC BY 4.0).
+    url: 'https://github.com/openscriptures/morphhb/archive/3d15126fb1ef74867fc1434be1942e837932691f.zip',
+    sha256: 'f56c150708b5d74719ecb709c712c31eae9855bca7b111fd82ec91b5d177b4c7',
+    dir: 'wlc-oshb',
+    format: { kind: 'oshb-xml', path: 'morphhb-3d15126fb1ef74867fc1434be1942e837932691f/wlc' },
     books: sectionBookCodes(PROTESTANT, 'ot'),
     rewriteVersifiedD: false,
   },
@@ -212,6 +216,13 @@ export const SOURCES: readonly SourceDef[] = [
     rewriteVersifiedD: true, // 150 Psalm titles are \d holding \v 1, as lxx numbers them (parse.ts)
   },
 ];
+
+/** The OSHB pin, for the data_source row of the qere word ids it supplies (ADR-0007). */
+export const OSHB = {
+  url: SOURCES.find((s) => s.meta.abbrev === 'WLC')!.url,
+  sha256: SOURCES.find((s) => s.meta.abbrev === 'WLC')!.sha256,
+  attribution: 'Original work of the Open Scriptures Hebrew Bible available at https://github.com/openscriptures/morphhb (CC BY 4.0)',
+} as const;
 
 /**
  * STEPBible TVTMS, the primary scheme-mapping data (ADR-0006). CC BY 4.0 by

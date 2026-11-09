@@ -29,7 +29,7 @@ describe.skipIf(!native)('book and canon tables', () => {
     const cols = (sqlite.prepare('PRAGMA table_info(book)').all() as { name: string }[]).map((c) => c.name);
     expect(cols).toEqual(['code', 'usfm_number']);
     sqlite.close();
-  });
+  }, 60_000); // the first import of write-db takes over 4 s while the corpus-wide tests run beside it
 
   it('prefers a canon-specific name over the default', async () => {
     const { createCorpusDb, seedBooksAndCanons } = await import('../ingest/write-db');
