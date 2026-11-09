@@ -55,7 +55,8 @@ export const PARATEXT_SCHEMES: readonly ParatextScheme[] = [
 /**
  * A scheme defined as a registered scheme plus listed changes (ADR-0002
  * amendment, 2026-11-09), for an edition whose verses fit no registered
- * scheme. `kjv` is the first such scheme and is built by hand below. Every
+ * scheme, or whose TVTMS text tests need other mapping rows than its base's
+ * editions (`bsb`, with no changes). `kjv` is the first such scheme and is built by hand below. Every
  * change must differ from the base, and schemes.test.ts checks each edition's
  * text against its scheme. TVTMS maps a derived scheme the same way as the
  * others, by running its tests against the derived counts.
@@ -149,6 +150,16 @@ export const DERIVED_SCHEMES: readonly DerivedSchemeDef[] = [
       ['4MA', 8, 27],
       ['4MA', 12, 20],
     ],
+  },
+  {
+    id: 'bsb',
+    name: 'Berean Standard Bible',
+    base: 'kjv',
+    sourceUrl: 'https://ebible.org/engbsb/',
+    note:
+      'kjv with the same verse counts. TVTMS\'s text tests read the Berean Standard Bible as following the critical ' +
+      'order of Philippians 1:16-17, which KJV does not, so its mapping rows differ (ADR-0006 amendment, text tests).',
+    lastVerses: [],
   },
 ];
 

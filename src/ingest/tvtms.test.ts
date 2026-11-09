@@ -4,17 +4,24 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { Mappings, PIVOT, checkCoverage, refKey, type Ref } from '../model/mapping';
+import type { Block, Token } from '../model/corpus';
 import type { Scheme } from '../model/scheme';
 import { buildPivot, checkExtendOnly, pivotSnapshot } from './pivot';
 import { DERIVED_SCHEMES, loadSchemes } from './schemes';
 import {
   TVTMS_PATH,
+  addBookText,
   compileTvtms,
   compileMappings,
+  editionText,
+  editionTextsFromSnapshot,
   evaluateTests,
+  evaluateTextTest,
   parseStandardRefs,
   parseTvtms,
   readTvtms,
+  type EditionText,
+  type EditionTextSnapshot,
 } from './tvtms';
 
 const ref = (book: string, chapter: number, verse: number, segment = ''): Ref => ({ book, chapter, verse, segment });
@@ -98,6 +105,85 @@ describe('evaluateTests against a verse-count table', () => {
   });
 });
 
+/** An edition with these word counts (`BOOK c:v`) and titled chapters (`BOOK c`). */
+const edition = (name: string, words: Record<string, number>, titled: string[] = [], books = ['JOL', 'PSA', 'PHP', 'MAL']): EditionText => ({
+  edition: name,
+  books: new Set(books),
+  words: new Map(Object.entries(words)),
+  titled: new Set(titled),
+});
+
+describe('text tests against an edition', () => {
+  // KJV and BSB word counts at TVTMS lines 4084-4087 (research/tvtms-text-tests.md).
+  const kjv = edition('KJV', { 'PHP 1:16': 15, 'PHP 1:17': 16 }, ['PSA 3']);
+  const bsb = edition('BSB', { 'PHP 1:16': 17, 'PHP 1:17': 22 });
+
+  it('compares word counts, with sums and doubling', () => {
+    expect(evaluateTextTest('Php.1:16<Php.1:17', bsb)).toBe(true);
+    expect(evaluateTextTest('Php.1:16>Php.1:17', bsb)).toBe(false);
+    const e = edition('E', { 'MAL 3:22': 10, 'MAL 3:23': 4, 'MAL 3:24': 12 });
+    expect(evaluateTextTest('Mal.3:23*2<Mal.3:22+Mal.3:24', e)).toBe(true); // 8 < 22
+    expect(evaluateTextTest('Mal.3:22+Mal.3:24>Mal.3:23*2', e)).toBe(true);
+    expect(evaluateTextTest('Mal.3:25<Mal.3:22', e)).toBe(true); // a verse the edition lacks has 0 words
+  });
+
+  it('leaves a word test undecided when the sides differ by less than 20%', () => {
+    expect(evaluateTextTest('Php.1:16>Php.1:17', kjv)).toBe('close'); // 15 against 16
+    expect(evaluateTextTest('Php.1:16<Php.1:17', kjv)).toBe('close');
+    expect(evaluateTextTest('Mal.3:1<Mal.3:2', kjv)).toBe('close'); // 0 against 0
+  });
+
+  it('reads TextBeforeV1 from the titled chapters', () => {
+    expect(evaluateTextTest('Psa.3:TextBeforeV1=Exist', kjv)).toBe(true);
+    expect(evaluateTextTest('Psa.4:TextBeforeV1=NotExist', kjv)).toBe(true);
+    expect(evaluateTextTest('Psa.3:TextBeforeV1=NotExist', kjv)).toBe(false);
+  });
+
+  it('cannot decide a test on a book the edition lacks', () => {
+    expect(evaluateTextTest('Gen.1:1<Gen.1:2', kjv)).toBe('no-book');
+    expect(evaluateTextTest('Ade.1:1<Php.1:17', kjv)).toBe('no-book');
+    expect(evaluateTextTest('Psa.3:TextBeforeV1=Exist', edition('NT', {}, [], ['PHP']))).toBe('no-book');
+  });
+
+  it("decides a row only when every edition that has its books agrees", () => {
+    const t = scheme([20, 32, 21]);
+    const tests = 'Jol.3:1=Exist & Php.1:16<Php.1:17';
+    expect(evaluateTests(tests, t, 'Jol', [bsb])).toBe(true);
+    expect(evaluateTests(tests, t, 'Jol', [kjv])).toBe('needs-text'); // close
+    expect(evaluateTests(tests, t, 'Jol', [bsb, kjv])).toBe('needs-text');
+    const greekOrder = edition('X', { 'PHP 1:16': 10, 'PHP 1:17': 30 });
+    const kjvOrder = edition('Y', { 'PHP 1:16': 30, 'PHP 1:17': 10 });
+    expect(evaluateTests(tests, t, 'Jol', [bsb, greekOrder])).toBe(true);
+    expect(evaluateTests(tests, t, 'Jol', [bsb, kjvOrder])).toBe('needs-text');
+    expect(evaluateTests(tests, t, 'Jol', [bsb, edition('OT', {}, [], ['JOL'])])).toBe(true); // lacks PHP: skipped
+    expect(evaluateTests(tests, t, 'Jol', [edition('OT', {}, [], ['JOL'])])).toBe('needs-text');
+    expect(evaluateTests('Jol.3:22=Exist & Php.1:16<Php.1:17', t, 'Jol', [bsb])).toBe(false); // count test first
+  });
+});
+
+describe('addBookText', () => {
+  const block = (id: number, role: Block['role']): Block => ({ id, chapter: 3, genre: 'heading', role, indent: 0, seq: 0 });
+  const token = (blockId: number, verse: number | null, seq: number, kind: Token['kind'] = 'word'): Token => ({
+    id: seq, blockId, chapter: 3, verse, wordIndex: null, seq, kind, text: 'x', verseStart: false, owId: null,
+  });
+
+  it('counts word tokens per verse and finds a psalm title before verse 1', () => {
+    const into = editionText('E');
+    addBookText(into, 'PSA', [block(0, 'section'), block(1, 'psalm_title'), block(2, null)], [
+      token(0, null, 0), token(1, null, 1), token(2, 1, 2), token(2, 1, 3), token(2, 1, 4, 'punct'), token(2, 2, 5),
+    ]);
+    expect([...into.words]).toEqual([['PSA 3:1', 2], ['PSA 3:2', 1]]);
+    expect([...into.titled]).toEqual(['PSA 3']);
+    expect([...into.books]).toEqual(['PSA']);
+  });
+
+  it('does not count a section heading, or a title numbered as verse 1', () => {
+    const into = editionText('E');
+    addBookText(into, 'PSA', [block(0, 'section'), block(1, 'psalm_title')], [token(0, null, 0), token(1, 1, 1)]);
+    expect(into.titled.size).toBe(0);
+  });
+});
+
 describe('parseTvtms and compileTvtms on synthetic rows', () => {
   const header = '#DataStart(Expanded)\nSourceType\tSourceRef\tStandardRef\tAction\tNoteMarker\tA\tB\tC\tTests\n';
   const row = (src: string, std: string, action: string, tests: string) =>
@@ -158,9 +244,12 @@ describe.skipIf(!hasTvtms)('the pinned TVTMS file', () => {
   // describe.skipIf still runs this body while collecting tests.
   const schemes = loadSchemes();
   const tvtms = hasTvtms ? readTvtms() : [];
-  const { pivot, rows, perScheme: compiled, diff } = hasTvtms
-    ? compileMappings(schemes, tvtms)
-    : { pivot: buildPivot(schemes), rows: [], perScheme: new Map(), diff: new Map() };
+  /** The editions' word counts for the tested verses, from the last ingest (build/edition-text.json). */
+  const snapshot = JSON.parse(readFileSync(join(import.meta.dirname, 'fixtures', 'edition-text.json'), 'utf8')) as EditionTextSnapshot;
+  const texts = editionTextsFromSnapshot(snapshot);
+  const { pivot, rows, perScheme: compiled, diff, conflicts } = hasTvtms
+    ? compileMappings(schemes, tvtms, texts)
+    : { pivot: buildPivot(schemes), rows: [], perScheme: new Map(), diff: new Map(), conflicts: new Map() };
   const m = new Mappings(rows, new Map(schemes).set(PIVOT, pivot));
 
   it('keeps KJV numbering for the 66 protestant books and gives 2 Esdras 7 KJV\'s 70 verses', () => {
@@ -191,6 +280,23 @@ describe.skipIf(!hasTvtms)('the pinned TVTMS file', () => {
     expect(compiled.get('kjv')!.rows).toEqual([]);
   });
 
+  it('gives BSB the critical order of Philippians 1:16-17 and KJV its own', () => {
+    expect(keys(m.map('bsb', 'kjv', ref('PHP', 1, 16)))).toEqual(['PHP 1:17']);
+    expect(keys(m.map('bsb', 'kjv', ref('PHP', 1, 17)))).toEqual(['PHP 1:16']);
+    expect(keys(m.toPivot('kjv', ref('PHP', 1, 16)))).toEqual(['PHP 1:16']);
+  });
+
+  it('finds no edition whose text maps a verse differently from its scheme', () => {
+    expect(Object.fromEntries(conflicts)).toEqual({});
+  });
+
+  it('stops BSB from sharing the kjv scheme with KJV', () => {
+    const shared = editionTextsFromSnapshot({ ...snapshot, BSB: { ...snapshot.BSB, scheme: 'kjv' } });
+    const c = compileMappings(schemes, tvtms, shared).conflicts;
+    expect([...c.keys()]).toEqual(['BSB']);
+    expect(c.get('BSB')).toEqual(['PHP 1:16\tBSB: PHP 1:17\tkjv: PHP 1:16', 'PHP 1:17\tBSB: PHP 1:16\tkjv: PHP 1:17']);
+  }, 60_000); // a second full compile
+
   it('stores TVTMS rows where TVTMS decides and .vrs rows only where it cannot', () => {
     for (const r of rows.filter((x) => x.source === 'vrs')) {
       expect(compiled.get(r.scheme)!.decided.has(refKey(r.from))).toBe(false);
@@ -209,11 +315,11 @@ describe.skipIf(!hasTvtms)('the pinned TVTMS file', () => {
   const KNOWN: Record<string, number> = { org: 2, vul: 2, rso: 15 };
   /**
    * Derived schemes: verses in a chapter the scheme changes, where TVTMS
-   * decides nothing without the edition's text (`needsText`) and no base
-   * `.vrs` row applies. Brenton's are 2 Esdras 14 and 19, Proverbs 24:35-62
-   * and Sirach 30 and 36; WEB's are Baruch 1:22 and 4 Maccabees 7:24-25.
+   * decides nothing even with the edition's text and no base `.vrs` row
+   * applies. Brenton's are 2 Esdras 14 and 19, Proverbs 24:35-62 and Sirach
+   * 30; WEB's are Baruch 1:22 and 4 Maccabees 7:24-25.
    */
-  const KNOWN_DERIVED: Record<string, number> = { web: 3, brenton: 102 };
+  const KNOWN_DERIVED: Record<string, number> = { web: 3, brenton: 97 };
 
   it.each([...schemes.keys()])('maps every %s verse into the pivot, apart from known gaps', (id) => {
     const problems = checkCoverage(schemes.get(id)!, pivot, rows);

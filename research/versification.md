@@ -260,6 +260,7 @@ Add a generated `bcv` integer (BBBCCCVVV with Paratext book numbers) only as a s
 5. **Fixtures.** Fix `divergent.vrs` (Rev 13 is a partial verse, not a shift). Add fixtures for 3 John 14-15, the two-verse title of Psalm 51 (many-to-one), Romans 14:24-26 and Daniel 3 to S3Y (cross-book).
 6. **OSHB.** Verify OSHB's numbering against `org` before ingesting it. Done 2026-11-09: ebible's `hboWLC` has no verse `org` lacks (`schemes.test.ts`) and no chapter that ends early.
 7. **Canon research.** `S3Y` versus `PrAzar`, and `ESG` versus `ADE` versus 16-chapter `EST`, are book-identity questions for `canons.md`.
+8. **Text tests per edition.** Two editions under one scheme can need different TVTMS rows (KJV and BSB at Philippians 1:16-17), and some word tests misfire in English. Counts in [tvtms-text-tests.md](tvtms-text-tests.md).
 
 [lp-res]: https://github.com/sillsdev/libpalaso/tree/f1f70e93a79d55b1769a4e20fb36047f2fa08d99/SIL.Scripture/Resources
 [lp-eng]: https://github.com/sillsdev/libpalaso/blob/f1f70e93a79d55b1769a4e20fb36047f2fa08d99/SIL.Scripture/Resources/eng.vrs.txt#L1-L60

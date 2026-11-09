@@ -30,5 +30,17 @@ Moving an address from one versification scheme to another needs mapping data. R
 - **The pivot's id is `pivot`.**
 - **Pivot segments may be TVTMS subverse ids** (`2ES 7:35!aa`). They appear only in mapping rows, never in stored addresses, which keep one-letter segments (ADR-0002). TVTMS subverse `!0` is the verse's ordinary text and is stored as the whole verse.
 - **The pivot holds only ids with a USFM home.** For the 66 protestant books it is KJV numbering exactly, so Standard references past KJV's extent are skipped: Esther 10:4-16:24 (the Greek additions in KJV-Apocrypha layout) and one stray `1Ki.5:32`. Where the additions to Esther go, and whether Baruch 6 or `LJE`, and Daniel 3:24-90 or `S3Y`, is the pivot home for shared text, stays open with research/canons.md ("What to decide next", item 5).
-- **`.vrs` rows fill in where TVTMS can't decide.** TVTMS is primary wherever its `=Exist`, `=NotExist` and `=Last` tests settle a verse against the scheme's verse counts. Most TVTMS rows also test word counts, so for the other verses the `.vrs` row is stored, tagged `source = 'vrs'`. Word-count tests are not yet run per edition at ingest (decision 3).
+- **`.vrs` rows fill in where TVTMS can't decide.** TVTMS is primary wherever its `=Exist`, `=NotExist` and `=Last` tests settle a verse against the scheme's verse counts. Most TVTMS rows also test word counts, so for the other verses the `.vrs` row is stored, tagged `source = 'vrs'`. Since the amendment below, the word-count and `TextBeforeV1` tests run per edition, and `.vrs` rows fill in only where those can't decide either.
 - **The `.vrs` witness reaches the pivot through TVTMS's `eng` rows.** `.vrs` lines map to `org`; they reach the pivot through `eng.vrs` read backwards and then TVTMS's `eng` rows, so a pivot id means the same thing in both witnesses. The diff therefore can't catch an error in TVTMS's `eng` rows themselves.
+
+## Amendment: text tests per edition (2026-11-09)
+
+Findings in [research/tvtms-text-tests.md](../../research/tvtms-text-tests.md).
+
+- **The text tests run against each edition at ingest.** A verse's word count is its number of `word` tokens. `TextBeforeV1` holds when a `psalm_title` block comes before verse 1. A test on a book the edition lacks leaves the row undecided.
+- **A word test decides only when its two sides differ by at least 20% of the larger.** A closer result leaves the row undecided. TVTMS gives no tolerance, and its Philippians 1:16-17 test reads KJV (15 against 16 words) and WEB (16 against 18) as following the Greek verse order, which they don't.
+- **A scheme takes a text-dependent row only when every edition under it that has the row's books gives the same result.** Mapping rows stay per scheme, so a scheme address names one text slot.
+- **The ingest stops when an edition's own results would map a verse differently from its scheme's rows.** Such an edition needs a derived scheme (ADR-0002). BSB follows the critical order of Philippians 1:16-17, which KJV doesn't, so BSB moved from `kjv` to `bsb`. That changed the scheme of every BSB address; nothing outside this repo stored one yet.
+- **The tested verses' word counts and titled Psalms are committed as `src/ingest/fixtures/edition-text.json`**, so tests compile the same mappings without a built corpus. The ingest writes `build/edition-text.json` and warns when it differs from the fixture. They are counts, not text.
+
+Rejected: mapping rows per edition, which would let one scheme address map two ways. Rejected: rejecting an edition whose results conflict, which would have dropped BSB.

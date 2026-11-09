@@ -71,7 +71,7 @@ export const SOURCES: readonly SourceDef[] = [
       language: 'english',
       year: 2023,
       license: 'Public Domain',
-      scheme: 'kjv',
+      scheme: 'bsb',
       edition: '',
     },
     url: 'https://ebible.org/Scriptures/engbsb_usfm.zip',
