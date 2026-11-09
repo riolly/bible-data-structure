@@ -15,7 +15,7 @@ const schemes = loadSchemes();
 
 describe('scheme registry', () => {
   it('holds kjv, the six Paratext schemes and the derived schemes', () => {
-    expect([...schemes.keys()].sort()).toEqual(['brenton', 'eng', 'kjv', 'lxx', 'org', 'rp', 'rsc', 'rso', 'vul', 'web']);
+    expect([...schemes.keys()].sort()).toEqual(['brenton', 'bsb', 'eng', 'kjv', 'lxx', 'org', 'rp', 'rsc', 'rso', 'vul', 'web']);
     expect([...SCHEME_IDS].sort()).toEqual([...schemes.keys()].sort());
   });
 
@@ -213,7 +213,7 @@ describe.skipIf(!native)('scheme tables', () => {
     seedSchemes(db, schemes);
 
     const ids = (sqlite.prepare('SELECT id FROM scheme ORDER BY id').all() as { id: string }[]).map((r) => r.id);
-    expect(ids).toEqual(['brenton', 'eng', 'kjv', 'lxx', 'org', 'rp', 'rsc', 'rso', 'vul', 'web']);
+    expect(ids).toEqual(['brenton', 'bsb', 'eng', 'kjv', 'lxx', 'org', 'rp', 'rsc', 'rso', 'vul', 'web']);
     const rev12 = sqlite
       .prepare("SELECT scheme, verse_count FROM scheme_verse_count WHERE book = 'REV' AND chapter = 12 ORDER BY scheme")
       .all();

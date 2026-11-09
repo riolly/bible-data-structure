@@ -14,14 +14,14 @@ Started 2026-11-09 from the research in [bible-codex](https://github.com/riolly/
    4. Full `.vrs` parser and `scheme_mapping` rows to an extend-only `pivot` scheme, with a coverage check in place of the bijection check. `versification_map` and `divergent.vrs` are gone; `fixtures/real-cases.vrs` holds real lines for the ADR-0006 cases. Done.
    5. TVTMS compiled per scheme, pinned by URL and sha256 in `src/ingest/sources.ts`. TVTMS rows are stored where TVTMS decides from verse counts, `.vrs` rows elsewhere, and `build/mapping-diff.tsv` lists where they disagree. Done.
 
-   Left open by this step, recorded in ADR-0006's amendments: TVTMS tests that need an edition's text are not evaluated, and the pivot home of the additions to Esther is undecided. Some libpalaso mapping lines name ESG verses missing from the same file's counts; `src/ingest/pivot.test.ts` reports them.
+   Left open by this step, recorded in ADR-0006's amendments: the pivot home of the additions to Esther is undecided. TVTMS's text tests, also left open here, now run per edition (ADR-0006 amendment, text tests). Some libpalaso mapping lines name ESG verses missing from the same file's counts; `src/ingest/pivot.test.ts` reports them.
 3. **Test against texts that disagree.** Import KJV, BSB, a Bible with deuterocanonical books, OSHB Hebrew, a Greek New Testament and, if licensable, the Septuagint. Make the trouble-spot fixtures in research/README.md pass.
    1. Licensing verdicts per source in [research/licensing.md](research/licensing.md). Every text below is public domain except SBLGNT (CC BY 4.0). Done.
    2. Each source lists the books it must have, and may carry counted text fixes. WLC (OSHB's Hebrew) and SBLGNT ingest under `org`. ADR-0004 v1.2 records that Hebrew and Greek tokenize under the v1.1 rules unchanged. Done.
    3. Derived schemes (ADR-0002 amendment): `rp` for Robinson-Pierpont 2018, `web` for the World English Bible with deuterocanon, and `brenton` for Brenton's Greek Septuagint. Done.
    4. Trouble-spot fixtures and `src/ingest/trouble-spots.test.ts`. Every spot but the Greek additions to Daniel and Esther passes. Done.
 
-   Left open by this step: 105 verses in chapters a derived scheme changes map nowhere until TVTMS's text tests are evaluated (ADR-0002 amendment). There is no Catholic or Orthodox canon yet, so the deuterocanonical books have no canon order.
+   Left open by this step: 100 verses in chapters a derived scheme changes map nowhere, Brenton's 97 and WEB's 3. TVTMS's text tests run per edition and don't decide them (ADR-0006 amendment, text tests). There is no Catholic or Orthodox canon yet, so the deuterocanonical books have no canon order.
 4. **Design app projections.** Write the contract any Bible app needs (render a chapter, resolve "Ps 23", map a verse to another edition, anchor a user's mark, search), then compile the model into per-app packs and measure size and speed. Content changes become rebuilds. Only app user data needs migrations.
 
 ## Carried over from bible-codex
@@ -51,7 +51,7 @@ Every pin update in `src/ingest/sources.ts` is a new edition (ADR-0005). Record 
 | Edition | Pinned zip sha256 | Edition stamp | Pinned on | Note |
 |---|---|---|---|---|
 | KJV | `c7ba60db…621aaf` | `sha256:7ead3d28b2b34c9b` | 2026-11-09 | July pin no longer matched. No July stamp exists, so a text change can't be confirmed |
-| BSB | `75ca91d5…f7fbc4` | `sha256:3b0004861fcf2481` | 2026-11-09 | Same as KJV |
+| BSB | `75ca91d5…f7fbc4` | `sha256:3b0004861fcf2481` | 2026-11-09 | Same as KJV. Scheme `bsb` since the TVTMS text tests (ADR-0006 amendment) |
 | WLC | `464225e1…bd1df7` | `sha256:a548fe69e09108f4` | 2026-11-09 | ebible `hboWLC`, scheme `org` |
 | SBLGNT | `04c5c536…b10a73` | `sha256:89a22750abd8cdbe` | 2026-11-09 | ebible `grcsbl`, scheme `org`. Stamp is before the text fix |
 | RP | `33b208ee…874048` | `sha256:1defb25636d232d6` | 2026-11-09 | ebible `grcmt`, scheme `rp` |

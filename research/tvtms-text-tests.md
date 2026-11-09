@@ -1,6 +1,6 @@
 # TVTMS text tests per edition
 
-Researched 2026-11-09 for ADR-0006 decision 3, which says TVTMS's word-count tests run per edition at ingest. Sources: [TVTMS][tvtms] at the pinned commit, and the corpus built from commit 126ebc3 (seven editions, README Editions).
+Researched 2026-11-09 for ADR-0006 decision 3, which says TVTMS's word-count tests run per edition at ingest. Decided the same day in ADR-0006's text-tests amendment: a 20% margin for word tests, and the derived scheme `bsb` for BSB. The counts below use no margin unless a section says so. Sources: [TVTMS][tvtms] at the pinned commit, and the corpus built from commit 126ebc3 (seven editions, README Editions).
 
 ## What the tests mean
 

@@ -23,9 +23,20 @@ import { usfmToUsj, usjBookCode } from './parse';
 import { SOURCES, type SourceDef } from './sources';
 import { applyTextFixes } from './text-fixes';
 import { checkExtendOnly, formatPivotSnapshot, pivotSnapshot, type PivotSnapshot } from './pivot';
-import { TVTMS_PATH, compileMappings, readTvtms, type TvtmsRow } from './tvtms';
+import {
+  TVTMS_PATH,
+  addBookText,
+  compileMappings,
+  compilePivot,
+  editionText,
+  editionTextSnapshot,
+  readTvtms,
+  type EditionText,
+  type TvtmsRow,
+} from './tvtms';
 import {
   createCorpusDb,
+  type CorpusDb,
   insertBookRows,
   insertTranslation,
   insertMappings,
@@ -37,6 +48,7 @@ const SOURCES_ROOT = join(import.meta.dirname, 'sources');
 const OUT_DIR = join(import.meta.dirname, '..', '..', 'build');
 const OUT_PATH = join(OUT_DIR, 'corpus.db');
 const PIVOT_SNAPSHOT = join(import.meta.dirname, 'fixtures', 'pivot.json');
+const EDITION_TEXT_SNAPSHOT = join(import.meta.dirname, 'fixtures', 'edition-text.json');
 
 /** The source's listed books, in its order. Files for other books (FRT, GLO, …) are skipped. */
 function readSourceFiles(src: SourceDef): SourceFile[] {
@@ -68,26 +80,14 @@ function main() {
   const { db, sqlite } = createCorpusDb(OUT_PATH);
   seedBooksAndCanons(db);
   const schemes = loadSchemes();
-  const { pivot, rows: mappingRows, perScheme, diff } = compileMappings(schemes, readTvtmsOrExplain());
+  const tvtms = readTvtmsOrExplain();
+  // The pivot reads no edition text, so the scheme rows go in before the editions.
+  const { pivot } = compilePivot(schemes, tvtms);
   checkPivotGrowth(pivot);
   seedSchemes(db, new Map(schemes).set(PIVOT, pivot));
-  insertMappings(db, mappingRows);
-  console.log(`schemes: ${[...schemes.keys()].join(', ')} + ${PIVOT}`);
-  for (const s of schemes.values()) {
-    const c = perScheme.get(s.id)!;
-    const own = mappingRows.filter((r) => r.scheme === s.id);
-    const fromVrs = own.filter((r) => r.source === 'vrs').length;
-    const lines = diff.get(s.id);
-    const witness = lines ? `${lines.length} verses where the witnesses disagree` : 'no .vrs witness';
-    console.log(
-      `  ${s.id}: ${own.length - fromVrs} TVTMS rows, ${fromVrs} .vrs rows; ${c.needsText.length} TVTMS rows need text; ${witness}`,
-    );
-    const problems = checkCoverage(s, pivot, mappingRows);
-    if (problems.length > 0) console.warn(`  ⚠ ${s.id}: ${problems.length} verse(s) map outside the pivot: ${problems.slice(0, 3).join('; ')}`);
-  }
-  const diffPath = join(OUT_DIR, 'mapping-diff.tsv');
-  writeFileSync(diffPath, [...diff].flatMap(([id, lines]) => lines.map((l) => `${id}\t${l}`)).join('\n') + '\n');
-  console.log(`  witness diff → ${diffPath}`);
+  /** Each scheme's editions, for TVTMS's text tests (ADR-0006 amendment). */
+  const texts = new Map<string, EditionText[]>();
+  const editions: { scheme: string; text: EditionText }[] = [];
 
   for (const src of SOURCES) {
     const scheme = schemes.get(src.meta.scheme);
@@ -96,6 +96,9 @@ function main() {
     const edition = computeEdition(raw);
     const files = applyTextFixes(raw, src.textFixes);
     const translationId = insertTranslation(db, { ...src.meta, edition });
+    const text = editionText(src.meta.abbrev);
+    texts.set(scheme.id, [...(texts.get(scheme.id) ?? []), text]);
+    editions.push({ scheme: scheme.id, text });
     console.log(`\n${src.meta.abbrev} — edition ${edition}`);
     for (const fix of src.textFixes ?? []) console.log(`  text fix ×${fix.count}: ${JSON.stringify(fix.find)} (${fix.why})`);
 
@@ -127,6 +130,7 @@ function main() {
         warnVerseGaps(file.code, tokens);
         checkScheme(scheme, file.code, tokens);
         insertBookRows(db, { translationId, book: file.code }, { blocks, tokens });
+        addBookText(text, file.code, blocks, tokens);
         addStats(totals, stats);
         blockCount += blocks.length;
         tokenCount += tokens.length;
@@ -137,9 +141,62 @@ function main() {
     console.log(`  not modelled in Phase 1 (dropped/unwrapped, counted): ${JSON.stringify(totals)}`);
   }
 
+  writeMappings(db, schemes, tvtms, texts);
+  writeEditionTextSnapshot(editions, tvtms);
+
   sqlite.exec('VACUUM; ANALYZE;');
   sqlite.close();
   console.log(`\n✓ wrote ${OUT_PATH}`);
+}
+
+/**
+ * Compile the mappings with every edition's text (ADR-0006), stop if an
+ * edition's own results disagree with its scheme's rows, and write them.
+ */
+function writeMappings(
+  db: CorpusDb,
+  schemes: ReadonlyMap<string, Scheme>,
+  tvtms: readonly TvtmsRow[],
+  texts: ReadonlyMap<string, readonly EditionText[]>,
+) {
+  const { pivot, rows: mappingRows, perScheme, diff, conflicts } = compileMappings(schemes, tvtms, texts);
+  if (conflicts.size > 0) {
+    const lines = [...conflicts].flatMap(([ed, ls]) => ls.slice(0, 10).map((l) => `${ed}: ${l}`));
+    throw new Error(
+      `an edition's text maps verses differently from its scheme; give it a derived scheme (ADR-0002):\n  ${lines.join('\n  ')}`,
+    );
+  }
+  console.log('');
+  insertMappings(db, mappingRows);
+  console.log(`schemes: ${[...schemes.keys()].join(', ')} + ${PIVOT}`);
+  for (const s of schemes.values()) {
+    const c = perScheme.get(s.id)!;
+    const own = mappingRows.filter((r) => r.scheme === s.id);
+    const fromVrs = own.filter((r) => r.source === 'vrs').length;
+    const lines = diff.get(s.id);
+    const witness = lines ? `${lines.length} verses where the witnesses disagree` : 'no .vrs witness';
+    console.log(
+      `  ${s.id}: ${own.length - fromVrs} TVTMS rows, ${fromVrs} .vrs rows; ${c.needsText.length} TVTMS rows its editions' text can't decide; ${witness}`,
+    );
+    const problems = checkCoverage(s, pivot, mappingRows);
+    if (problems.length > 0) console.warn(`  ⚠ ${s.id}: ${problems.length} verse(s) map outside the pivot: ${problems.slice(0, 3).join('; ')}`);
+  }
+  const diffPath = join(OUT_DIR, 'mapping-diff.tsv');
+  writeFileSync(diffPath, [...diff].flatMap(([id, lines]) => lines.map((l) => `${id}\t${l}`)).join('\n') + '\n');
+  console.log(`  witness diff → ${diffPath}`);
+}
+
+/**
+ * The facts the text tests read, for the committed fixture tvtms.test.ts uses.
+ * Copy build/edition-text.json over the fixture when an edition changes.
+ */
+function writeEditionTextSnapshot(editions: readonly { scheme: string; text: EditionText }[], tvtms: readonly TvtmsRow[]) {
+  const json = JSON.stringify(editionTextSnapshot(editions, tvtms), null, 1) + '\n';
+  const path = join(OUT_DIR, 'edition-text.json');
+  writeFileSync(path, json);
+  if (json !== readFileSync(EDITION_TEXT_SNAPSHOT, 'utf8')) {
+    console.warn(`  ⚠ ${path} differs from ${EDITION_TEXT_SNAPSHOT}: copy it over to update the tests`);
+  }
 }
 
 function readTvtmsOrExplain(): TvtmsRow[] {

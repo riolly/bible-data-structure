@@ -79,8 +79,9 @@ Such an edition gets a **derived scheme**: a registered base plus a list of chan
 
 - A change that matches the base fails the load, so every listed change is a real difference.
 - TVTMS maps a derived scheme the same way as the others, by running its tests against the derived counts (ADR-0006). Where TVTMS decides nothing, a chapter the scheme leaves unchanged takes its base's `.vrs` rows (`derivedVrsPivotRows` in `pivot.ts`). `mapping-diff.tsv` reports where TVTMS disagrees with them, as for the Paratext schemes.
-- Open: 105 verses in changed chapters map nowhere (Brenton 102, WEB 3), because the TVTMS tests that decide them need the edition's text. `tvtms.test.ts` pins the count.
+- Open: verses in changed chapters that map nowhere, because no TVTMS row decides them even with the edition's text (ADR-0006 amendment, text tests). `tvtms.test.ts` pins the count.
+- A derived scheme may list no changes when its edition's TVTMS text tests need other mapping rows than its base's editions (ADR-0006 amendment). `bsb` is `kjv` for the Berean Standard Bible, which follows the critical order of Philippians 1:16-17.
 - Each edition's text is checked against its scheme (`schemes.test.ts`). A verse the edition lacks in the middle of a chapter stays in the scheme and only warns, as for BSB.
-- Seeded: `rp` (`kjv`, Romans 14 to 26 and 16 to 24), `web` (`rp` plus `eng`'s deuterocanon, 13 changes) and `brenton` (`lxx`, 30 changes).
+- Seeded: `rp` (`kjv`, Romans 14 to 26 and 16 to 24), `web` (`rp` plus `eng`'s deuterocanon, 13 changes), `brenton` (`lxx`, 30 changes) and `bsb` (`kjv`, no changes).
 
 Rejected: rejecting editions that fit no scheme, which would leave out the deuterocanon and the Septuagint. Also rejected: building a scheme from each edition's text automatically, which makes every edition its own scheme and leaves no reviewed list of differences.

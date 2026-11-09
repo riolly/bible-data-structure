@@ -7,10 +7,11 @@
  * says its SourceType column "isn't used in programming", so rows are picked
  * by their tests alone.
  *
- * For a scheme, the tests run against its verse-count table: `=Exist`,
- * `=NotExist`, `=Last`, and subverse counts from its segment lines. Word-count
- * tests (`<`, `>`) and `TextBeforeV1` need an edition's text; rows that depend
- * on them are returned as `needsText` and not compiled.
+ * For a scheme, the count tests run against its verse-count table: `=Exist`,
+ * `=NotExist`, `=Last`, and subverse counts from its segment lines. The
+ * word-count tests (`<`, `>`) and `TextBeforeV1` run against the text of the
+ * scheme's editions (ADR-0006 amendment, text tests). Rows they can't decide
+ * are returned as `needsText` and not compiled.
  *
  * The file is downloaded, not committed; sources.ts says why.
  */
@@ -20,6 +21,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { BOOK_BY_CODE } from '../model/books';
+import type { Block, Token } from '../model/corpus';
 import { PROTESTANT, canonBookCodes } from '../model/canon';
 import { Relation, parseRefKey, refKey, type MappingRow, type Ref } from '../model/mapping';
 import { lastVerse, type Scheme } from '../model/scheme';
@@ -180,18 +182,143 @@ function checkKjvExtent(refs: readonly Ref[], kjv: Scheme, text: string): void {
 
 const TEST_RE = /^(?:([0-9A-Za-z]{3})\.)?(\d+|[A-Z]):(\d+|Title)(?:\.(\d+))?=(Exist|NotExist|Last)$/;
 
-/** Evaluate one row's tests against a scheme's tables. */
-export function evaluateTests(tests: string, s: Scheme, sourceBook = ''): boolean | 'needs-text' {
+/** What TVTMS's text tests read from one edition (ADR-0006 amendment, text tests). */
+export interface EditionText {
+  /** The edition's abbreviation, for messages. */
+  readonly edition: string;
+  readonly books: ReadonlySet<string>;
+  /** Word tokens per verse, keyed `BOOK c:v`. A verse that isn't here has 0. */
+  readonly words: ReadonlyMap<string, number>;
+  /** Chapters with a psalm title before verse 1, keyed `BOOK c`. */
+  readonly titled: ReadonlySet<string>;
+}
+
+/** An empty EditionText for addBookText to fill. */
+export function editionText(edition: string) {
+  return { edition, books: new Set<string>(), words: new Map<string, number>(), titled: new Set<string>() };
+}
+
+/**
+ * Add one book's tokens to an edition's text facts. A psalm title counts as
+ * text before verse 1 when its block comes before the chapter's first verse-1
+ * token. Section headings are not canonical text and don't count.
+ */
+export function addBookText(
+  into: ReturnType<typeof editionText>,
+  book: string,
+  blocks: readonly Block[],
+  tokens: readonly Token[],
+): void {
+  into.books.add(book);
+  const firstVerse1 = new Map<number, number>();
+  for (const t of tokens) {
+    if (t.verse === null) continue;
+    if (t.kind === 'word') {
+      const k = `${book} ${t.chapter}:${t.verse}`;
+      into.words.set(k, (into.words.get(k) ?? 0) + 1);
+    }
+    if (t.verse === 1 && !firstVerse1.has(t.chapter)) firstVerse1.set(t.chapter, t.seq);
+  }
+  const role = new Map(blocks.map((b) => [b.id, b.role]));
+  for (const t of tokens) {
+    if (t.verse !== null || role.get(t.blockId) !== 'psalm_title') continue;
+    if (t.seq < (firstVerse1.get(t.chapter) ?? Infinity)) into.titled.add(`${book} ${t.chapter}`);
+  }
+}
+
+/**
+ * A word test decides only when its two sides differ by at least this share
+ * of the larger. TVTMS's Philippians 1:16-17 test reads KJV's 15 against 16
+ * words as the Greek order (research/tvtms-text-tests.md).
+ */
+export const WORD_TEST_MARGIN = 0.2;
+
+const TEXT_BEFORE_RE = /^([0-9A-Za-z]{3})\.(\d+):TextBeforeV1=(Exist|NotExist)$/;
+const WORD_TERM_RE = /^([0-9A-Za-z]{3})\.(\d+):(\d+)(?:\*(\d+))?$/;
+const isTextTest = (t: string) => /TextBeforeV/i.test(t) || /[<>]/.test(t);
+
+function bookOrNull(abbr: string): string | null {
+  try {
+    return usfm(abbr);
+  } catch {
+    return null; // a book no edition has, such as Ade
+  }
+}
+
+/** A word test side such as `Mal.3:22+Mal.3:24` or `1Ki.10:21*2`; null when the edition lacks a book. */
+function wordSide(side: string, text: EditionText): number | null {
+  let n = 0;
+  for (const term of side.split('+')) {
+    const m = WORD_TERM_RE.exec(term.trim());
+    if (!m) throw new Error(`TVTMS: unreadable word test side "${side}"`);
+    const book = bookOrNull(m[1]);
+    if (book === null || !text.books.has(book)) return null;
+    n += (text.words.get(`${book} ${m[2]}:${m[3]}`) ?? 0) * Number(m[4] ?? 1);
+  }
+  return n;
+}
+
+/**
+ * One text test against one edition: `close` when a word test's sides differ
+ * by less than WORD_TEST_MARGIN, `no-book` when the edition lacks a book the
+ * test names.
+ */
+export function evaluateTextTest(test: string, text: EditionText): boolean | 'close' | 'no-book' {
+  const tb = TEXT_BEFORE_RE.exec(test);
+  if (tb) {
+    const book = bookOrNull(tb[1]);
+    if (book === null || !text.books.has(book)) return 'no-book';
+    const titled = text.titled.has(`${book} ${tb[2]}`);
+    return tb[3] === 'Exist' ? titled : !titled;
+  }
+  const m = /^(.+?)([<>])(.+)$/.exec(test);
+  if (!m) throw new Error(`TVTMS: unreadable test "${test}"`);
+  const a = wordSide(m[1], text);
+  const b = wordSide(m[3], text);
+  if (a === null || b === null) return 'no-book';
+  if (a === b || Math.abs(a - b) < WORD_TEST_MARGIN * Math.max(a, b)) return 'close';
+  return m[2] === '>' ? a > b : a < b;
+}
+
+/**
+ * A row's text tests across a scheme's editions. An edition decides the row
+ * when it has every book the tests name; every edition that decides it must
+ * agree, and none may be close, or the row stays undecided.
+ */
+function textTestsResult(tests: readonly string[], texts: readonly EditionText[]): boolean | 'needs-text' {
+  let agreed: boolean | null = null;
+  for (const text of texts) {
+    const results = tests.map((t) => evaluateTextTest(t, text));
+    if (results.includes('no-book')) continue;
+    if (!results.includes(false) && results.includes('close')) return 'needs-text';
+    const result = !results.includes(false);
+    if (agreed !== null && agreed !== result) return 'needs-text';
+    agreed = result;
+  }
+  return agreed ?? 'needs-text';
+}
+
+/**
+ * Evaluate one row's tests against a scheme's tables, and its text tests
+ * against the scheme's editions. Without editions, a row that passes its
+ * count tests and has text tests needs text.
+ */
+export function evaluateTests(
+  tests: string,
+  s: Scheme,
+  sourceBook = '',
+  texts: readonly EditionText[] = [],
+): boolean | 'needs-text' {
   if (tests === '') return true;
-  let needsText = false;
+  const textTests: string[] = [];
   // A test without a book (`33:31=Exist`) uses the book of the test before it,
   // or the row's source book (TVTMS lines 23687-23691 omit `Sir.`).
   let lastBook = sourceBook;
   for (const raw of tests.split('&')) {
     const t = raw.trim();
     if (t === '') continue;
-    if (/TextBeforeV/i.test(t) || /[<>]/.test(t)) {
-      needsText = true;
+    if (isTextTest(t)) {
+      textTests.push(t);
       continue;
     }
     const m = TEST_RE.exec(t);
@@ -228,7 +355,7 @@ export function evaluateTests(tests: string, s: Scheme, sourceBook = ''): boolea
     }
     if (!result) return false;
   }
-  return needsText ? 'needs-text' : true;
+  return textTests.length === 0 ? true : textTestsResult(textTests, texts);
 }
 
 export interface Compiled {
@@ -242,7 +369,8 @@ export interface Compiled {
 
 /**
  * Compile TVTMS for one scheme: keep rows whose tests pass against its tables
- * and drop references that land on themselves (the table is sparse).
+ * and its editions' text, and drop references that land on themselves (the
+ * table is sparse).
  *
  * A source reference counts as decided only when every passing row for it
  * gives the same non-empty targets and no row that needs text gives other
@@ -253,7 +381,12 @@ export interface Compiled {
  * `seed` is the pivot before TVTMS: its counts finish ranges that cross a
  * chapter, and its 66 protestant books (KJV numbering) bound Standard refs.
  */
-export function compileTvtms(all: readonly TvtmsRow[], s: Scheme, seed: Scheme): Compiled {
+export function compileTvtms(
+  all: readonly TvtmsRow[],
+  s: Scheme,
+  seed: Scheme,
+  texts: readonly EditionText[] = [],
+): Compiled {
   const needsText: TvtmsRow[] = [];
   const skipped: { line: number; reason: string }[] = [];
   const ownLast: LastVerse = (b, c) => lastVerse(s, b, c);
@@ -267,7 +400,7 @@ export function compileTvtms(all: readonly TvtmsRow[], s: Scheme, seed: Scheme):
     let froms: Ref[];
     let tos: Ref[];
     try {
-      result = evaluateTests(row.tests, s, row.source.slice(0, 3));
+      result = evaluateTests(row.tests, s, row.source.slice(0, 3), texts);
       if (result === false) continue;
       froms = parseStandardRefs(row.source, ownLast);
       tos = parseStandardRefs(row.standard, seedLast);
@@ -427,25 +560,143 @@ export interface CompiledMappings {
   readonly perScheme: Map<string, Compiled>;
   /** Per scheme with a `.vrs` witness, the verses where TVTMS and `.vrs` disagree. */
   readonly diff: Map<string, string[]>;
+  /**
+   * Per edition, the verses its own text results map differently from its
+   * scheme's rows: `REF<tab>EDITION: A<tab>SCHEME: B`. The ingest stops on any.
+   */
+  readonly conflicts: Map<string, string[]>;
 }
 
 /**
- * The whole ADR-0006 build. The seed pivot (kjv's 66 books, eng's other books
- * as eng numbers them) is only used to compile TVTMS. The stored pivot then
- * takes eng's other books where TVTMS sends eng's verses, so a TVTMS Standard
- * id means one thing in every row (2ES 7 has KJV's 70 verses, with NRSV
- * 7:36-105 as subverses of 7:35), and grows by every Standard reference.
+ * The stored pivot. The seed pivot (kjv's 66 books, eng's other books as eng
+ * numbers them) compiles TVTMS. The stored pivot then takes eng's other books
+ * where TVTMS sends eng's verses, so a TVTMS Standard id means one thing in
+ * every row (2ES 7 has KJV's 70 verses, with NRSV 7:36-105 as subverses of
+ * 7:35), and grows by every Standard reference. It reads no edition text, so
+ * the ingest can seed it before the editions.
  */
-export function compileMappings(schemes: ReadonlyMap<string, Scheme>, tvtms: readonly TvtmsRow[]): CompiledMappings {
+export function compilePivot(schemes: ReadonlyMap<string, Scheme>, tvtms: readonly TvtmsRow[]) {
   const seed = buildPivot(schemes);
-  const perScheme = new Map([...schemes.keys()].map((id) => [id, compileTvtms(tvtms, schemes.get(id)!, seed)]));
-  const engRows = engToPivotRows(perScheme.get('eng')!);
-  const pivot = extendPivot(buildPivot(schemes, engRows), tvtms, seed);
+  const engRows = engToPivotRows(compileTvtms(tvtms, schemes.get('eng')!, seed));
+  return { seed, engRows, pivot: extendPivot(buildPivot(schemes, engRows), tvtms, seed) };
+}
+
+/**
+ * The whole ADR-0006 build. `texts` holds each scheme's editions for the
+ * text tests (ADR-0006 amendment, text tests); a scheme without editions
+ * leaves its text-dependent rows undecided.
+ */
+export function compileMappings(
+  schemes: ReadonlyMap<string, Scheme>,
+  tvtms: readonly TvtmsRow[],
+  texts: ReadonlyMap<string, readonly EditionText[]> = new Map(),
+): CompiledMappings {
+  const { seed, engRows, pivot } = compilePivot(schemes, tvtms);
+  const perScheme = new Map(
+    [...schemes.keys()].map((id) => [id, compileTvtms(tvtms, schemes.get(id)!, seed, texts.get(id) ?? [])]),
+  );
   const vrsRows = allVrsPivotRows(schemes, engRows);
+  const rows = mergeWitnesses(perScheme, vrsRows);
   return {
     pivot,
-    rows: mergeWitnesses(perScheme, vrsRows),
+    rows,
     perScheme,
     diff: diffWitnesses(perScheme, vrsRows),
+    conflicts: editionConflicts(schemes, tvtms, seed, texts, vrsRows, rows),
   };
+}
+
+/**
+ * Compile each edition of a multi-edition scheme on its own text and compare
+ * the verses it decides with the scheme's stored rows. A difference means the
+ * edition needs a derived scheme (ADR-0002).
+ */
+function editionConflicts(
+  schemes: ReadonlyMap<string, Scheme>,
+  tvtms: readonly TvtmsRow[],
+  seed: Scheme,
+  texts: ReadonlyMap<string, readonly EditionText[]>,
+  vrsRows: readonly MappingRow[],
+  rows: readonly MappingRow[],
+): Map<string, string[]> {
+  const out = new Map<string, string[]>();
+  const targets = (rel: Relation, r: Ref) => rel.forward(r).map(refKey).sort().join(', ') || 'absent';
+  for (const [id, editions] of texts) {
+    if (editions.length < 2) continue;
+    const scheme = new Relation(rows.filter((r) => r.scheme === id));
+    for (const text of editions) {
+      const own = compileTvtms(tvtms, schemes.get(id)!, seed, [text]);
+      const mine = new Relation(mergeWitnesses(new Map([[id, own]]), vrsRows));
+      const lines: string[] = [];
+      for (const key of [...own.decided].sort()) {
+        const r = parseRefKey(key);
+        const a = targets(mine, r);
+        const b = targets(scheme, r);
+        if (a !== b) lines.push(`${key}\t${text.edition}: ${a}\t${id}: ${b}`);
+      }
+      if (lines.length > 0) out.set(text.edition, lines);
+    }
+  }
+  return out;
+}
+
+/** The committed form of the edition text facts (fixtures/edition-text.json). */
+export type EditionTextSnapshot = Record<
+  string,
+  { scheme: string; books: string[]; words: Record<string, number>; titled: string[] }
+>;
+
+/**
+ * The facts TVTMS's text tests read, limited to the verses and chapters the
+ * tests name. Tests compile mappings from the committed copy without a
+ * corpus; the ingest writes a fresh one to compare.
+ */
+export function editionTextSnapshot(
+  editions: readonly { scheme: string; text: EditionText }[],
+  tvtms: readonly TvtmsRow[],
+): EditionTextSnapshot {
+  const verses = new Set<string>();
+  const chapters = new Set<string>();
+  for (const row of tvtms) {
+    for (const raw of row.tests.split('&')) {
+      const t = raw.trim();
+      if (!isTextTest(t)) continue;
+      const tb = TEXT_BEFORE_RE.exec(t);
+      if (tb) {
+        const book = bookOrNull(tb[1]);
+        if (book) chapters.add(`${book} ${tb[2]}`);
+        continue;
+      }
+      for (const term of t.split(/[<>+]/)) {
+        const m = WORD_TERM_RE.exec(term.trim());
+        const book = m && bookOrNull(m[1]);
+        if (book) verses.add(`${book} ${m[2]}:${m[3]}`);
+      }
+    }
+  }
+  const out: EditionTextSnapshot = {};
+  for (const { scheme, text } of editions) {
+    out[text.edition] = {
+      scheme,
+      books: [...text.books].sort(),
+      words: Object.fromEntries([...text.words].filter(([k]) => verses.has(k)).sort(([a], [b]) => a.localeCompare(b))),
+      titled: [...text.titled].filter((k) => chapters.has(k)).sort(),
+    };
+  }
+  return out;
+}
+
+/** Read a snapshot back as each scheme's editions. */
+export function editionTextsFromSnapshot(snapshot: EditionTextSnapshot): Map<string, EditionText[]> {
+  const out = new Map<string, EditionText[]>();
+  for (const [edition, e] of Object.entries(snapshot)) {
+    const text: EditionText = {
+      edition,
+      books: new Set(e.books),
+      words: new Map(Object.entries(e.words)),
+      titled: new Set(e.titled),
+    };
+    out.set(e.scheme, [...(out.get(e.scheme) ?? []), text]);
+  }
+  return out;
 }
