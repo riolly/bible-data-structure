@@ -60,6 +60,23 @@ describe('scheme registry', () => {
   });
 });
 
+describe('the scheme of each ingested edition (ADR-0006 amendment)', () => {
+  // An ingested edition keeps its scheme: its addresses name it. When a new
+  // edition conflicts with a scheme's rows, the newcomer gets a derived scheme.
+  // Changing an entry here moves every address of that edition.
+  it('stays as first ingested', () => {
+    expect(Object.fromEntries(SOURCE_DEFS.map((s) => [s.meta.abbrev, s.meta.scheme]))).toEqual({
+      KJV: 'kjv',
+      BSB: 'bsb',
+      WLC: 'org',
+      SBLGNT: 'org',
+      RP: 'rp',
+      WEB: 'web',
+      Brenton: 'brenton',
+    });
+  });
+});
+
 describe('derived schemes (ADR-0002 amendment)', () => {
   it('moves the Romans doxology to 14:24-26 in rp, and web inherits it', () => {
     for (const id of ['rp', 'web']) {
