@@ -5,7 +5,6 @@ import { describe, expect, it } from 'vitest';
 
 import { loadVersificationMap } from '../db/corpus-read';
 import { buildVersificationMap, toCanonical, toNative } from '../model/versification';
-import { CANON_BY_CODE } from './books';
 import { nativeModuleLoads } from './native-probe';
 import { parseVrs } from './vrs';
 
@@ -24,14 +23,14 @@ const divergentVrs = readFileSync(join(__dirname, 'fixtures', 'divergent.vrs'), 
 
 // The four classic divergence sites, as [book, native, canonical] anchors.
 const ANCHORS = [
-  { book: 'Psalms', native: { chapter: 3, verse: 1 }, canon: { chapter: 3, verse: 0 } }, // title
-  { book: 'Psalms', native: { chapter: 3, verse: 2 }, canon: { chapter: 3, verse: 1 } },
-  { book: 'Joel', native: { chapter: 3, verse: 1 }, canon: { chapter: 2, verse: 28 } },
-  { book: 'Joel', native: { chapter: 4, verse: 1 }, canon: { chapter: 3, verse: 1 } },
-  { book: 'Malachi', native: { chapter: 3, verse: 19 }, canon: { chapter: 4, verse: 1 } },
-  { book: 'Malachi', native: { chapter: 3, verse: 24 }, canon: { chapter: 4, verse: 6 } },
-  { book: 'Revelation', native: { chapter: 12, verse: 18 }, canon: { chapter: 13, verse: 1 } },
-  { book: 'Revelation', native: { chapter: 13, verse: 1 }, canon: { chapter: 13, verse: 2 } },
+  { book: 'PSA', native: { chapter: 3, verse: 1 }, canon: { chapter: 3, verse: 0 } }, // title
+  { book: 'PSA', native: { chapter: 3, verse: 2 }, canon: { chapter: 3, verse: 1 } },
+  { book: 'JOL', native: { chapter: 3, verse: 1 }, canon: { chapter: 2, verse: 28 } },
+  { book: 'JOL', native: { chapter: 4, verse: 1 }, canon: { chapter: 3, verse: 1 } },
+  { book: 'MAL', native: { chapter: 3, verse: 19 }, canon: { chapter: 4, verse: 1 } },
+  { book: 'MAL', native: { chapter: 3, verse: 24 }, canon: { chapter: 4, verse: 6 } },
+  { book: 'REV', native: { chapter: 12, verse: 18 }, canon: { chapter: 13, verse: 1 } },
+  { book: 'REV', native: { chapter: 13, verse: 1 }, canon: { chapter: 13, verse: 2 } },
 ] as const;
 
 describe('divergent versification fixture — pure round-trip (hard gate)', () => {
@@ -65,8 +64,8 @@ describe('divergent versification fixture — pure round-trip (hard gate)', () =
   });
 
   it('leaves an undiverged verse identity (sparse map)', () => {
-    expect(toCanonical(map, 'Joel', { chapter: 1, verse: 1 })).toEqual({ chapter: 1, verse: 1 });
-    expect(toCanonical(map, 'Genesis', { chapter: 1, verse: 1 })).toEqual({ chapter: 1, verse: 1 });
+    expect(toCanonical(map, 'JOL', { chapter: 1, verse: 1 })).toEqual({ chapter: 1, verse: 1 });
+    expect(toCanonical(map, 'GEN', { chapter: 1, verse: 1 })).toEqual({ chapter: 1, verse: 1 });
   });
 });
 
@@ -76,11 +75,12 @@ const native = nativeModuleLoads(
 
 describe.skipIf(!native)('divergent versification fixture — DB round-trip through versification_map', () => {
   it('writes the sparse rows and reads them back into an identical map', async () => {
-    const { createCorpusDb, insertBook, insertTranslation, insertVersification } = await import(
+    const { createCorpusDb, insertTranslation, insertVersification, seedBooksAndCanons } = await import(
       './write-db'
     );
 
     const { db, sqlite } = createCorpusDb(':memory:');
+    seedBooksAndCanons(db);
     const translationId = insertTranslation(db, {
       name: 'Divergent Fixture',
       abbrev: 'DIV',
@@ -91,15 +91,8 @@ describe.skipIf(!native)('divergent versification fixture — DB round-trip thro
       edition: 'sha256:0000000000000000',
     });
 
-    // Insert the books the fixture touches and resolve slug → storage id.
-    const bookIdBySlug = new Map<string, number>();
-    for (const code of ['PSA', 'JOL', 'MAL', 'REV', 'GEN']) {
-      const b = CANON_BY_CODE.get(code)!;
-      bookIdBySlug.set(b.slug, insertBook(db, b));
-    }
-
     const rows = parseVrs(divergentVrs).map((r) => ({
-      bookId: bookIdBySlug.get(r.book)!,
+      book: r.book,
       srcChapter: r.srcChapter,
       srcVerse: r.srcVerse,
       canonChapter: r.canonChapter,

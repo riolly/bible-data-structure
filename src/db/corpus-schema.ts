@@ -1,4 +1,4 @@
-import { index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { index, integer, primaryKey, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
 import type { BlockRole } from '../model/corpus';
 
@@ -9,9 +9,8 @@ import type { BlockRole } from '../model/corpus';
  *   - the app reader (expo-sqlite driver, opened from the bundled asset)
  *
  * Integer pks here are STORAGE ids only — regenerated wholesale on every
- * re-ingest. Anchors and presentation rules join by coordinate / semantic key
- * (translation abbrev + book.slug + chapter + verse + word_index), never by
- * these ids (ADR-0001, old-repo ADR-0004).
+ * re-ingest. Outside references use addresses (src/model/address.ts): scheme +
+ * USFM book code + chapter + verse + word index, never these ids (ADR-0002).
  */
 
 export const translation = sqliteTable('translation', {
@@ -32,14 +31,80 @@ export const translation = sqliteTable('translation', {
   edition: text('edition').notNull(),
 });
 
+/**
+ * A book of scripture, keyed by its USFM code (ADR-0002). Names live in
+ * `book_name`, order and grouping in the canon tables.
+ */
 export const book = sqliteTable('book', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  /** Canonical id, e.g. "John" — used in Anchor coordinates. */
-  slug: text('slug').notNull().unique(),
-  name: text('name').notNull(),
-  testament: text('testament', { enum: ['ot', 'nt'] }).notNull(),
-  /** Canonical book order. */
-  position: integer('position').notNull(),
+  code: text('code').primaryKey(),
+  /** The USFM spec's book number (`01`, `A4`). A file sort key, not an id. */
+  usfmNumber: text('usfm_number').notNull(),
+});
+
+/** One tradition's list of books (ADR-0002 "Canon shape"). */
+export const canon = sqliteTable('canon', {
+  id: text('id').primaryKey(),
+  tradition: text('tradition').notNull(),
+  sourceUrl: text('source_url').notNull(),
+  note: text('note').notNull(),
+});
+
+/** A group inside a canon. Sections form a tree through `parent_section_id`. */
+export const canonSection = sqliteTable(
+  'canon_section',
+  {
+    canonId: text('canon_id')
+      .notNull()
+      .references(() => canon.id),
+    sectionId: text('section_id').notNull(),
+    parentSectionId: text('parent_section_id'),
+    ordinal: integer('ordinal').notNull(),
+    labelKey: text('label_key').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.canonId, t.sectionId] })],
+);
+
+/** One counted item in a canon, in canon order. Holds one or more books. */
+export const canonEntry = sqliteTable(
+  'canon_entry',
+  {
+    canonId: text('canon_id')
+      .notNull()
+      .references(() => canon.id),
+    entryId: text('entry_id').notNull(),
+    sectionId: text('section_id').notNull(),
+    ordinal: integer('ordinal').notNull(),
+    status: text('status', { enum: ['canonical', 'readable', 'appendix'] }).notNull(),
+    /** NULL: label the entry with its only book's name. */
+    labelKey: text('label_key'),
+  },
+  (t) => [primaryKey({ columns: [t.canonId, t.entryId] })],
+);
+
+export const canonEntryBook = sqliteTable(
+  'canon_entry_book',
+  {
+    canonId: text('canon_id').notNull(),
+    entryId: text('entry_id').notNull(),
+    ordinal: integer('ordinal').notNull(),
+    bookCode: text('book_code')
+      .notNull()
+      .references(() => book.code),
+  },
+  (t) => [primaryKey({ columns: [t.canonId, t.entryId, t.ordinal] })],
+);
+
+/** A book's names in one language. `canon_id` NULL is the default; a canon row overrides it. */
+export const bookName = sqliteTable('book_name', {
+  bookCode: text('book_code')
+    .notNull()
+    .references(() => book.code),
+  lang: text('lang').notNull(),
+  canonId: text('canon_id').references(() => canon.id),
+  long: text('long').notNull(),
+  short: text('short').notNull(),
+  abbr: text('abbr'),
+  source: text('source').notNull(),
 });
 
 export const block = sqliteTable(
@@ -49,9 +114,9 @@ export const block = sqliteTable(
     translationId: integer('translation_id')
       .notNull()
       .references(() => translation.id),
-    bookId: integer('book_id')
+    book: text('book')
       .notNull()
-      .references(() => book.id),
+      .references(() => book.code),
     chapter: integer('chapter').notNull(),
     /** Typesetting branch. */
     genre: text('genre', { enum: ['prose', 'poetry', 'heading'] }).notNull(),
@@ -62,7 +127,7 @@ export const block = sqliteTable(
     /** Render order within the chapter (= seq of its first token). */
     seq: integer('seq').notNull(),
   },
-  (t) => [index('block_order').on(t.translationId, t.bookId, t.seq)],
+  (t) => [index('block_order').on(t.translationId, t.book, t.seq)],
 );
 
 export const token = sqliteTable(
@@ -72,9 +137,9 @@ export const token = sqliteTable(
     translationId: integer('translation_id')
       .notNull()
       .references(() => translation.id),
-    bookId: integer('book_id')
+    book: text('book')
       .notNull()
-      .references(() => book.id),
+      .references(() => book.code),
     chapter: integer('chapter').notNull(),
     /**
      * Canonical verse (av11n); NULL = non-verse content. EVERY heading token
@@ -99,8 +164,8 @@ export const token = sqliteTable(
     owId: text('ow_id'),
   },
   (t) => [
-    index('token_render').on(t.translationId, t.bookId, t.chapter, t.verse, t.seq),
-    index('token_anchor').on(t.translationId, t.bookId, t.chapter, t.verse, t.wordIndex),
+    index('token_render').on(t.translationId, t.book, t.chapter, t.verse, t.seq),
+    index('token_anchor').on(t.translationId, t.book, t.chapter, t.verse, t.wordIndex),
   ],
 );
 
@@ -115,13 +180,13 @@ export const versificationMap = sqliteTable(
     translationId: integer('translation_id')
       .notNull()
       .references(() => translation.id),
-    bookId: integer('book_id')
+    book: text('book')
       .notNull()
-      .references(() => book.id),
+      .references(() => book.code),
     srcChapter: integer('src_chapter').notNull(),
     srcVerse: integer('src_verse').notNull(),
     canonChapter: integer('canon_chapter').notNull(),
     canonVerse: integer('canon_verse').notNull(),
   },
-  (t) => [index('vmap_src').on(t.translationId, t.bookId, t.srcChapter, t.srcVerse)],
+  (t) => [index('vmap_src').on(t.translationId, t.book, t.srcChapter, t.srcVerse)],
 );

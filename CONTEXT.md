@@ -10,17 +10,17 @@ Terms marked *(planned)* are decided in an ADR but not yet in the code.
 One book of scripture, identified by its **USFM book code** (`GEN`, `PSA`, `JHN`, `TOB`, `1MA`). Names, abbreviations and slugs are display data per language, never ids. (ADR-0002)
 _Avoid_: using an English name or slug as an id
 
-**Canon** *(planned)*:
+**Canon**:
 One specific list of what a tradition counts as scripture, in its order: Protestant now, Catholic, Orthodox, Tanakh and Ethiopian lists later. Grouping and order belong to the canon, not to the book. (ADR-0002)
 _Avoid_: assuming every Bible has 66 books or the same order
 
-**Canon entry** *(planned)*:
+**Canon entry**:
 One counted item in a canon, holding one or more book codes. Tanakh "Samuel" is one entry with `1SA` and `2SA`. Each entry has a status: `canonical`, `readable` (the Orthodox *anagignoskomena*) or `appendix`. Traditions count entries, not codes.
 
-**Canon section** *(planned)*:
-A group inside a canon (Old Testament, Pentateuch, Torah, Ketuvim, appendix). Sections form a tree and replace the old `testament` field.
+**Canon section**:
+A group inside a canon (Old Testament, Pentateuch, Torah, Ketuvim, appendix). Sections form a tree.
 
-**Book name** *(planned)*:
+**Book name**:
 A book's long name, short name and abbreviation in one language, with optional overrides per canon (Vulgate `EZR` is "1 Esdras"). Parsing a human reference needs a canon and a language.
 
 ## Editions

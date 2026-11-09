@@ -5,13 +5,14 @@
  *
  * Integer ids are storage-only and regenerated every ingest; block rows are
  * inserted first and their rowids mapped by the block's local ordinal.
- * Anchors join by abbrev + slug + coordinate, never by these ids.
+ * Outside references use addresses, never these ids.
  */
 
 import Database from 'better-sqlite3';
-import { eq } from 'drizzle-orm';
 import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 
+import { BOOKS, ENGLISH_NAMES } from '../model/books';
+import { CANONS } from '../model/canon';
 import type { Block, Token } from '../model/corpus';
 import * as schema from '../db/corpus-schema';
 
@@ -30,27 +31,65 @@ CREATE TABLE translation (
   edition TEXT NOT NULL
 );
 CREATE TABLE book (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  slug TEXT NOT NULL UNIQUE,
-  name TEXT NOT NULL,
-  testament TEXT NOT NULL,
-  position INTEGER NOT NULL
+  code TEXT PRIMARY KEY,
+  usfm_number TEXT NOT NULL
+);
+CREATE TABLE canon (
+  id TEXT PRIMARY KEY,
+  tradition TEXT NOT NULL,
+  source_url TEXT NOT NULL,
+  note TEXT NOT NULL
+);
+CREATE TABLE canon_section (
+  canon_id TEXT NOT NULL REFERENCES canon(id),
+  section_id TEXT NOT NULL,
+  parent_section_id TEXT,
+  ordinal INTEGER NOT NULL,
+  label_key TEXT NOT NULL,
+  PRIMARY KEY (canon_id, section_id)
+);
+CREATE TABLE canon_entry (
+  canon_id TEXT NOT NULL REFERENCES canon(id),
+  entry_id TEXT NOT NULL,
+  section_id TEXT NOT NULL,
+  ordinal INTEGER NOT NULL,
+  status TEXT NOT NULL,
+  label_key TEXT,
+  PRIMARY KEY (canon_id, entry_id),
+  FOREIGN KEY (canon_id, section_id) REFERENCES canon_section(canon_id, section_id)
+);
+CREATE TABLE canon_entry_book (
+  canon_id TEXT NOT NULL,
+  entry_id TEXT NOT NULL,
+  ordinal INTEGER NOT NULL,
+  book_code TEXT NOT NULL REFERENCES book(code),
+  PRIMARY KEY (canon_id, entry_id, ordinal),
+  FOREIGN KEY (canon_id, entry_id) REFERENCES canon_entry(canon_id, entry_id)
+);
+CREATE TABLE book_name (
+  book_code TEXT NOT NULL REFERENCES book(code),
+  lang TEXT NOT NULL,
+  canon_id TEXT REFERENCES canon(id),
+  long TEXT NOT NULL,
+  short TEXT NOT NULL,
+  abbr TEXT,
+  source TEXT NOT NULL
 );
 CREATE TABLE block (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   translation_id INTEGER NOT NULL REFERENCES translation(id),
-  book_id INTEGER NOT NULL REFERENCES book(id),
+  book TEXT NOT NULL REFERENCES book(code),
   chapter INTEGER NOT NULL,
   genre TEXT NOT NULL,
   role TEXT,
   indent INTEGER NOT NULL DEFAULT 0,
   seq INTEGER NOT NULL
 );
-CREATE INDEX block_order ON block (translation_id, book_id, seq);
+CREATE INDEX block_order ON block (translation_id, book, seq);
 CREATE TABLE token (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   translation_id INTEGER NOT NULL REFERENCES translation(id),
-  book_id INTEGER NOT NULL REFERENCES book(id),
+  book TEXT NOT NULL REFERENCES book(code),
   chapter INTEGER NOT NULL,
   verse INTEGER,
   word_index INTEGER,
@@ -61,24 +100,25 @@ CREATE TABLE token (
   verse_start INTEGER NOT NULL DEFAULT 0,
   ow_id TEXT
 );
-CREATE INDEX token_render ON token (translation_id, book_id, chapter, verse, seq);
-CREATE INDEX token_anchor ON token (translation_id, book_id, chapter, verse, word_index);
+CREATE INDEX token_render ON token (translation_id, book, chapter, verse, seq);
+CREATE INDEX token_anchor ON token (translation_id, book, chapter, verse, word_index);
 CREATE TABLE versification_map (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   translation_id INTEGER NOT NULL REFERENCES translation(id),
-  book_id INTEGER NOT NULL REFERENCES book(id),
+  book TEXT NOT NULL REFERENCES book(code),
   src_chapter INTEGER NOT NULL,
   src_verse INTEGER NOT NULL,
   canon_chapter INTEGER NOT NULL,
   canon_verse INTEGER NOT NULL
 );
-CREATE INDEX vmap_src ON versification_map (translation_id, book_id, src_chapter, src_verse);
+CREATE INDEX vmap_src ON versification_map (translation_id, book, src_chapter, src_verse);
 `;
 
 export function createCorpusDb(path: string): { db: CorpusDb; sqlite: Database.Database } {
   const sqlite = new Database(path);
   sqlite.pragma('journal_mode = OFF'); // build artifact — no crash safety needed
   sqlite.pragma('synchronous = OFF');
+  sqlite.pragma('foreign_keys = ON');
   sqlite.exec(DDL);
   // rc.4 driver: the client must be passed via config (the positional
   // (client, config) form silently opens a NEW anonymous database)
@@ -104,24 +144,51 @@ export function insertTranslation(db: CorpusDb, meta: TranslationMeta): number {
   return row.id;
 }
 
-export function insertBook(
-  db: CorpusDb,
-  b: { slug: string; name: string; testament: 'ot' | 'nt'; position: number },
-): number {
-  const existing = db
-    .select({ id: schema.book.id })
-    .from(schema.book)
-    .where(eq(schema.book.slug, b.slug))
-    .get();
-  if (existing) return existing.id;
-  const [row] = db.insert(schema.book).values(b).returning({ id: schema.book.id }).all();
-  return row.id;
+/** Write every USFM book, every canon and the default English names (ADR-0002). */
+export function seedBooksAndCanons(db: CorpusDb): void {
+  db.insert(schema.book).values(BOOKS.map((b) => ({ code: b.code, usfmNumber: b.usfmNumber }))).run();
+  for (const c of CANONS) {
+    db.insert(schema.canon)
+      .values({ id: c.id, tradition: c.tradition, sourceUrl: c.sourceUrl, note: c.note })
+      .run();
+    db.insert(schema.canonSection)
+      .values(
+        c.sections.map((s, i) => ({
+          canonId: c.id,
+          sectionId: s.id,
+          parentSectionId: s.parent,
+          ordinal: i + 1,
+          labelKey: s.labelKey,
+        })),
+      )
+      .run();
+    db.insert(schema.canonEntry)
+      .values(
+        c.entries.map((e, i) => ({
+          canonId: c.id,
+          entryId: e.id,
+          sectionId: e.section,
+          ordinal: i + 1,
+          status: e.status,
+          labelKey: e.labelKey,
+        })),
+      )
+      .run();
+    db.insert(schema.canonEntryBook)
+      .values(
+        c.entries.flatMap((e) =>
+          e.books.map((code, i) => ({ canonId: c.id, entryId: e.id, ordinal: i + 1, bookCode: code })),
+        ),
+      )
+      .run();
+  }
+  db.insert(schema.bookName).values([...ENGLISH_NAMES]).run();
 }
 
 /** Insert one book's normalized rows; maps local block ordinals → rowids. */
 export function insertBookRows(
   db: CorpusDb,
-  ids: { translationId: number; bookId: number },
+  ids: { translationId: number; book: string },
   rows: { blocks: Block[]; tokens: Token[] },
 ): void {
   const blockRowId = new Map<number, number>();
@@ -131,7 +198,7 @@ export function insertBookRows(
       .values(
         chunk.map((b) => ({
           translationId: ids.translationId,
-          bookId: ids.bookId,
+          book: ids.book,
           chapter: b.chapter,
           genre: b.genre,
           role: b.role,
@@ -151,7 +218,7 @@ export function insertBookRows(
           if (blockId == null) throw new Error(`token ${t.id} references unknown block ${t.blockId}`);
           return {
             translationId: ids.translationId,
-            bookId: ids.bookId,
+            book: ids.book,
             chapter: t.chapter,
             verse: t.verse,
             wordIndex: t.wordIndex,
@@ -170,7 +237,7 @@ export function insertBookRows(
 
 /** One `versification_map` row, resolved to storage ids (native → canonical). */
 export interface VersificationInsert {
-  bookId: number;
+  book: string;
   srcChapter: number;
   srcVerse: number;
   canonChapter: number;

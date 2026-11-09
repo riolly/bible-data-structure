@@ -14,7 +14,7 @@ import { existsSync, readdirSync, readFileSync, mkdirSync, rmSync } from 'node:f
 import { join } from 'node:path';
 
 import type { IngestStats } from './normalize';
-import { CANON_BY_CODE } from './books';
+import { PROTESTANT, canonBookCodes } from '../model/canon';
 import { computeEdition, type SourceFile } from './edition';
 import { normalizeUsj } from './normalize';
 import { usfmToUsj, usjBookCode } from './parse';
@@ -22,16 +22,20 @@ import { SOURCES } from './sources';
 import { parseVrs } from './vrs';
 import {
   createCorpusDb,
-  insertBook,
   insertBookRows,
   insertTranslation,
   insertVersification,
+  seedBooksAndCanons,
 } from './write-db';
 
 const SOURCES_ROOT = join(import.meta.dirname, 'sources');
 const VRS_ROOT = join(import.meta.dirname, 'vrs');
 const OUT_DIR = join(import.meta.dirname, '..', '..', 'build');
 const OUT_PATH = join(OUT_DIR, 'corpus.db');
+
+/** The books every bundled edition must have, in canon order. */
+const EXPECTED_BOOKS = canonBookCodes(PROTESTANT);
+const BOOK_ORDER = new Map(EXPECTED_BOOKS.map((code, i) => [code, i]));
 
 function readSourceFiles(dir: string): SourceFile[] {
   const root = join(SOURCES_ROOT, dir);
@@ -40,13 +44,13 @@ function readSourceFiles(dir: string): SourceFile[] {
     if (!name.toLowerCase().endsWith('.usfm')) continue;
     const usfm = readFileSync(join(root, name), 'utf8');
     const code = usfm.match(/^\\id (\w{3})/)?.[1];
-    if (!code || !CANON_BY_CODE.has(code)) continue; // FRT, Apocrypha, …
+    if (!code || !BOOK_ORDER.has(code)) continue; // FRT, Apocrypha, …
     files.push({ code, usfm });
   }
-  if (files.length !== CANON_BY_CODE.size) {
+  if (files.length !== EXPECTED_BOOKS.length) {
     const seen = new Set(files.map((f) => f.code));
-    const missing = [...CANON_BY_CODE.keys()].filter((c) => !seen.has(c));
-    throw new Error(`${dir}: expected 66 canon books, got ${files.length} (missing: ${missing.join(', ')})`);
+    const missing = EXPECTED_BOOKS.filter((c) => !seen.has(c));
+    throw new Error(`${dir}: expected ${EXPECTED_BOOKS.length} protestant canon books, got ${files.length} (missing: ${missing.join(', ')})`);
   }
   return files;
 }
@@ -61,6 +65,7 @@ function main() {
   mkdirSync(OUT_DIR, { recursive: true });
   rmSync(OUT_PATH, { force: true });
   const { db, sqlite } = createCorpusDb(OUT_PATH);
+  seedBooksAndCanons(db);
 
   for (const src of SOURCES) {
     const files = readSourceFiles(src.dir);
@@ -72,14 +77,10 @@ function main() {
     let blockCount = 0;
     let tokenCount = 0;
     let vmapCount = 0;
-    const bookIdBySlug = new Map<string, number>();
     const ingestAll = sqlite.transaction(() => {
       for (const file of [...files].sort(
-        (a, b) => CANON_BY_CODE.get(a.code)!.position - CANON_BY_CODE.get(b.code)!.position,
+        (a, b) => BOOK_ORDER.get(a.code)! - BOOK_ORDER.get(b.code)!,
       )) {
-        const bookDef = CANON_BY_CODE.get(file.code)!;
-        const bookId = insertBook(db, bookDef);
-        bookIdBySlug.set(bookDef.slug, bookId);
         const { usj, parseErrors, versifiedTitleRewrites } = usfmToUsj(file.usfm, {
           rewriteVersifiedD: src.rewriteVersifiedD,
         });
@@ -101,7 +102,7 @@ function main() {
         const { blocks, tokens, stats } = normalizeUsj(usj);
         validate(file.code, blocks.length, tokens);
         warnVerseGaps(file.code, tokens);
-        insertBookRows(db, { translationId, bookId }, { blocks, tokens });
+        insertBookRows(db, { translationId, book: file.code }, { blocks, tokens });
         addStats(totals, stats);
         blockCount += blocks.length;
         tokenCount += tokens.length;
@@ -109,7 +110,7 @@ function main() {
       // Sparse native↔canonical map (#12, ADR-0001): resolve the translation's
       // versification scheme to its .vrs file. av11n == canonical → no file
       // needed / zero rows; a divergent scheme drops its rows here.
-      vmapCount = insertVersificationForScheme(db, translationId, src.meta.versification, bookIdBySlug);
+      vmapCount = insertVersificationForScheme(db, translationId, src.meta.versification);
     });
     ingestAll();
     console.log(`  ${blockCount} blocks, ${tokenCount} tokens, ${vmapCount} versification rows`);
@@ -131,16 +132,14 @@ function insertVersificationForScheme(
   db: ReturnType<typeof createCorpusDb>['db'],
   translationId: number,
   scheme: string,
-  bookIdBySlug: ReadonlyMap<string, number>,
 ): number {
   const path = join(VRS_ROOT, `${scheme}.vrs`);
   if (!existsSync(path)) return 0; // scheme without a divergence file = identity
   const rows = parseVrs(readFileSync(path, 'utf8'));
   const resolved = rows.map((r) => {
-    const bookId = bookIdBySlug.get(r.book);
-    if (bookId == null) throw new Error(`${scheme}.vrs: maps book "${r.book}" absent from corpus`);
+    if (!BOOK_ORDER.has(r.book)) throw new Error(`${scheme}.vrs: maps book "${r.book}" absent from corpus`);
     return {
-      bookId,
+      book: r.book,
       srcChapter: r.srcChapter,
       srcVerse: r.srcVerse,
       canonChapter: r.canonChapter,

@@ -23,7 +23,7 @@ const native = nativeModuleLoads(
 
 describe.skipIf(!native)('corpus DB round-trip (write seam ↔ read seam)', () => {
   it('a chapter read returns the exact Token+Block rows the normalizer produced', async () => {
-    const { createCorpusDb, insertBook, insertBookRows, insertTranslation } = await import(
+    const { createCorpusDb, insertBookRows, insertTranslation, seedBooksAndCanons } = await import(
       './write-db'
     );
     const usj = JSON.parse(
@@ -32,6 +32,7 @@ describe.skipIf(!native)('corpus DB round-trip (write seam ↔ read seam)', () =
     const { blocks, tokens } = normalizeUsj(usj);
 
     const { db, sqlite } = createCorpusDb(':memory:');
+    seedBooksAndCanons(db);
     const translationId = insertTranslation(db, {
       name: 'Fixture',
       abbrev: 'FIX',
@@ -41,11 +42,10 @@ describe.skipIf(!native)('corpus DB round-trip (write seam ↔ read seam)', () =
       versification: 'av11n',
       edition: 'sha256:0000000000000000',
     });
-    const bookId = insertBook(db, { slug: 'John', name: 'John', testament: 'nt', position: 43 });
-    insertBookRows(db, { translationId, bookId }, { blocks, tokens });
+    insertBookRows(db, { translationId, book: 'JHN' }, { blocks, tokens });
 
     // chapter 1 read includes chapter-0 front matter (\mt book title)
-    const ch1 = readChapter(db, 'FIX', 'John', 1);
+    const ch1 = readChapter(db, 'FIX', 'JHN', 1);
     const expectBlocks = blocks.filter((b) => b.chapter <= 1);
     const expectTokens = tokens.filter((t) => t.chapter <= 1);
     expect(ch1.blocks.length).toBe(expectBlocks.length);
@@ -67,12 +67,12 @@ describe.skipIf(!native)('corpus DB round-trip (write seam ↔ read seam)', () =
     });
 
     // a non-first chapter read does NOT include front matter
-    const ch2 = readChapter(db, 'FIX', 'John', 2);
+    const ch2 = readChapter(db, 'FIX', 'JHN', 2);
     expect(ch2.blocks.every((b) => b.chapter === 2)).toBe(true);
     expect(ch2.tokens.some((t) => t.verse === null)).toBe(true); // \d + \qa headings
 
     // unknown coordinate reads empty, not throwing
-    expect(readChapter(db, 'KJV', 'John', 1)).toEqual({ blocks: [], tokens: [] });
+    expect(readChapter(db, 'KJV', 'JHN', 1)).toEqual({ blocks: [], tokens: [] });
 
     sqlite.close();
   });
@@ -118,11 +118,13 @@ describe.skipIf(!native)('DDL ↔ drizzle schema parity (write-db.ts hand-mirror
           hasDefault: c.dflt_value != null,
         }))
         .sort((a, b) => a.name.localeCompare(b.name));
+      const inCompositePk = (name: string) =>
+        table.primaryKeys.some((pk) => pk.columns.some((c) => c.name === name));
       const schemaCols = table.columns
         .map((c) => ({
           name: c.name,
           notNull: c.primary || c.notNull,
-          primary: c.primary,
+          primary: c.primary || inCompositePk(c.name),
           hasDefault: c.default !== undefined,
         }))
         .sort((a, b) => a.name.localeCompare(b.name));

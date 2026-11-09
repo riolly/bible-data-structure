@@ -18,7 +18,7 @@ bun run ingest            # sources → build/corpus.db (gitignored)
   stats bag of everything Phase 1 deliberately drops. Unknown structure throws.
 - `parse.ts` — usfm-grammar wrapper (strict first, lenient with logged errors;
   versified-`\d` grammar-gap preprocess).
-- `books.ts` — the 66-book canon: USFM code → permanent anchor slug.
+- Books, canons and English names live in `src/model/books.ts` and `src/model/canon.ts`; `write-db.ts` seeds them.
 - `edition.ts` — deterministic `translation.edition` stamp (ADR-0005): sha256
   over the source text, immune to zip repackaging.
 - `sources.ts` / `download.ts` — pinned upstream zips + checksums. A checksum

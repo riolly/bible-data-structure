@@ -22,14 +22,14 @@ Started 2026-11-09 from the research in [bible-codex](https://github.com/riolly/
 |---|---|---|
 | Token stream with Block overlays (old ADR-0001, 0010) | ADR-0001 | Keep |
 | Single fixed KJV versification as the hub (old ADR-0001) | ADR-0002 | Replaced: addresses name their scheme |
-| `book` with English slug id, `testament`, fixed `position` | `src/db/corpus-schema.ts`, `src/ingest/books.ts` | Revisit: USFM codes, canon as data (ADR-0002) |
+| `book` with English slug id, `testament`, fixed `position` | `src/db/corpus-schema.ts`, `src/model/books.ts`, `src/model/canon.ts` | Replaced: USFM codes, canon as data (ADR-0002) |
 | Original Word hub, morpheme grain, external ids (old ADR-0007) | ADR-0003 | Keep, not built |
 | Registered tokenizer policy (old ADR-0014) | ADR-0004 | Keep. Revisit verse bridges and non-English scripts |
 | Edition stamp and quote witness (old ADR-0013) | ADR-0005 | Keep |
 | Headings not addressable | ADR-0001 | Revisit in structure research |
 | Textual variants (not modeled) | research/README.md | New topic |
 | Ingest pipeline, tokenizer, `.vrs` parser, fixtures | `src/ingest/` | Keep, 54 tests pass |
-| Corpus schema and reader | `src/db/` | Keep. The app menu type behind `listBooks` became a plain `CorpusBook` |
+| Corpus schema and reader | `src/db/` | Keep. `listBooks` became `canonBooks`, which reads order and names from the canon tables |
 | Interlinear sourcing (old issue #2) | research/interlinear-corpus-sourcing.md | Keep, open |
 | Licensing notes (an old agent memory) | research/README.md | Lost, needs redoing |
 | User data, storage and sync design (old ADR-0006, 0009, 0011) | docs/prior-art/ | Input for step 4 |

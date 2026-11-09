@@ -1,12 +1,6 @@
-import { and, asc, eq, inArray, max } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, max, or } from 'drizzle-orm';
 import type { BaseSQLiteDatabase } from 'drizzle-orm/sqlite-core';
 
-/** A book the corpus can render, with its chapter count. */
-export interface CorpusBook {
-  readonly slug: string;
-  readonly name: string;
-  readonly chapters: number;
-}
 import type { Block, Token } from '../model/corpus';
 import {
   buildVersificationMap,
@@ -16,12 +10,10 @@ import {
 import * as schema from './corpus-schema';
 
 /**
- * Chapter read across the old-repo ADR-0009 Drizzle seam. Driver-agnostic over the
- * SYNC sqlite drivers: the app calls it with drizzle(expo-sqlite), the ingest
- * round-trip test with drizzle(better-sqlite3) — same schema, same query.
- *
- * The corpus is addressed by SEMANTIC KEYS (translation abbrev + book slug),
- * never by storage ids (ADR-0001/0004).
+ * Corpus reads across the old-repo ADR-0009 Drizzle seam. Driver-agnostic over
+ * the SYNC sqlite drivers (better-sqlite3 at build time and in tests). Books are
+ * addressed by USFM code, translations by abbrev, never by storage ids
+ * (ADR-0002).
  */
 
 /** Driver-agnostic bound satisfied by both sync drizzle drivers. */
@@ -32,27 +24,47 @@ export interface Chapter {
   tokens: Token[];
 }
 
+/** One book in a canon, with its display name. */
+export interface CanonBook {
+  readonly code: string;
+  readonly name: string;
+  readonly section: string;
+}
+
 /**
- * The books the corpus can render, in canonical order, each with its chapter
- * count (= the book's highest chapter number; chapter 0 front matter excluded).
- * Reads a translation only to bound the numbering — chapter counts are
- * av11n-canonical, identical across the bundled translations.
+ * A canon's books in canon order, each named in `lang`. A name row for this
+ * canon wins over the default (`canon_id` NULL); with neither, the name is the
+ * USFM code.
  */
-export function listBooks(db: SyncSqliteDb, translationAbbrev: string): CorpusBook[] {
-  return db
-    .select({
-      slug: schema.book.slug,
-      name: schema.book.name,
-      chapters: max(schema.block.chapter),
-    })
-    .from(schema.book)
-    .innerJoin(schema.block, eq(schema.block.bookId, schema.book.id))
-    .innerJoin(schema.translation, eq(schema.block.translationId, schema.translation.id))
-    .where(eq(schema.translation.abbrev, translationAbbrev))
-    .groupBy(schema.book.id)
-    .orderBy(asc(schema.book.position))
-    .all()
-    .map((r) => ({ slug: r.slug, name: r.name, chapters: r.chapters ?? 0 }));
+export function canonBooks(db: SyncSqliteDb, canonId: string, lang: string): CanonBook[] {
+  const rows = db
+    .select({ code: schema.canonEntryBook.bookCode, section: schema.canonEntry.sectionId })
+    .from(schema.canonEntry)
+    .innerJoin(
+      schema.canonEntryBook,
+      and(
+        eq(schema.canonEntryBook.canonId, schema.canonEntry.canonId),
+        eq(schema.canonEntryBook.entryId, schema.canonEntry.entryId),
+      ),
+    )
+    .where(eq(schema.canonEntry.canonId, canonId))
+    .orderBy(asc(schema.canonEntry.ordinal), asc(schema.canonEntryBook.ordinal))
+    .all();
+  const names = new Map<string, { name: string; specific: boolean }>();
+  for (const n of db
+    .select({ code: schema.bookName.bookCode, name: schema.bookName.short, canonId: schema.bookName.canonId })
+    .from(schema.bookName)
+    .where(
+      and(
+        eq(schema.bookName.lang, lang),
+        or(isNull(schema.bookName.canonId), eq(schema.bookName.canonId, canonId)),
+      ),
+    )
+    .all()) {
+    const specific = n.canonId !== null;
+    if (specific || !names.get(n.code)?.specific) names.set(n.code, { name: n.name, specific });
+  }
+  return rows.map((r) => ({ code: r.code, name: names.get(r.code)?.name ?? r.code, section: r.section }));
 }
 
 /**
@@ -72,22 +84,19 @@ export function listEditions(db: SyncSqliteDb): string[] {
 }
 
 /**
- * A book's highest chapter number (the Codex flip bound, #9). Scoped to one
- * book, so it reads a single MAX aggregate instead of aggregating every book
- * in the translation the way `listBooks` does. Chapter 0 front matter never
- * wins the MAX, so this matches `listBooks`' `chapters`.
+ * A book's highest chapter number in one translation. Chapter 0 front matter
+ * never wins the MAX.
  */
 export function chapterCount(
   db: SyncSqliteDb,
   translationAbbrev: string,
-  bookSlug: string,
+  bookCode: string,
 ): number {
   const rows = db
     .select({ max: max(schema.block.chapter) })
     .from(schema.block)
     .innerJoin(schema.translation, eq(schema.block.translationId, schema.translation.id))
-    .innerJoin(schema.book, eq(schema.block.bookId, schema.book.id))
-    .where(and(eq(schema.translation.abbrev, translationAbbrev), eq(schema.book.slug, bookSlug)))
+    .where(and(eq(schema.translation.abbrev, translationAbbrev), eq(schema.block.book, bookCode)))
     .all();
   return rows[0]?.max ?? 1;
 }
@@ -100,14 +109,14 @@ export function chapterCount(
 export function readChapter(
   db: SyncSqliteDb,
   translationAbbrev: string,
-  bookSlug: string,
+  bookCode: string,
   chapter: number,
 ): Chapter {
   const chapters = chapter === 1 ? [0, 1] : [chapter];
   const scoped = <C extends typeof schema.block | typeof schema.token>(table: C) =>
     and(
       eq(schema.translation.abbrev, translationAbbrev),
-      eq(schema.book.slug, bookSlug),
+      eq(table.book, bookCode),
       inArray(table.chapter, chapters),
     );
 
@@ -122,7 +131,6 @@ export function readChapter(
     })
     .from(schema.block)
     .innerJoin(schema.translation, eq(schema.block.translationId, schema.translation.id))
-    .innerJoin(schema.book, eq(schema.block.bookId, schema.book.id))
     .where(scoped(schema.block))
     .orderBy(asc(schema.block.chapter), asc(schema.block.seq))
     .all();
@@ -142,7 +150,6 @@ export function readChapter(
     })
     .from(schema.token)
     .innerJoin(schema.translation, eq(schema.token.translationId, schema.translation.id))
-    .innerJoin(schema.book, eq(schema.token.bookId, schema.book.id))
     .where(scoped(schema.token))
     .orderBy(asc(schema.token.chapter), asc(schema.token.seq))
     .all();
@@ -152,8 +159,8 @@ export function readChapter(
 
 /**
  * A translation's sparse native↔canonical divergence rows (#12). Empty for an
- * av11n translation (KJV/BSB) — the map is identity there. Book slug (not the
- * storage id) is returned, matching the coordinate-keyed model (ADR-0001).
+ * av11n translation (KJV/BSB) — the map is identity there. The USFM book code
+ * is returned, never a storage id (ADR-0002).
  */
 export function readVersification(
   db: SyncSqliteDb,
@@ -161,7 +168,7 @@ export function readVersification(
 ): VersificationRow[] {
   return db
     .select({
-      book: schema.book.slug,
+      book: schema.versificationMap.book,
       srcChapter: schema.versificationMap.srcChapter,
       srcVerse: schema.versificationMap.srcVerse,
       canonChapter: schema.versificationMap.canonChapter,
@@ -169,7 +176,6 @@ export function readVersification(
     })
     .from(schema.versificationMap)
     .innerJoin(schema.translation, eq(schema.versificationMap.translationId, schema.translation.id))
-    .innerJoin(schema.book, eq(schema.versificationMap.bookId, schema.book.id))
     .where(eq(schema.translation.abbrev, translationAbbrev))
     .all();
 }
