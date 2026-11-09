@@ -8,6 +8,7 @@ import { PROTESTANT, canonBookCodes } from '../model/canon';
 import { checkVerses, hasVerse, lastVerse } from '../model/scheme';
 import { nativeModuleLoads } from './native-probe';
 import { KJV_TITLES, SCHEME_IDS, loadSchemes } from './schemes';
+import { SOURCES as SOURCE_DEFS } from './sources';
 
 const schemes = loadSchemes();
 
@@ -116,6 +117,23 @@ describe.each(['kjv', 'bsb'])('%s source text under the kjv scheme', (dir) => {
       checked++;
     }
     expect(checked).toBe(66);
+  });
+});
+
+describe.each(SOURCE_DEFS.map((s) => [s.meta.abbrev, s] as const))('%s source text', (_, src) => {
+  it.skipIf(!existsSync(join(SOURCES, src.dir)))('has its listed books, and no verse its scheme lacks', () => {
+    const scheme = schemes.get(src.meta.scheme)!;
+    const wanted = new Set(src.books);
+    const seen: string[] = [];
+    for (const name of readdirSync(join(SOURCES, src.dir))) {
+      if (!name.endsWith('.usfm')) continue;
+      const usfm = readFileSync(join(SOURCES, src.dir, name), 'utf8');
+      const code = usfm.match(/^\\id (\w{3})/)?.[1];
+      if (!code || !wanted.has(code)) continue;
+      expect(checkVerses(scheme, code, usfmVerses(usfm)).unknown, code).toEqual([]);
+      seen.push(code);
+    }
+    expect(seen.sort()).toEqual([...src.books].sort());
   });
 });
 

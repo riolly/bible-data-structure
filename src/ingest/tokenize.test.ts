@@ -94,4 +94,27 @@ describe('registered tokenization policy (ADR-0004)', () => {
       expect(covered).toBe(s.replace(/\s+/g, ''));
     }
   });
+
+  // ADR-0004 v1.2: WLC and SBLGNT go through the same rules. Text from the
+  // pinned sources (WLC GEN 1, SBLGNT ROM 14-16, MRK 16, JHN 7).
+  it('Hebrew: maqaf, sof pasuq and paseq are punct; points and accents stay in the word (v1.2)', () => {
+    expect(texts('וַיִּקְרָ֨א אֱלֹהִ֤ים ׀ לָאוֹר֙')).toEqual(['w:וַיִּקְרָ֨א', 'w:אֱלֹהִ֤ים', 'p:׀', 'w:לָאוֹר֙']);
+    expect(texts('וַֽיְהִי־ עֶ֥רֶב')).toEqual(['w:וַֽיְהִי', 'p:־', 'w:עֶ֥רֶב']);
+    // a maqaf inside one OSHB \w still splits: a word index is not an OSHB word number
+    expect(texts('זַרְעוֹ־ב֖וֹ')).toEqual(['w:זַרְעוֹ', 'p:־', 'w:ב֖וֹ']);
+    // the petuha letter after a verse is a word, last in its verse
+    expect(texts('אֶחָֽד׃ פ')).toEqual(['w:אֶחָֽד', 'p:׃', 'w:פ']);
+  });
+
+  it('Greek: elision with ʼ (a letter) stays in the word, with ’ it is punct (v1.2)', () => {
+    expect(texts('κατʼ ἐπιταγὴν')).toEqual(['w:κατʼ', 'w:ἐπιταγὴν']);
+    expect(texts('δι’ αὐτοῦ')).toEqual(['w:δι', 'p:’', 'w:αὐτοῦ']);
+  });
+
+  it('Greek: ano teleia, question mark and critical signs are punct (v1.2)', () => {
+    expect(texts('ἐσθίοντι· πάντα')).toEqual(['w:ἐσθίοντι', 'p:·', 'w:πάντα']);
+    expect(texts('ἐστίν\u037E'.normalize('NFC'))).toEqual(['w:ἐστίν', 'p:;']);
+    expect(texts('καὶ ⸂ὅλης ἐκκλησίας⸃.')).toEqual(['w:καὶ', 'p:⸂', 'w:ὅλης', 'w:ἐκκλησίας', 'p:⸃.']);
+    expect(texts('⟦ καὶ ἐπορεύθη')).toEqual(['p:⟦', 'w:καὶ', 'w:ἐπορεύθη']);
+  });
 });

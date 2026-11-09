@@ -16,7 +16,8 @@ A word address is a verse plus a `word_index`: the 0-based ordinal of a word Tok
 ## Open for the research
 
 - Rule 6 (a verse bridge collapses to its first number) loses information. Surfacing verse ranges needs re-ingest and is an address migration. Decide before any external reference exists.
-- The rules were written for English. Greek, Hebrew and other scripts (no spaces, different punctuation) need their own registered policy per script or language.
+- The rules were written for English. Amendment v1.2 registers what they do with Hebrew and Greek. A script without spaces between words still needs its own policy.
+- The petuha and setuma letters (פ, ס) that WLC prints after a verse are word tokens (v1.2). Moving them to structure later is an address migration for those tokens only.
 
 ## The registered policy (v1 — fixed 2026-07-04, issue #6)
 
@@ -75,3 +76,11 @@ per-occurrence ids (ADR-0003).
 The measure-vs-shape parity assertion belongs to the Skia runtime (jest/device) suite, not the
 Skia-free ingest tests.
 
+## Amendment v1.2: Hebrew and Greek use the v1.1 rules unchanged (2026-11-09, step 3)
+
+WLC (Hebrew) and SBLGNT (Greek) ingest through the same `tokenize.ts`. No rule changed, so no English address moved. These tests in `tokenize.test.ts` pin the results with text from the pinned sources:
+
+1. Maqaf (`־`, U+05BE), sof pasuq (`׃`, U+05C3) and paseq (`׀`, U+05C0) are punctuation. A maqaf compound is two words, even inside one OSHB `\w` (`זַרְעוֹ־ב֖וֹ`, GEN 1:11). So a word index is not an OSHB word number. ADR-0003 links original words by external id, never by index.
+2. The petuha and setuma letters (`פ`, `ס`) after a WLC verse are words. They come last in their verse, so no other word's index depends on them.
+3. SBLGNT marks elision with `ʼ` (U+02BC), which Unicode classes as a letter, so `κατʼ` is one word. An elision written with `’` (U+2019) splits off as punctuation under rule 3. The same elision tokenizes differently by character, so a source that switches characters is an address migration.
+4. Ano teleia (`·`), the Greek question mark (U+037E, NFC `;`) and SBLGNT's critical signs (`⸀ ⸁ ⸂ ⸃ ⟦ ⟧`) are punctuation.

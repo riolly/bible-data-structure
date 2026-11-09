@@ -14,14 +14,14 @@ import { existsSync, readdirSync, readFileSync, mkdirSync, rmSync, writeFileSync
 import { join } from 'node:path';
 
 import type { IngestStats } from './normalize';
-import { PROTESTANT, canonBookCodes } from '../model/canon';
 import { PIVOT, checkCoverage } from '../model/mapping';
 import { checkVerses, type Scheme } from '../model/scheme';
 import { loadSchemes } from './schemes';
 import { computeEdition, type SourceFile } from './edition';
 import { normalizeUsj } from './normalize';
 import { usfmToUsj, usjBookCode } from './parse';
-import { SOURCES } from './sources';
+import { SOURCES, type SourceDef } from './sources';
+import { applyTextFixes } from './text-fixes';
 import { checkExtendOnly, formatPivotSnapshot, pivotSnapshot, type PivotSnapshot } from './pivot';
 import { TVTMS_PATH, compileMappings, readTvtms, type TvtmsRow } from './tvtms';
 import {
@@ -38,26 +38,22 @@ const OUT_DIR = join(import.meta.dirname, '..', '..', 'build');
 const OUT_PATH = join(OUT_DIR, 'corpus.db');
 const PIVOT_SNAPSHOT = join(import.meta.dirname, 'fixtures', 'pivot.json');
 
-/** The books every bundled edition must have, in canon order. */
-const EXPECTED_BOOKS = canonBookCodes(PROTESTANT);
-const BOOK_ORDER = new Map(EXPECTED_BOOKS.map((code, i) => [code, i]));
-
-function readSourceFiles(dir: string): SourceFile[] {
-  const root = join(SOURCES_ROOT, dir);
-  const files: SourceFile[] = [];
+/** The source's listed books, in its order. Files for other books (FRT, GLO, …) are skipped. */
+function readSourceFiles(src: SourceDef): SourceFile[] {
+  const root = join(SOURCES_ROOT, src.dir);
+  const wanted = new Set(src.books);
+  const byCode = new Map<string, SourceFile>();
   for (const name of readdirSync(root)) {
     if (!name.toLowerCase().endsWith('.usfm')) continue;
     const usfm = readFileSync(join(root, name), 'utf8');
     const code = usfm.match(/^\\id (\w{3})/)?.[1];
-    if (!code || !BOOK_ORDER.has(code)) continue; // FRT, Apocrypha, …
-    files.push({ code, usfm });
+    if (!code || !wanted.has(code)) continue;
+    if (byCode.has(code)) throw new Error(`${src.dir}: two files for ${code}`);
+    byCode.set(code, { code, usfm });
   }
-  if (files.length !== EXPECTED_BOOKS.length) {
-    const seen = new Set(files.map((f) => f.code));
-    const missing = EXPECTED_BOOKS.filter((c) => !seen.has(c));
-    throw new Error(`${dir}: expected ${EXPECTED_BOOKS.length} protestant canon books, got ${files.length} (missing: ${missing.join(', ')})`);
-  }
-  return files;
+  const missing = src.books.filter((c) => !byCode.has(c));
+  if (missing.length > 0) throw new Error(`${src.dir}: no file for ${missing.join(', ')}`);
+  return src.books.map((c) => byCode.get(c)!);
 }
 
 const addStats = (into: Record<string, number>, from: IngestStats) => {
@@ -95,18 +91,18 @@ function main() {
   for (const src of SOURCES) {
     const scheme = schemes.get(src.meta.scheme);
     if (!scheme) throw new Error(`${src.meta.abbrev}: unknown scheme "${src.meta.scheme}"`);
-    const files = readSourceFiles(src.dir);
-    const edition = computeEdition(files);
+    const raw = readSourceFiles(src);
+    const edition = computeEdition(raw);
+    const files = applyTextFixes(raw, src.textFixes);
     const translationId = insertTranslation(db, { ...src.meta, edition });
     console.log(`\n${src.meta.abbrev} — edition ${edition}`);
+    for (const fix of src.textFixes ?? []) console.log(`  text fix ×${fix.count}: ${JSON.stringify(fix.find)} (${fix.why})`);
 
     const totals: Record<string, number> = {};
     let blockCount = 0;
     let tokenCount = 0;
     const ingestAll = sqlite.transaction(() => {
-      for (const file of [...files].sort(
-        (a, b) => BOOK_ORDER.get(a.code)! - BOOK_ORDER.get(b.code)!,
-      )) {
+      for (const file of files) {
         const { usj, parseErrors, versifiedTitleRewrites } = usfmToUsj(file.usfm, {
           rewriteVersifiedD: src.rewriteVersifiedD,
         });
