@@ -95,15 +95,19 @@ async function main() {
   // Parse one edition ahead: the workers parse the next edition's books while
   // this thread normalizes and writes the current one.
   const pool = createParsePool(join(OUT_DIR, 'usj-cache'));
-  const prepared = SOURCES.map((src) => lazy(() => prepareSource(src, pool)));
+  const prepared = new Map<number, ReturnType<typeof prepareSource>>();
+  const prepare = (i: number) => {
+    if (!prepared.has(i)) prepared.set(i, prepareSource(SOURCES[i], pool));
+    return prepared.get(i)!;
+  };
   try {
     for (const [i, src] of SOURCES.entries()) {
       const started = performance.now();
       const scheme = schemes.get(src.meta.scheme);
       if (!scheme) throw new Error(`${src.meta.abbrev}: unknown scheme "${src.meta.scheme}"`);
-      const { edition, files, outcomes } = prepared[i]();
+      const { edition, files, outcomes } = prepare(i);
       // A source that fails to prepare throws again when its turn comes, so errors keep source order.
-      if (i + 1 < SOURCES.length) try { prepared[i + 1](); } catch {}
+      if (i + 1 < SOURCES.length) try { prepare(i + 1); } catch {}
       const translationId = insertTranslation(db, { ...src.meta, edition });
       console.log(`\n${src.meta.abbrev} — edition ${edition}`);
       for (const fix of src.textFixes ?? []) console.log(`  text fix ×${fix.count}: ${JSON.stringify(fix.find)} (${fix.why})`);
@@ -142,6 +146,7 @@ async function main() {
           tokenCount += tokens.length;
         }
         sqlite.exec('COMMIT');
+        prepared.delete(i); // free this edition's parse results
       } catch (e) {
         sqlite.exec('ROLLBACK');
         throw e;
@@ -165,12 +170,6 @@ async function main() {
 }
 
 const seconds = (since: number) => `${((performance.now() - since) / 1000).toFixed(1)} s`;
-
-/** Run `f` once, on first call. */
-function lazy<T>(f: () => T): () => T {
-  let done: { value: T } | null = null;
-  return () => (done ??= { value: f() }).value;
-}
 
 /**
  * Read a source's files, stamp its edition, apply its text fixes and queue

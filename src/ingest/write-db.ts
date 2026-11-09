@@ -168,6 +168,7 @@ CREATE INDEX mapping_to ON scheme_mapping (scheme, pivot_book, pivot_chapter, pi
 
 const INDEX_DDL = DDL.match(/^CREATE INDEX .*;$/gm)!.join('\n');
 const TABLE_DDL = DDL.replace(/^CREATE INDEX .*;\n/gm, '');
+if (/\bINDEX\b/.test(TABLE_DDL)) throw new Error('write-db.ts: an index in DDL is not one line of `CREATE INDEX ...;`');
 
 /**
  * `deferIndexes` leaves the indexes out until createIndexes runs. Sorting the

@@ -46,42 +46,50 @@ export function createParsePool(cacheDir: string, threads = DEFAULT_THREADS): Pa
   const counts = { hits: 0, parsed: 0 };
   const queue: { req: ParseRequest; done: (r: ParseReply) => void }[] = [];
   const pending = new Map<number, (r: ParseReply) => void>();
-  const idle: Worker[] = [];
+  // One request per worker at a time. Two per worker made a cold ingest
+  // slower (4:15 against 3:57): a worker could hold two large books while
+  // others sat idle.
+  const slots: Worker[] = [];
   const workers: Worker[] = [];
   let nextId = 0;
-  let failure: Error | null = null;
+  let failure: string | null = null;
+  let closing = false;
 
   const dispatch = () => {
-    while (idle.length > 0 && queue.length > 0) {
+    while (slots.length > 0 && queue.length > 0) {
       const { req, done } = queue.shift()!;
       pending.set(req.id, done);
-      idle.pop()!.postMessage(req);
+      slots.pop()!.postMessage(req);
     }
+  };
+  // A worker that dies leaves its requests unanswered: fail every waiting parse.
+  const fail = (why: string) => {
+    failure ??= `a parse worker stopped: ${why}`;
+    for (const done of [...pending.values(), ...queue.map((q) => q.done)]) done({ id: -1, error: failure });
+    pending.clear();
+    queue.length = 0;
   };
   const start = () => {
     const w = new Worker(new URL('./parse-worker.ts', import.meta.url));
     w.on('message', (r: ParseReply) => {
       const done = pending.get(r.id)!;
       pending.delete(r.id);
-      idle.push(w);
+      slots.push(w);
       dispatch();
       done(r);
     });
-    w.on('error', (e) => {
-      // A crashed worker leaves its request unanswered: fail every waiting parse.
-      failure = e;
-      for (const done of [...pending.values(), ...queue.map((q) => q.done)]) done({ id: -1, error: e.message });
-      pending.clear();
-      queue.length = 0;
+    w.on('error', (e) => fail(e.message));
+    w.on('exit', (code) => {
+      if (!closing) fail(`exit code ${code}`);
     });
     workers.push(w);
-    idle.push(w);
+    slots.push(w);
   };
 
   const parseFresh = (usfm: string, opts: ParseOptions) =>
     new Promise<ParseReply>((done) => {
-      if (failure) return done({ id: -1, error: failure.message });
-      if (workers.length < threads && idle.length === 0) start();
+      if (failure) return done({ id: -1, error: failure });
+      if (workers.length < threads && slots.length === 0) start();
       queue.push({ req: { id: nextId++, usfm, opts }, done });
       dispatch();
     });
@@ -103,6 +111,7 @@ export function createParsePool(cacheDir: string, threads = DEFAULT_THREADS): Pa
       return reply.json;
     },
     async close() {
+      closing = true;
       await Promise.all(workers.map((w) => w.terminate()));
     },
   };
