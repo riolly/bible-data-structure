@@ -86,6 +86,16 @@ describe('formatAddress', () => {
     expect(formatAddress(a)).toBe('MAT 2:1!3/kjv');
   });
 
+  it('refuses a range that ends before it starts, as the parser does', () => {
+    expect(() =>
+      formatAddress({
+        scheme: 'kjv',
+        start: { book: 'MAT', chapter: 2, verse: 1, segment: '', wordIndex: 2 },
+        end: { book: 'MAT', chapter: 2, verse: 1, segment: '' },
+      }),
+    ).toThrow(/ends before/);
+  });
+
   it('writes the shortest range end', () => {
     expect(
       formatAddress({

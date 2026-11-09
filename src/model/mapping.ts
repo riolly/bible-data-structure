@@ -38,7 +38,20 @@ export interface MappingRow {
   readonly source?: 'tvtms' | 'vrs';
 }
 
-export const refKey = (r: Ref): string => `${r.book} ${r.chapter}:${r.verse}${r.segment}`;
+/**
+ * A unique string for a reference. A one-letter segment is appended as in an
+ * address (`REV 13:1a`); a longer pivot subverse id is set off by `!`
+ * (`2ES 7:35!aa`), so no segment can read as more verse digits.
+ */
+export const refKey = (r: Ref): string =>
+  `${r.book} ${r.chapter}:${r.verse}${/^[a-z]?$/.test(r.segment) ? r.segment : `!${r.segment}`}`;
+
+/** The inverse of `refKey`. */
+export function parseRefKey(key: string): Ref {
+  const m = /^(\S+) (\d+):(\d+)(?:([a-z])|!([a-z0-9]+))?$/.exec(key);
+  if (!m) throw new Error(`not a reference key: "${key}"`);
+  return { book: m[1], chapter: Number(m[2]), verse: Number(m[3]), segment: m[4] ?? m[5] ?? '' };
+}
 const verseOf = (r: Ref): string => `${r.book} ${r.chapter}:${r.verse}`;
 const whole = (r: Ref): Ref => ({ ...r, segment: '' });
 
@@ -84,18 +97,20 @@ export class Relation {
       (r.segment === '' && this.fromParts.has(verseOf(r)));
   }
 
-  /** Where `r` goes. Empty means absent. */
+  /**
+   * Where `r` goes. Empty means absent. A whole verse goes wherever its own
+   * rows and its parts' rows send it; a part with no row of its own follows
+   * its whole verse.
+   */
   forward(r: Ref): Ref[] {
-    const exact = this.byFrom.get(refKey(r));
-    if (exact) return dedupe(exact.filter((t): t is Ref => t !== null));
+    const real = (list: (Ref | null)[]) => list.filter((t): t is Ref => t !== null);
     if (r.segment !== '') {
-      const w = this.byFrom.get(refKey(whole(r)));
-      if (w) return dedupe(w.filter((t): t is Ref => t !== null));
-    } else {
-      const parts = this.fromParts.get(verseOf(r));
-      if (parts) return dedupe(parts.flatMap((k) => this.byFrom.get(k)!).filter((t): t is Ref => t !== null));
+      const own = this.byFrom.get(refKey(r)) ?? this.byFrom.get(refKey(whole(r)));
+      return own ? dedupe(real(own)) : [r];
     }
-    return [r];
+    const keys = this.fromParts.get(verseOf(r));
+    if (!keys) return [r];
+    return dedupe(real(keys.flatMap((k) => this.byFrom.get(k)!)));
   }
 
   /**
@@ -168,7 +183,10 @@ export class Mappings {
 export function checkCoverage(scheme: Scheme, pivot: Scheme, rows: readonly MappingRow[]): string[] {
   const own = rows.filter((r) => r.scheme === scheme.id);
   const rel = new Relation(own);
-  const absent = new Set(own.filter((r) => r.to === null).map((r) => refKey(r.from)));
+  // A verse counts as marked absent when every row starting in it is absent.
+  const rowsOfVerse = new Map<string, MappingRow[]>();
+  for (const r of own) push(rowsOfVerse, verseOf(r.from), r);
+  const allAbsent = (ref: Ref) => rowsOfVerse.get(verseOf(ref))?.every((r) => r.to === null) ?? false;
   const problems: string[] = [];
   for (const [book, counts] of scheme.verseCounts) {
     counts.forEach((last, i) => {
@@ -176,7 +194,7 @@ export function checkCoverage(scheme: Scheme, pivot: Scheme, rows: readonly Mapp
         if (!hasVerse(scheme, book, i + 1, v)) continue;
         const ref = { book, chapter: i + 1, verse: v, segment: '' };
         const targets = rel.forward(ref);
-        if (targets.length === 0 && !absent.has(refKey(ref))) problems.push(`${refKey(ref)} maps nowhere`);
+        if (targets.length === 0 && !allAbsent(ref)) problems.push(`${refKey(ref)} maps nowhere`);
         for (const t of targets) {
           if (!refExists(pivot, t)) problems.push(`${refKey(ref)} maps to ${refKey(t)}, which the pivot lacks`);
         }

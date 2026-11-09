@@ -9,7 +9,8 @@
  * 2026-11-09. Each row is [spec number, code, spec English name].
  *
  * The spec gives one English name per book, so the seeded `long` and `short`
- * names are the same and `abbr` is empty. The spec qualifies two names
+ * names are the same and `abbr` is empty. `source` is the `usfm-spec`
+ * data_source row, which carries the attribution. The spec qualifies two names
  * ("Esther (Hebrew)", "Daniel (Hebrew)"); they are kept as written.
  */
 
@@ -140,5 +141,5 @@ export const ENGLISH_NAMES: readonly BookName[] = SPEC.map(([, code, name]) => (
   long: name,
   short: name,
   abbr: null,
-  source: USFM_SPEC_URL,
+  source: 'usfm-spec',
 }));

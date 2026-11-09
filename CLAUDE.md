@@ -24,7 +24,7 @@ Model the Bible as it is, independent of any app. If a concept only exists becau
 - **A book's id is its USFM code** (ADR-0002). Names and slugs are display data.
 - **Outside references point at addresses or external `ow_id`s, never at row ids.** Row ids are rebuilt on every ingest.
 - **A failing tokenizer test is an address migration, not a test to update** (ADR-0004). Don't change `src/ingest/tokenize.ts` rules without an ADR amendment.
-- **Updating a source pin in `src/ingest/sources.ts` is a new edition** (ADR-0005). Record the new edition stamp in README.md.
+- **Updating a text pin in `SOURCES` (`src/ingest/sources.ts`) is a new edition** (ADR-0005). Record the new edition stamp in README.md. Updating the `TVTMS` pin can change mapping rows: compare `build/mapping-diff.tsv` before and after, and the pivot check must pass.
 - **Licensing before bundling.** Check that a source can be redistributed before any output that leaves this machine includes it.
 
 ## Where things go

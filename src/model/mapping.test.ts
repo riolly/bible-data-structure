@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { Mappings, PIVOT, checkCoverage, type MappingRow } from './mapping';
+import { Mappings, PIVOT, Relation, checkCoverage, parseRefKey, refKey, type MappingRow } from './mapping';
 import type { Scheme } from './scheme';
 
 const ref = (book: string, chapter: number, verse: number, segment = '') => ({ book, chapter, verse, segment });
@@ -60,6 +60,26 @@ describe('Mappings', () => {
   });
 });
 
+describe('Relation.forward with part rows', () => {
+  it('sends a whole verse to its own row and its parts rows', () => {
+    // TVTMS Latin Sir 18:1 keeps its number while 18:1b becomes 18:2.
+    const r = new Relation([
+      { from: ref('SIR', 18, 1), to: ref('SIR', 18, 1) },
+      { from: ref('SIR', 18, 1, 'b'), to: ref('SIR', 18, 2) },
+    ]);
+    expect(r.forward(ref('SIR', 18, 1))).toEqual([ref('SIR', 18, 1), ref('SIR', 18, 2)]);
+    expect(r.forward(ref('SIR', 18, 1, 'b'))).toEqual([ref('SIR', 18, 2)]);
+    expect(r.forward(ref('SIR', 18, 1, 'a'))).toEqual([ref('SIR', 18, 1)]);
+  });
+
+  it('keeps keys apart for long segments', () => {
+    expect(refKey(ref('2ES', 7, 35, 'aa'))).toBe('2ES 7:35!aa');
+    expect(refKey(ref('ESG', 1, 1, 'a'))).not.toBe(refKey(ref('ESG', 1, 10)));
+    expect(parseRefKey('2ES 7:35!aa')).toEqual(ref('2ES', 7, 35, 'aa'));
+    expect(parseRefKey('REV 13:1a')).toEqual(ref('REV', 13, 1, 'a'));
+  });
+});
+
 describe('checkCoverage (replaces the bijection check)', () => {
   it('passes when every verse lands in the pivot', () => {
     expect(checkCoverage(heb, pivot, rows)).toEqual([]);
@@ -75,6 +95,12 @@ describe('checkCoverage (replaces the bijection check)', () => {
     const bad = scheme('bad', { JOL: [20, 32, 22] });
     const absent: MappingRow = { scheme: 'bad', from: ref('JOL', 3, 22), to: null, kind: 'absent' };
     expect(checkCoverage(bad, pivot, [absent])).toEqual([]);
+  });
+
+  it('accepts a verse whose parts are all marked absent', () => {
+    const bad = scheme('bad', { JOL: [20, 32, 22] });
+    const parts: MappingRow[] = ['a', 'b'].map((seg) => ({ scheme: 'bad', from: ref('JOL', 3, 22, seg), to: null, kind: 'absent' }));
+    expect(checkCoverage(bad, pivot, parts)).toEqual([]);
   });
 
   it('allows many-to-one rows that the old bijection check rejected', () => {

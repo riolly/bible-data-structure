@@ -1,8 +1,8 @@
 /**
  * Fetch the pinned USFM source zips and the TVTMS file into src/ingest/sources/
- * (gitignored) and verify their sha256 against sources.ts. Run once before `pnpm ingest`:
+ * (gitignored) and verify their sha256 against sources.ts. Run once before `bun run ingest`:
  *
- *   pnpm ingest:download
+ *   bun run ingest:download
  */
 
 import { createHash } from 'node:crypto';

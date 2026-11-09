@@ -59,7 +59,7 @@ The CrossWire OSIS table adds `DanGr` and `AddDan` (with Prayer of Azariah as an
 
 ### Protestant (66)
 
-The order in `src/ingest/books.ts` (GEN to MAL, MAT to REV) is the order of the KJV and of SWORD's `KJV` scheme. KJV editions that include the Apocrypha print it as a block between the testaments. SWORD's KJVA scheme lists it as `1Esd 2Esd Tob Jdt AddEsth Wis Sir Bar PrAzar Sus Bel PrMan 1Macc 2Macc` after Malachi ([canon_kjva.h](https://raw.githubusercontent.com/bibletime/crosswire-sword-mirror/trunk/include/canon_kjva.h)). In this block Baruch has 6 chapters (the Letter of Jeremiah is chapter 6) and the additions to Esther stand alone.
+The order in `src/ingest/books.ts` at commit `cf03cc0`, now `src/model/canon.ts` (GEN to MAL, MAT to REV), is the order of the KJV and of SWORD's `KJV` scheme. KJV editions that include the Apocrypha print it as a block between the testaments. SWORD's KJVA scheme lists it as `1Esd 2Esd Tob Jdt AddEsth Wis Sir Bar PrAzar Sus Bel PrMan 1Macc 2Macc` after Malachi ([canon_kjva.h](https://raw.githubusercontent.com/bibletime/crosswire-sword-mirror/trunk/include/canon_kjva.h)). In this block Baruch has 6 chapters (the Letter of Jeremiah is chapter 6) and the additions to Esther stand alone.
 
 ### Roman Catholic (73)
 
@@ -152,6 +152,11 @@ The 24-count makes 1-2 Samuel, 1-2 Kings, 1-2 Chronicles and Ezra-Nehemiah one b
 The Septuagint names come from common usage (Esdras A and B), *unverified against a printed LXX edition*. The point for the model holds either way: never display or parse "1 Esdras" without knowing the canon.
 
 **Book identity versus versification.** Greek Esther shows that "which USFM code" and "how the verses are numbered" are separate questions. The same Catholic book appears as `EST` with 16 chapters, `ESG` with 10 chapters, and lettered verses in the Nova Vulgata. The versification research has to give each of those layouts a scheme. This file only fixes which code the content belongs to.
+
+**Codes found while building step 2 (2026-11-09).**
+
+- TVTMS writes Latin 2 Esdras as both `4Es` and `2Es`. Its section headers read `$4Es./2Es.10:59-10:60`, and its `4Es.10:59-60` rows match `rso.vrs` lines 395-396 for `2ES` ([TVTMS][tvtms]). So TVTMS `4Es` is USFM `2ES`, not `EZA`, even though the USFM spec says `EZA` was "formerly called 4ES".
+- libpalaso's `eng.vrs`, `org.vrs` and `lxx.vrs` list verse counts for `JSA`, `JDB`, `TBS`, `SST`, `DNT` and `BLT`. Its `Canon.cs` marks all six "*obsolete*" ("actual variant text for JOS, now in LXA text"), no mapping line uses them, and the USFM spec lacks them ([Canon.cs lines 321-327](https://github.com/sillsdev/libpalaso/blob/b4f7a6da7b868f9ae909e40fb0708f5fd4efd782/SIL.Scripture/Canon.cs#L321-L327)). The scheme registry drops them.
 
 ## 4. How data formats represent a canon or book set
 
@@ -251,3 +256,4 @@ book_name   book_code, lang (BCP 47), canon_id NULL, long, short, abbr, source
 4. **Status values.** Is `canonical | readable | appendix` enough, or does the Ethiopian narrower and broader split need a fourth value instead of two canons?
 5. **With the versification research:** schemes for the three Esther layouts (Vulgate chapters 11-16, Nova Vulgata lettered verses, WEB Catholic merged verses), Daniel 13-14 versus `SUS`/`BEL`, Baruch 6 versus `LJE`, and Psalm 151 inside `PSA` versus `PS2`.
 6. **Primary checks still open:** Oriental Orthodox lists (Coptic, Armenian, Syriac), the OSIS 2.1.1 manual's book appendix, and the Russian Longer Catechism text.
+[tvtms]: https://github.com/STEPBible/STEPBible-Data/tree/5de0a47f35f0fc13dfe1430d104e5db8a4285f9c/Versification

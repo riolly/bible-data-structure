@@ -7,7 +7,7 @@ import { BOOK_BY_CODE } from '../model/books';
 import { PROTESTANT, canonBookCodes } from '../model/canon';
 import { checkVerses, hasVerse, lastVerse } from '../model/scheme';
 import { nativeModuleLoads } from './native-probe';
-import { SCHEME_IDS, loadSchemes } from './schemes';
+import { KJV_TITLES, SCHEME_IDS, loadSchemes } from './schemes';
 
 const schemes = loadSchemes();
 
@@ -103,6 +103,16 @@ describe.each(['kjv', 'bsb'])('%s source text under the kjv scheme', (dir) => {
       const code = usfm.match(/^\\id (\w{3})/)?.[1];
       if (!code || !books.has(code)) continue;
       expect(checkVerses(kjv, code, usfmVerses(usfm)), code).toEqual({ unknown: [], short: [] });
+      if (code === 'PSA') {
+        const titled = new Set<number>();
+        let chapter = 0;
+        for (const line of usfm.split('\n')) {
+          const c = /^\\c (\d+)/.exec(line);
+          if (c) chapter = Number(c[1]);
+          else if (line.startsWith('\\d')) titled.add(chapter);
+        }
+        expect([...titled].sort((a, b) => a - b)).toEqual(KJV_TITLES);
+      }
       checked++;
     }
     expect(checked).toBe(66);

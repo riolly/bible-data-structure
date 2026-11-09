@@ -38,7 +38,7 @@ describe.skipIf(!native)('book and canon tables', () => {
     seedBooksAndCanons(db);
     sqlite
       .prepare(
-        "INSERT INTO book_name (book_code, lang, canon_id, long, short, abbr, source) VALUES ('SNG', 'en', 'protestant', 'Song of Solomon', 'Song of Solomon', NULL, 'test')",
+        "INSERT INTO book_name (book_code, lang, canon_id, long, short, abbr, source) VALUES ('SNG', 'en', 'protestant', 'Song of Solomon', 'Song of Solomon', NULL, 'usfm-spec')",
       )
       .run();
     expect(canonBooks(db, 'protestant', 'en').find((b) => b.code === 'SNG')?.name).toBe(

@@ -146,7 +146,10 @@ export const bookName = sqliteTable('book_name', {
   long: text('long').notNull(),
   short: text('short').notNull(),
   abbr: text('abbr'),
-  source: text('source').notNull(),
+  /** A data_source id. */
+  source: text('source')
+    .notNull()
+    .references(() => dataSource.id),
 });
 
 export const block = sqliteTable(
@@ -212,10 +215,11 @@ export const token = sqliteTable(
 );
 
 /**
- * Where mapping rows came from, with the attribution and note of changes the
- * source's licence asks for (TVTMS is CC BY 4.0, ADR-0006).
+ * Where seeded data came from, with the attribution and note of changes each
+ * licence asks for: the USFM spec's book names and TVTMS (CC BY 4.0), and the
+ * libpalaso `.vrs` files (MIT).
  */
-export const mappingSource = sqliteTable('mapping_source', {
+export const dataSource = sqliteTable('data_source', {
   id: text('id').primaryKey(),
   url: text('url').notNull(),
   sha256: text('sha256'),
@@ -280,10 +284,10 @@ export const schemeMapping = sqliteTable(
     pivotSegment: text('pivot_segment'),
     /** TVTMS action, or how a `.vrs` line read. */
     kind: text('kind').notNull(),
-    /** Where the row came from: `tvtms` or `vrs` (see mapping_source). */
+    /** Where the row came from: `tvtms` or `vrs` (see data_source). */
     source: text('source')
       .notNull()
-      .references(() => mappingSource.id),
+      .references(() => dataSource.id),
   },
   (t) => [
     index('mapping_from').on(t.scheme, t.book, t.chapter, t.verse),

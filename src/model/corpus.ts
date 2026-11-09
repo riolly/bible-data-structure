@@ -8,8 +8,8 @@
  * - Whitespace is never a Token — spacing is a presentation concern.
  * - Heading Tokens carry verse=null (never 0) and wordIndex=null; a mid-chapter
  *   section heading never inherits the preceding verse.
- * - `id` fields are STORAGE ids only — anchors address by coordinate
- *   (see coordinate.ts), never by these ids; they do not survive re-ingest.
+ * - `id` fields are STORAGE ids only. Outside references use addresses
+ *   (address.ts), never these ids; they do not survive re-ingest.
  *
  * No Skia / CanvasKit import in this layer (old-repo ADR-0008).
  */

@@ -3,22 +3,24 @@
  * (ADR-0006).
  *
  * The pivot is TVTMS's Standard numbering: KJV numbers, with subverses where
- * other English Bibles split a KJV verse, titles as verse 0, and the extra
- * books. It is seeded here from `kjv` (the 66 books) and `eng` (the other
- * books), and only grows: pivot.test.ts compares it with the committed
- * snapshot in fixtures/pivot.json, the previous build.
+ * other Bibles split a KJV verse, titles as verse 0, and the extra books. It
+ * is built from `kjv` (the 66 books), from where eng's verses land for the
+ * other books eng has, and from Paratext counts for books eng lacks; tvtms.ts
+ * then adds every Standard reference. It only grows: the ingest compares it
+ * with fixtures/pivot.json, the previous build.
  *
  * `.vrs` mapping lines read `scheme = org`. A scheme's rows to the pivot are
- * composed as scheme → org (its own lines, then org.vrs's own lines) → eng (eng.vrs read backwards) →
- * pivot (ENG_TO_PIVOT, or TVTMS's eng rows when given). A book eng lacks goes
- * from org straight to the pivot.
- * org is only a step in Paratext's own data here, never the pivot.
+ * composed as scheme → org (its own lines, then org.vrs's own lines) → eng
+ * (eng.vrs read backwards) → pivot (ENG_TO_PIVOT, or TVTMS's eng rows when
+ * given). A book eng lacks goes from org straight to the pivot. org is only a
+ * step in Paratext's own data here, never the pivot.
  */
 
-import { PIVOT, Relation, refExists, type MappingRow, type Ref } from '../model/mapping';
+import { PIVOT, Relation, parseRefKey, refExists, refKey, type MappingRow, type Ref } from '../model/mapping';
 import type { Scheme } from '../model/scheme';
 import { PROTESTANT, canonBookCodes } from '../model/canon';
 import { PARATEXT_SCHEMES, readParatextVrs } from './schemes';
+import { TVTMS } from './sources';
 import { parseVrs, type VrsMapping } from './vrs';
 
 const ref = (book: string, chapter: number, verse: number, segment = ''): Ref => ({ book, chapter, verse, segment });
@@ -35,37 +37,58 @@ export const ENG_TO_PIVOT: readonly { from: Ref; to: Ref }[] = [
 ];
 
 /**
- * Build the pivot from the registry: kjv's 66 books, eng's other books, and
+ * Build the pivot: kjv's 66 books; eng's other books where `engToPivotRows`
+ * sends eng's verses (identity by default, TVTMS's eng rows once compiled);
  * any book eng lacks numbered as the first Paratext scheme that has it (org
- * first), with ENG_TO_PIVOT's subverses.
+ * first); subverses from ENG_TO_PIVOT; and the kjv and eng titles.
  */
-export function buildPivot(schemes: ReadonlyMap<string, Scheme>): Scheme {
+export function buildPivot(
+  schemes: ReadonlyMap<string, Scheme>,
+  engToPivotRows: readonly { from: Ref; to: Ref | null }[] = ENG_TO_PIVOT,
+): Scheme {
   const kjv = schemes.get('kjv')!;
   const eng = schemes.get('eng')!;
   const protestant = new Set(canonBookCodes(PROTESTANT));
   const verseCounts = new Map<string, number[]>();
+  const segments = new Map<string, string[]>();
+  const titles = new Set([...kjv.titles, ...eng.titles]);
+  const addSegment = (r: Ref) => {
+    if (r.segment === '') return;
+    const k = `${r.book} ${r.chapter}:${r.verse}`;
+    const segs = segments.get(k) ?? segments.set(k, []).get(k)!;
+    if (!segs.includes(r.segment)) segs.push(r.segment);
+  };
   for (const [book, counts] of kjv.verseCounts) verseCounts.set(book, [...counts]);
-  for (const [book, counts] of eng.verseCounts) if (!protestant.has(book)) verseCounts.set(book, [...counts]);
+  const engToPivot = new Relation(engToPivotRows);
+  for (const [book, counts] of eng.verseCounts) {
+    if (protestant.has(book)) continue;
+    counts.forEach((last, i) => {
+      for (let v = 1; v <= last; v++) {
+        for (const t of engToPivot.forward(ref(book, i + 1, v))) {
+          const c = verseCounts.get(t.book) ?? verseCounts.set(t.book, []).get(t.book)!;
+          while (c.length < t.chapter) c.push(0);
+          if (t.verse === 0) titles.add(`${t.book} ${t.chapter}`);
+          else c[t.chapter - 1] = Math.max(c[t.chapter - 1], t.verse);
+          addSegment(t);
+        }
+      }
+    });
+  }
   for (const { id } of PARATEXT_SCHEMES) {
     for (const [book, counts] of schemes.get(id)!.verseCounts) {
       if (!verseCounts.has(book)) verseCounts.set(book, [...counts]);
     }
   }
-  const segments = new Map<string, string[]>();
-  for (const { to } of ENG_TO_PIVOT) {
-    if (to.segment === '') continue;
-    const k = `${to.book} ${to.chapter}:${to.verse}`;
-    segments.set(k, [...(segments.get(k) ?? []), to.segment]);
-  }
+  for (const { to } of ENG_TO_PIVOT) addSegment(to);
   return {
     id: PIVOT,
     name: 'Pivot',
-    sourceUrl: 'https://github.com/STEPBible/STEPBible-Data/tree/5de0a47f35f0fc13dfe1430d104e5db8a4285f9c/Versification',
+    sourceUrl: TVTMS.url,
     note: 'Synthetic, extend-only (ADR-0006). TVTMS Standard numbering: KJV numbers, subverses, titles as verse 0, extra books.',
     verseCounts,
     excluded: new Set(),
     segments,
-    titles: new Set(eng.titles),
+    titles,
   };
 }
 
@@ -79,9 +102,9 @@ function domain(s: Scheme, extra: readonly Ref[]): Ref[] {
       }
     });
   }
-  const seen = new Set(out.map((r) => `${r.book} ${r.chapter}:${r.verse}${r.segment}`));
+  const seen = new Set(out.map(refKey));
   for (const r of extra) {
-    const k = `${r.book} ${r.chapter}:${r.verse}${r.segment}`;
+    const k = refKey(r);
     if (!seen.has(k)) out.push(r), seen.add(k);
   }
   return out;
@@ -133,26 +156,25 @@ export function vrsPivotRows(
             .flatMap((o) => (schemeId === 'org' ? [o] : inOrg.forward(o)))
             .flatMap((o) => (eng.verseCounts.has(o.book) ? engToOrg.backward(o, engHas) : [o]));
     const targets = viaEng.flatMap((e) => engToPivot.forward(e));
-    if (!same(targets, r)) targetsOf.set(`${r.book} ${r.chapter}:${r.verse}${r.segment}`, targets);
+    if (!same(targets, r)) targetsOf.set(refKey(r), targets);
   }
 
   const sourcesPerTarget = new Map<string, number>();
   for (const targets of targetsOf.values()) {
     for (const t of targets) {
-      const k = `${t.book} ${t.chapter}:${t.verse}${t.segment}`;
+      const k = refKey(t);
       sourcesPerTarget.set(k, (sourcesPerTarget.get(k) ?? 0) + 1);
     }
   }
   const rows: MappingRow[] = [];
   for (const [key, targets] of targetsOf) {
-    const m = /^(\S+) (\d+):(\d+)([a-z]?)$/.exec(key)!;
-    const from = ref(m[1], Number(m[2]), Number(m[3]), m[4]);
+    const from = parseRefKey(key);
     if (targets.length === 0) {
       rows.push({ scheme: schemeId, from, to: null, kind: 'absent' });
       continue;
     }
     for (const to of targets) {
-      const merged = (sourcesPerTarget.get(`${to.book} ${to.chapter}:${to.verse}${to.segment}`) ?? 0) > 1;
+      const merged = (sourcesPerTarget.get(refKey(to)) ?? 0) > 1;
       const kind = targets.length > 1 ? 'split' : merged ? 'merge' : 'renumber';
       rows.push({ scheme: schemeId, from, to, kind });
     }
@@ -189,10 +211,11 @@ export function pivotSnapshot(p: Scheme): PivotSnapshot {
 }
 
 /**
- * SWORD's invariants for the pivot (ADR-0006): no id is removed, no count
- * decreases, and no meaning is reassigned. A book, chapter, verse, segment or
- * title in `prev` must still be in `next`; segments may only be appended, so
- * an existing letter keeps its position. Returns the violations.
+ * Two of SWORD's three invariants for the pivot (ADR-0006): no id is removed
+ * and no count decreases. A book, chapter, verse, segment or title in `prev`
+ * must still be in `next`, and segments may only be appended, so an existing
+ * letter keeps its position. The third, that no id changes meaning, can't be
+ * checked from ids; review the witness diff for it. Returns the violations.
  */
 export function checkExtendOnly(prev: PivotSnapshot, next: PivotSnapshot): string[] {
   const out: string[] = [];

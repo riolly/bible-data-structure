@@ -175,7 +175,7 @@ Two caveats:
 
 ## 6. The carried code compared
 
-The carried code is [`src/ingest/vrs.ts`](../src/ingest/vrs.ts), [`src/model/versification.ts`](../src/model/versification.ts), [`av11n.vrs`](../src/ingest/vrs/av11n.vrs) and [`divergent.vrs`](../src/ingest/fixtures/divergent.vrs). It reads `NATIVE = CANONICAL` lines, where canonical is KJV numbering. It expands equal-length ranges into one row per verse, and it builds a bijective map that is identity wherever no row exists.
+The carried code (at commit `cf03cc0`, replaced in step 2) is `src/ingest/vrs.ts`, `src/model/versification.ts`, `src/ingest/vrs/av11n.vrs` and `src/ingest/fixtures/divergent.vrs`. It reads `NATIVE = CANONICAL` lines, where canonical is KJV numbering. It expands equal-length ranges into one row per verse, and it builds a bijective map that is identity wherever no row exists.
 
 It gets these things right:
 

@@ -83,6 +83,7 @@ export function formatAddress(a: Address): string {
   const e = a.end;
   if (e) {
     if (e.book !== s.book) throw new Error(`address: range crosses books (${s.book}, ${e.book})`);
+    if (compare(e, s) < 0) throw new Error(`address: range ends before it starts`);
     const sameVerse = e.chapter === s.chapter && e.verse === s.verse && e.segment === s.segment;
     if (sameVerse && s.wordIndex !== undefined && e.wordIndex !== undefined) {
       out += `-${e.wordIndex + 1}`;

@@ -19,8 +19,16 @@ Moving an address from one versification scheme to another needs mapping data. R
 
 ## Consequences
 
-- TVTMS needs attribution and a note of changes in compiled outputs. STEPBible asks that the raw file not be re-posted, so the repo pins it by URL and checksum like the text sources, and doesn't commit it. Where the attribution lives in each output is open.
-- `src/ingest/vrs.ts` must learn the full `.vrs` format: segments, cross-book lines and `#!` lines. Today it throws on most of these or drops them.
-- `src/ingest/fixtures/divergent.vrs` shifts Revelation 13:1-17 by one verse, which no real source does. The real difference is a partial verse (NRSV 12:18 = KJV 13:1a). Replace it with real cases: 3 John 14-15, the two-verse title of Psalm 51 (many-to-one), Romans 14:24-26 (cross-chapter), and Daniel 3 to `S3Y` (cross-book).
+- TVTMS needs attribution and a note of changes in compiled outputs. STEPBible asks that the raw file not be re-posted, so the repo pins it by URL and checksum like the text sources, and doesn't commit it. Built in step 2: the corpus DB's `data_source` table holds the attribution and note of changes for each mapping source.
+- `src/ingest/vrs.ts` must learn the full `.vrs` format: segments, cross-book lines and `#!` lines. Done in step 2 (2026-11-09).
+- `src/ingest/fixtures/divergent.vrs` shifts Revelation 13:1-17 by one verse, which no real source does. The real difference is a partial verse (NRSV 12:18 = KJV 13:1a). Replace it with real cases: 3 John 14-15, the two-verse title of Psalm 51 (many-to-one), Romans 14:24-26 (cross-chapter), and Daniel 3 to `S3Y` (cross-book). Done in step 2: `src/ingest/fixtures/real-cases.vrs`.
 - Verse mapping can't see a clause that moves between verses with the same numbers (the "stood on the sand" clause, which KJV and BSB place differently in Revelation 12:17 / 13:1). Only word alignment (ADR-0003) or the quote witness (ADR-0005) catches that.
-- The pivot's id is `pivot` (decided 2026-11-09 while building it). Open: whether OSHB's numbering matches `org` (unverified).
+- Open: whether OSHB's numbering matches `org` (unverified).
+
+## Amendments from building it (2026-11-09)
+
+- **The pivot's id is `pivot`.**
+- **Pivot segments may be TVTMS subverse ids** (`2ES 7:35!aa`). They appear only in mapping rows, never in stored addresses, which keep one-letter segments (ADR-0002). TVTMS subverse `!0` is the verse's ordinary text and is stored as the whole verse.
+- **The pivot holds only ids with a USFM home.** For the 66 protestant books it is KJV numbering exactly, so Standard references past KJV's extent are skipped: Esther 10:4-16:24 (the Greek additions in KJV-Apocrypha layout) and one stray `1Ki.5:32`. Where the additions to Esther go, and whether Baruch 6 or `LJE`, and Daniel 3:24-90 or `S3Y`, is the pivot home for shared text, stays open with research/canons.md ("What to decide next", item 5).
+- **`.vrs` rows fill in where TVTMS can't decide.** TVTMS is primary wherever its `=Exist`, `=NotExist` and `=Last` tests settle a verse against the scheme's verse counts. Most TVTMS rows also test word counts, so for the other verses the `.vrs` row is stored, tagged `source = 'vrs'`. Word-count tests are not yet run per edition at ingest (decision 3).
+- **The `.vrs` witness reaches the pivot through TVTMS's `eng` rows.** `.vrs` lines map to `org`; they reach the pivot through `eng.vrs` read backwards and then TVTMS's `eng` rows, so a pivot id means the same thing in both witnesses. The diff therefore can't catch an error in TVTMS's `eng` rows themselves.

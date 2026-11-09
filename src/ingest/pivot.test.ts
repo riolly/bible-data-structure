@@ -82,8 +82,14 @@ describe('the pivot only grows', () => {
     readFileSync(join(import.meta.dirname, 'fixtures', 'pivot.json'), 'utf8'),
   ) as PivotSnapshot;
 
-  it('holds the whole seed (the TVTMS extension is checked in tvtms.test.ts and at ingest)', () => {
-    expect(checkExtendOnly(pivotSnapshot(pivot), committed)).toEqual([]);
+  it('holds kjv\'s 66 books and every seeded title (the rest needs TVTMS: tvtms.test.ts and the ingest check it)', () => {
+    const seed = pivotSnapshot(pivot);
+    const protestant: PivotSnapshot = {
+      books: Object.fromEntries([...schemes.get('kjv')!.verseCounts.keys()].map((b) => [b, seed.books[b]])),
+      segments: {},
+      titles: seed.titles,
+    };
+    expect(checkExtendOnly(protestant, committed)).toEqual([]);
   });
 
   it('flags a removed verse, a renamed segment and a dropped title', () => {
@@ -122,13 +128,12 @@ const native = nativeModuleLoads(
 
 describe.skipIf(!native)('mapping rows in the corpus DB', () => {
   it('read back into the same mappings', async () => {
-    const { createCorpusDb, seedBooksAndCanons, seedSchemes, insertMappingSources, insertMappings, insertTranslation } =
+    const { createCorpusDb, seedBooksAndCanons, seedSchemes, insertMappings, insertTranslation } =
       await import('./write-db');
     const { loadMappings } = await import('../db/corpus-read');
     const { db, sqlite } = createCorpusDb(':memory:');
     seedBooksAndCanons(db);
     seedSchemes(db, withPivot);
-    insertMappingSources(db);
     insertMappings(db, rows, 'vrs');
 
     const count = sqlite.prepare('SELECT count(*) AS n FROM scheme_mapping').get() as { n: number };

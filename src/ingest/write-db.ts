@@ -11,10 +11,11 @@
 import Database from 'better-sqlite3';
 import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 
-import { BOOKS, ENGLISH_NAMES } from '../model/books';
+import { BOOKS, ENGLISH_NAMES, USFM_SPEC_URL } from '../model/books';
 import { CANONS } from '../model/canon';
 import type { Block, Token } from '../model/corpus';
 import { PIVOT, type MappingRow } from '../model/mapping';
+import { LIBPALASO_URL } from './schemes';
 import { TVTMS } from './sources';
 import type { Scheme } from '../model/scheme';
 import * as schema from '../db/corpus-schema';
@@ -23,6 +24,14 @@ export type CorpusDb = BetterSQLite3Database<typeof schema>;
 
 /** DDL mirroring src/db/corpus-schema.ts (and schema.dbml). */
 const DDL = `
+CREATE TABLE data_source (
+  id TEXT PRIMARY KEY,
+  url TEXT NOT NULL,
+  sha256 TEXT,
+  license TEXT NOT NULL,
+  attribution TEXT NOT NULL,
+  changes TEXT NOT NULL
+);
 CREATE TABLE scheme (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
@@ -96,7 +105,7 @@ CREATE TABLE book_name (
   long TEXT NOT NULL,
   short TEXT NOT NULL,
   abbr TEXT,
-  source TEXT NOT NULL
+  source TEXT NOT NULL REFERENCES data_source(id)
 );
 CREATE TABLE block (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -125,14 +134,6 @@ CREATE TABLE token (
 );
 CREATE INDEX token_render ON token (translation_id, book, chapter, verse, seq);
 CREATE INDEX token_anchor ON token (translation_id, book, chapter, verse, word_index);
-CREATE TABLE mapping_source (
-  id TEXT PRIMARY KEY,
-  url TEXT NOT NULL,
-  sha256 TEXT,
-  license TEXT NOT NULL,
-  attribution TEXT NOT NULL,
-  changes TEXT NOT NULL
-);
 CREATE TABLE scheme_segment (
   scheme TEXT NOT NULL REFERENCES scheme(id),
   book TEXT NOT NULL REFERENCES book(code),
@@ -159,7 +160,7 @@ CREATE TABLE scheme_mapping (
   pivot_verse INTEGER,
   pivot_segment TEXT,
   kind TEXT NOT NULL,
-  source TEXT NOT NULL REFERENCES mapping_source(id)
+  source TEXT NOT NULL REFERENCES data_source(id)
 );
 CREATE INDEX mapping_from ON scheme_mapping (scheme, book, chapter, verse);
 CREATE INDEX mapping_to ON scheme_mapping (scheme, pivot_book, pivot_chapter, pivot_verse);
@@ -197,8 +198,9 @@ export function insertTranslation(db: CorpusDb, meta: TranslationMeta): number {
   return row.id;
 }
 
-/** Write every USFM book, every canon and the default English names (ADR-0002). */
+/** Write the data sources, every USFM book, every canon and the default English names (ADR-0002). */
 export function seedBooksAndCanons(db: CorpusDb): void {
+  db.insert(schema.dataSource).values([...DATA_SOURCES]).run();
   db.insert(schema.book).values(BOOKS.map((b) => ({ code: b.code, usfmNumber: b.usfmNumber }))).run();
   for (const c of CANONS) {
     db.insert(schema.canon)
@@ -320,8 +322,16 @@ export function insertBookRows(
   }
 }
 
-/** The two mapping witnesses (ADR-0006), with attribution and a note of changes. */
-export const MAPPING_SOURCES = [
+/** Where seeded data came from, with attribution and a note of changes. */
+export const DATA_SOURCES = [
+  {
+    id: 'usfm-spec',
+    url: USFM_SPEC_URL,
+    sha256: null,
+    license: 'CC BY 4.0',
+    attribution: 'Book codes and English names from the USFM-USX-USJ documentation, Book Identifiers (USFM 3.2), CC BY 4.0',
+    changes: 'Peripherals and XX* codes left out; the one English name is used as both long and short name.',
+  },
   {
     id: 'tvtms',
     url: TVTMS.url,
@@ -336,7 +346,7 @@ export const MAPPING_SOURCES = [
   },
   {
     id: 'vrs',
-    url: 'https://github.com/sillsdev/libpalaso/tree/f1f70e93a79d55b1769a4e20fb36047f2fa08d99/SIL.Scripture/Resources',
+    url: LIBPALASO_URL,
     sha256: null,
     license: 'MIT',
     attribution: 'Versification files from libpalaso, Copyright (c) 2007-2014 SIL International (MIT)',
@@ -345,10 +355,6 @@ export const MAPPING_SOURCES = [
       'TVTMS\'s eng rows; used only for verses TVTMS cannot decide from verse counts.',
   },
 ] as const;
-
-export function insertMappingSources(db: CorpusDb): void {
-  db.insert(schema.mappingSource).values([...MAPPING_SOURCES]).run();
-}
 
 /** Write mapping rows to the pivot (ADR-0006), tagged with where they came from. */
 export function insertMappings(db: CorpusDb, rows: readonly MappingRow[], source: 'tvtms' | 'vrs' = 'vrs'): void {

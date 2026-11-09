@@ -6,11 +6,15 @@
  * and checked by sha256 on every load. A changed file stops the load.
  *
  * `kjv` is SWORD's KJV numbering. SWORD is GPL-2.0 and never ships (ADR-0006),
- * and no libpalaso file is KJV numbering. So `kjv` is built from `eng` for the
- * 66 protestant books with the two places where they differ
- * (research/versification.md, section 1): Revelation 12 ends at verse 17 and
- * 3 John at verse 14. schemes.test.ts checks the result against every verse of
- * the KJV and BSB texts.
+ * and no libpalaso file is KJV numbering. So `kjv` takes eng's counts for the
+ * 66 protestant books and changes Revelation 12 to end at verse 17 and 3 John
+ * at verse 14. schemes.test.ts checks every verse of the KJV and BSB texts
+ * against the result, and those two are the only places they differ.
+ *
+ * Psalm titles: KJV_TITLES lists the Psalms whose title KJV prints (a `\d`
+ * line in the KJV and BSB sources; the test checks both). `kjv` and `eng` have
+ * verse 0 there. A Paratext scheme also has verse 0 where its own mapping
+ * lines number one.
  */
 
 import { createHash } from 'node:crypto';
@@ -22,7 +26,7 @@ import type { Scheme } from '../model/scheme';
 import { parseVrs } from './vrs';
 
 export const LIBPALASO_COMMIT = 'f1f70e93a79d55b1769a4e20fb36047f2fa08d99';
-const LIBPALASO_URL = `https://github.com/sillsdev/libpalaso/blob/${LIBPALASO_COMMIT}/SIL.Scripture/Resources`;
+export const LIBPALASO_URL = `https://github.com/sillsdev/libpalaso/blob/${LIBPALASO_COMMIT}/SIL.Scripture/Resources`;
 export const LIBPALASO_DIR = join(import.meta.dirname, 'vrs', 'libpalaso');
 
 /**
@@ -50,6 +54,16 @@ export const PARATEXT_SCHEMES: readonly ParatextScheme[] = [
 
 export const SCHEME_IDS: readonly string[] = ['kjv', ...PARATEXT_SCHEMES.map((s) => s.id)];
 
+// prettier-ignore
+export const KJV_TITLES: readonly number[] = [
+  3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+  30, 31, 32, 34, 35, 36, 37, 38, 39, 40, 41, 42, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56,
+  57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82,
+  83, 84, 85, 86, 87, 88, 89, 90, 92, 98, 100, 101, 102, 103, 108, 109, 110, 120, 121, 122, 123, 124,
+  125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 138, 139, 140, 141, 142, 143, 144, 145,
+];
+const kjvTitles = KJV_TITLES.map((c) => `PSA ${c}`);
+
 /** Where `kjv` differs from `eng` in the 66 protestant books: [book, chapter, last verse]. */
 const KJV_FROM_ENG: readonly (readonly [string, number, number])[] = [
   ['REV', 12, 17],
@@ -74,6 +88,7 @@ export function loadSchemes(): Map<string, Scheme> {
     const { verseCounts, excluded, segments, mappings } = parseVrs(readParatextVrs(def.id));
     // A title is verse 0 where the scheme's own mapping lines number one.
     const titles = new Set(mappings.filter((m) => m.from.verse === 0).map((m) => `${m.from.book} ${m.from.chapter}`));
+    if (def.id === 'eng') for (const t of kjvTitles) titles.add(t);
     for (const code of OBSOLETE_CODES) verseCounts.delete(code);
     out.set(def.id, {
       id: def.id,
@@ -95,12 +110,11 @@ export function loadSchemes(): Map<string, Scheme> {
     id: 'kjv',
     name: 'King James',
     sourceUrl: `${LIBPALASO_URL}/eng.vrs.txt`,
-    note: 'SWORD KJV numbering: eng counts and titles for the 66 protestant books, with REV 12 ending at 17 and 3JN at 14.',
+    note: 'SWORD KJV numbering: eng counts for the 66 protestant books, with REV 12 ending at 17 and 3JN at 14; KJV Psalm titles.',
     verseCounts: kjvCounts,
     excluded: new Set(),
     segments: new Map(),
-    // KJV prints the same Psalm titles eng numbers as verse 0.
-    titles: new Set([...eng.titles].filter((t) => kjvCounts.has(t.split(' ')[0]))),
+    titles: new Set(kjvTitles),
   });
   return out;
 }

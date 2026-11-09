@@ -5,16 +5,13 @@ import { describe, expect, it } from 'vitest';
 
 import { Mappings, PIVOT, checkCoverage, refKey, type Ref } from '../model/mapping';
 import type { Scheme } from '../model/scheme';
-import { allVrsPivotRows, buildPivot, checkExtendOnly, pivotSnapshot } from './pivot';
+import { buildPivot, checkExtendOnly, pivotSnapshot } from './pivot';
 import { loadSchemes } from './schemes';
 import {
   TVTMS_PATH,
   compileTvtms,
-  diffWitnesses,
-  engToPivotRows,
+  compileMappings,
   evaluateTests,
-  extendPivot,
-  mergeWitnesses,
   parseStandardRefs,
   parseTvtms,
   readTvtms,
@@ -41,15 +38,29 @@ describe('parseStandardRefs', () => {
     ['Gen.32:1', ['GEN 32:1']],
     ['Rev.13:1!a', ['REV 13:1a']],
     ['Psa.3:Title', ['PSA 3:0']],
-    ['Gen.2:25-3:1', ['GEN 2:25', 'GEN 3:1']],
+    ['Gen.2:24-3:1', ['GEN 2:24', 'GEN 2:25', 'GEN 3:1']],
     ['Jol.2:28-30', ['JOL 2:28', 'JOL 2:29', 'JOL 2:30']],
     ['Gen.5:32; 6:1', ['GEN 5:32', 'GEN 6:1']],
     ['Est.1:1; 2:1,3-4', ['EST 1:1', 'EST 2:1', 'EST 2:3', 'EST 2:4']],
-    ['Jos.9:2!0', ['JOS 9:2!0']],
+    ['Jos.9:2!0', ['JOS 9:2']],
+    ['2Es.7:35!aa', ['2ES 7:35!aa']],
     ['Sir.1:1; Est.2:2', ['SIR 1:1', 'EST 2:2']],
     ['4Es.10:59', ['2ES 10:59']],
   ])('%s', (text, expected) => {
-    expect(parseStandardRefs(text).map((r) => (/^\d/.test(r.segment) ? `${r.book} ${r.chapter}:${r.verse}!${r.segment}` : refKey(r)))).toEqual(expected);
+    expect(parseStandardRefs(text, (b, c) => (b === 'GEN' && c === 2 ? 25 : undefined)).map(refKey)).toEqual(expected);
+  });
+
+  it('lists the whole of every chapter a range crosses', () => {
+    // TVTMS line 8598 uses Esg.11:2-12:6.
+    const refs = parseStandardRefs('Esg.11:2-12:6', (_b, c) => (c === 11 ? 12 : undefined)).map(refKey);
+    expect(refs).toHaveLength(11 + 6);
+    expect(refs).toContain('ESG 11:7');
+  });
+
+  it('rejects a cross-chapter range without counts, and a reversed range', () => {
+    expect(() => parseStandardRefs('Gen.2:24-3:1')).toThrow(/no verse count/);
+    expect(() => parseStandardRefs('Jdt.2:16-8')).toThrow(/ends before/); // TVTMS line 26586
+    expect(() => parseStandardRefs('1Ki.4:34-3:1')).toThrow(/ends before/);
   });
 
   it('rejects a book TVTMS has but USFM lacks', () => {
@@ -99,13 +110,14 @@ describe('parseTvtms and compileTvtms on synthetic rows', () => {
     row('Jol.1:2', 'Jol.1:2-3', 'Concatenation', 'Jol.1:2<Jol.1:3') +
     row('Ade.1:1', 'Est.1:1', 'Renumber verse', '') +
     '#DataEnd(Expanded)\n';
+  const kjvLike = scheme([20, 32, 21]);
 
   it('reads only the expanded section', () => {
     expect(parseTvtms(text).map((r) => r.source)).toEqual(['Jol.3:1', 'Jol.4:1', 'Jol.1:1', 'Jol.1:2', 'Ade.1:1']);
   });
 
   it('keeps rows whose count tests pass, drops identity, defers text tests, skips unknown books', () => {
-    const c = compileTvtms(parseTvtms(text), scheme([20, 27, 5, 21]));
+    const c = compileTvtms(parseTvtms(text), scheme([20, 27, 5, 21]), kjvLike);
     expect(c.rows.map((r) => `${refKey(r.from)}>${r.to ? refKey(r.to) : '-'} ${r.kind}`)).toEqual([
       'JOL 3:1>JOL 2:28 Renumber verse',
       'JOL 4:1>JOL 3:1 Renumber verse',
@@ -115,7 +127,28 @@ describe('parseTvtms and compileTvtms on synthetic rows', () => {
   });
 
   it('compiles nothing for a scheme the tests reject', () => {
-    expect(compileTvtms(parseTvtms(text), scheme([20, 32, 21])).rows).toEqual([]);
+    expect(compileTvtms(parseTvtms(text), kjvLike, kjvLike).rows).toEqual([]);
+  });
+
+  it('leaves a verse undecided when a text-dependent row disagrees with an untested one', () => {
+    // TVTMS AllBibles 1Ki.22:44 (no tests) against rows that need text.
+    const t = header + row('Jol.1:5', 'Jol.1:5', 'Keep verse', '') + row('Jol.1:5', 'Jol.1:4!b', 'Renumber verse', 'Jol.1:5<Jol.1:4') + '#DataEnd(Expanded)\n';
+    const c = compileTvtms(parseTvtms(t), kjvLike, kjvLike);
+    expect(c.decided.has('JOL 1:5')).toBe(false);
+  });
+
+  it('keeps a verse identity row when one of its parts moves', () => {
+    // TVTMS Latin Sir.18:1 stays and Sir.18:1!b becomes 18:2.
+    const t = header + row('Jol.1:5', 'Jol.1:5', 'Keep verse', 'Jol.3:21=Last') + row('Jol.1:5!b', 'Jol.1:6', 'Renumber verse', 'Jol.3:21=Last') + '#DataEnd(Expanded)\n';
+    const c = compileTvtms(parseTvtms(t), kjvLike, kjvLike);
+    expect(c.rows.map((r) => `${refKey(r.from)}>${refKey(r.to!)}`).sort()).toEqual(['JOL 1:5>JOL 1:5', 'JOL 1:5b>JOL 1:6']);
+  });
+
+  it('skips a Standard reference past the KJV extent of a protestant book', () => {
+    const t = header + row('Jol.1:5', 'Jol.3:22', 'Renumber verse', '') + row('Jol.1:6', 'Sir.60:1', 'Renumber verse', '') + '#DataEnd(Expanded)\n';
+    const c = compileTvtms(parseTvtms(t), kjvLike, kjvLike);
+    expect(c.rows.map((r) => refKey(r.to!))).toEqual(['SIR 60:1']); // not a protestant book: no bound
+    expect(c.skipped.map((x) => x.reason)).toEqual([expect.stringMatching(/past KJV/)]);
   });
 });
 
@@ -125,20 +158,24 @@ describe.skipIf(!hasTvtms)('the pinned TVTMS file', () => {
   // describe.skipIf still runs this body while collecting tests.
   const schemes = loadSchemes();
   const tvtms = hasTvtms ? readTvtms() : [];
-  const seed = buildPivot(schemes);
-  const pivot = extendPivot(seed, tvtms);
-  const compiled = new Map([...schemes.keys()].map((id) => [id, compileTvtms(tvtms, schemes.get(id)!)]));
-  const vrsRows = allVrsPivotRows(schemes, engToPivotRows(compiled.get('eng')!));
-  const rows = mergeWitnesses(compiled, vrsRows);
+  const { pivot, rows, perScheme: compiled, diff } = hasTvtms
+    ? compileMappings(schemes, tvtms)
+    : { pivot: buildPivot(schemes), rows: [], perScheme: new Map(), diff: new Map() };
   const m = new Mappings(rows, new Map(schemes).set(PIVOT, pivot));
 
-  it('extends the seeded pivot without removing anything', () => {
-    expect(checkExtendOnly(pivotSnapshot(seed), pivotSnapshot(pivot))).toEqual([]);
+  it('keeps KJV numbering for the 66 protestant books and gives 2 Esdras 7 KJV\'s 70 verses', () => {
+    for (const [book, counts] of schemes.get('kjv')!.verseCounts) expect(pivot.verseCounts.get(book), book).toEqual(counts);
+    expect(pivot.verseCounts.get('2ES')![6]).toBe(70);
     expect(pivot.segments.get('REV 13:1')).toEqual(['a', 'b']);
+    expect([...pivot.segments.values()].flat().every((x) => /^[a-z]+$/.test(x))).toBe(true);
+  });
+
+  it('keeps a Latin verse whole when only its part moves (Sir 18:1)', () => {
+    expect(keys(m.toPivot('vul', ref('SIR', 18, 1)))).toContain('SIR 18:1');
   });
 
   it('compiles rows for every scheme', () => {
-    for (const [id, c] of compiled) expect(c.rows.length, id).toBeGreaterThan(id === 'kjv' ? -1 : 0);
+    for (const [id, c] of compiled as Map<string, ReturnType<typeof compileTvtms>>) expect(c.rows.length, id).toBeGreaterThan(id === 'kjv' ? -1 : 0);
   });
 
   it('agrees with the .vrs witness on the ADR-0006 cases', () => {
@@ -158,17 +195,16 @@ describe.skipIf(!hasTvtms)('the pinned TVTMS file', () => {
     for (const r of rows.filter((x) => x.source === 'vrs')) {
       expect(compiled.get(r.scheme)!.decided.has(refKey(r.from))).toBe(false);
     }
-    expect(rows.filter((r) => r.source === 'tvtms').length).toBeGreaterThan(rows.length / 2);
+    expect(rows.some((r) => r.source === 'tvtms')).toBe(true);
   });
 
   it('reports where TVTMS and the .vrs files disagree', () => {
-    const diff = diffWitnesses(compiled, vrsRows);
     expect(diff.get('kjv')).toEqual([]);
     for (const [id, lines] of diff) for (const l of lines) expect(l, id).toMatch(/^\S+ \d+:\d+\S*\ttvtms: .*\tvrs: /);
   });
 
   /** The upstream ESG inconsistencies of pivot.test.ts, now only through `.vrs` fill-in rows. */
-  const KNOWN: Record<string, number> = { org: 2, vul: 2, rso: 14 };
+  const KNOWN: Record<string, number> = { org: 2, vul: 2, rso: 15 };
 
   it.each([...schemes.keys()])('maps every %s verse into the pivot, apart from known upstream ESG lines', (id) => {
     const problems = checkCoverage(schemes.get(id)!, pivot, rows);

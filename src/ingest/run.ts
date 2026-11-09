@@ -6,9 +6,8 @@
  *   bun run ingest            # → build/corpus.db, build/mapping-diff.tsv, build/pivot.json
  *
  * Translation-agnostic: every SOURCES entry runs through the same
- * parse (usfm-grammar → USJ) → normalize → write pipeline. The output
- * corpus.db is a generated build artifact (gitignored) that Metro bundles as
- * an asset; run this before a native/dev build that renders scripture.
+ * parse (usfm-grammar → USJ) → normalize → write pipeline. The outputs in
+ * build/ are generated and gitignored.
  */
 
 import { existsSync, readdirSync, readFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
@@ -29,7 +28,6 @@ import {
   createCorpusDb,
   insertBookRows,
   insertTranslation,
-  insertMappingSources,
   insertMappings,
   seedBooksAndCanons,
   seedSchemes,
@@ -77,7 +75,6 @@ function main() {
   const { pivot, rows: mappingRows, perScheme, diff } = compileMappings(schemes, readTvtmsOrExplain());
   checkPivotGrowth(pivot);
   seedSchemes(db, new Map(schemes).set(PIVOT, pivot));
-  insertMappingSources(db);
   insertMappings(db, mappingRows);
   console.log(`schemes: ${[...schemes.keys()].join(', ')} + ${PIVOT}`);
   for (const s of schemes.values()) {

@@ -12,8 +12,7 @@
  * tests (`<`, `>`) and `TextBeforeV1` need an edition's text; rows that depend
  * on them are returned as `needsText` and not compiled.
  *
- * The file is CC BY 4.0 and STEPBible asks that it not be re-posted, so it is
- * downloaded to sources/tvtms/ (sources.ts pins it) and never committed.
+ * The file is downloaded, not committed; sources.ts says why.
  */
 
 import { createHash } from 'node:crypto';
@@ -21,7 +20,8 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { BOOK_BY_CODE } from '../model/books';
-import { Relation, refKey, type MappingRow, type Ref } from '../model/mapping';
+import { PROTESTANT, canonBookCodes } from '../model/canon';
+import { Relation, parseRefKey, refKey, type MappingRow, type Ref } from '../model/mapping';
 import { lastVerse, type Scheme } from '../model/scheme';
 import { ENG_TO_PIVOT, allVrsPivotRows, buildPivot } from './pivot';
 import { TVTMS } from './sources';
@@ -86,12 +86,19 @@ export function readTvtms(path = TVTMS_PATH): TvtmsRow[] {
 const PART_RE =
   /^(?:([0-9A-Za-z]{3})\.)?(?:(\d+|[A-Z]):)?(\d+|Title)(?:[!*]?([a-z]+\d*|\d+))?(?:-(?:(\d+):)?(\d+)?([a-z]+)?)?$/;
 
+/** Last verse of a chapter, for ranges that cross a chapter (`Gen.2:25-3:1`). */
+export type LastVerse = (book: string, chapter: number) => number | undefined;
+
 /**
  * Parse a TVTMS reference list such as `Gen.5:32; 6:1`, `Est.1:1; 2:1,3-4`,
  * `Gen.2:25-3:1`, `Rev.13:1!a`, `Psa.3:Title` or `Est.1:1a-c` into single
  * references. Titles are verse 0. A list may switch books (`Sir.1:1; Est.2:2`).
+ *
+ * Subverse `!0` is the verse's ordinary text, the text "found in all Bibles"
+ * (TVTMS field notes), so it becomes the whole verse (segment `''`). A range
+ * across chapters needs `last` to list the rest of the first chapter.
  */
-export function parseStandardRefs(text: string): Ref[] {
+export function parseStandardRefs(text: string, last?: LastVerse): Ref[] {
   const out: Ref[] = [];
   let book = '';
   let chapter = 0;
@@ -113,11 +120,14 @@ export function parseStandardRefs(text: string): Ref[] {
       if (!book) throw new Error(`TVTMS: no book in "${text}"`);
       firstInGroup = false;
       const verse = v === 'Title' ? 0 : Number(v);
-      const segment = seg ?? '';
+      const segment = seg === undefined || seg === '0' ? '' : seg;
       if (endV === undefined && endSeg !== undefined) {
         // A segment range in one verse: `1:1a-c`.
-        for (let s = segment.charCodeAt(0); s <= endSeg.charCodeAt(0); s++) {
-          out.push({ book, chapter, verse, segment: String.fromCharCode(s) });
+        if (segment.length !== 1 || endSeg.length !== 1 || endSeg < segment) {
+          throw new Error(`TVTMS: unreadable segment range in "${text}"`);
+        }
+        for (let x = segment.charCodeAt(0); x <= endSeg.charCodeAt(0); x++) {
+          out.push({ book, chapter, verse, segment: String.fromCharCode(x) });
         }
         continue;
       }
@@ -128,18 +138,43 @@ export function parseStandardRefs(text: string): Ref[] {
       if (segment !== '' || endSeg !== undefined) throw new Error(`TVTMS: a verse range with segments in "${text}"`);
       const toChapter = endC === undefined ? chapter : Number(endC);
       const toVerse = Number(endV);
-      if (toChapter === chapter) {
-        for (let x = verse; x <= toVerse; x++) out.push({ book, chapter, verse: x, segment: '' });
-      } else {
-        // `Gen.2:25-3:1`: the end of one chapter and the start of the next. Only
-        // the named ends are listed; the verses between come from the counts.
-        out.push({ book, chapter, verse, segment: '' });
-        for (let x = 1; x <= toVerse; x++) out.push({ book, chapter: toChapter, verse: x, segment: '' });
+      if (toChapter < chapter || (toChapter === chapter && toVerse < verse)) {
+        throw new Error(`TVTMS: range ends before it starts in "${text}"`);
+      }
+      for (let ch = chapter; ch <= toChapter; ch++) {
+        const from = ch === chapter ? verse : 1;
+        let to = toVerse;
+        if (ch < toChapter) {
+          const l = last?.(book, ch);
+          if (l === undefined) throw new Error(`TVTMS: no verse count for ${book} ${ch} in "${text}"`);
+          to = l;
+        }
+        for (let x = from; x <= to; x++) out.push({ book, chapter: ch, verse: x, segment: '' });
       }
       chapter = toChapter;
     }
   }
   return out;
+}
+
+/**
+ * TVTMS Standard numbering is KJV numbering for the 66 protestant books
+ * (ADR-0006). A Standard reference past KJV's last verse there has no USFM
+ * home: Est.10:4-16:24 is the Greek additions in KJV-Apocrypha layout, which
+ * belongs to `ESG` or an additions book (an open question in
+ * research/canons.md), and 1Ki.5:32 (line 6534) is past 1 Kings 5's 18
+ * verses. Rows naming one are skipped, like `Ade` rows.
+ */
+const PROTESTANT_BOOKS: ReadonlySet<string> = new Set(canonBookCodes(PROTESTANT));
+
+function checkKjvExtent(refs: readonly Ref[], kjv: Scheme, text: string): void {
+  for (const r of refs) {
+    if (!PROTESTANT_BOOKS.has(r.book)) continue;
+    const counts = kjv.verseCounts.get(r.book);
+    if (!counts) continue;
+    const l = counts[r.chapter - 1];
+    if (l === undefined || r.verse > l) throw new Error(`TVTMS: "${text}" is past KJV's ${r.book} (no USFM home)`);
+  }
 }
 
 const TEST_RE = /^(?:([0-9A-Za-z]{3})\.)?(\d+|[A-Z]):(\d+|Title)(?:\.(\d+))?=(Exist|NotExist|Last)$/;
@@ -205,15 +240,27 @@ export interface Compiled {
 }
 
 /**
- * Compile TVTMS for one scheme: keep rows whose tests pass against its tables,
- * merge their targets per source reference, and drop references that land on
- * themselves (the table is sparse).
+ * Compile TVTMS for one scheme: keep rows whose tests pass against its tables
+ * and drop references that land on themselves (the table is sparse).
+ *
+ * A source reference counts as decided only when every passing row for it
+ * gives the same non-empty targets and no row that needs text gives other
+ * targets. Otherwise the count tests can't choose (Hebrew Esther 1:1 against
+ * Greek Esther 1:1 with an addition; TVTMS's untested `AllBibles` notes such
+ * as 1Ki.22:44), and the `.vrs` row is used instead.
+ *
+ * `seed` is the pivot before TVTMS: its counts finish ranges that cross a
+ * chapter, and its 66 protestant books (KJV numbering) bound Standard refs.
  */
-export function compileTvtms(all: readonly TvtmsRow[], s: Scheme): Compiled {
+export function compileTvtms(all: readonly TvtmsRow[], s: Scheme, seed: Scheme): Compiled {
   const needsText: TvtmsRow[] = [];
   const skipped: { line: number; reason: string }[] = [];
+  const ownLast: LastVerse = (b, c) => lastVerse(s, b, c);
+  const seedLast: LastVerse = (b, c) => lastVerse(seed, b, c);
   /** Source key → each passing row's targets for it. */
   const candidates = new Map<string, { from: Ref; row: TvtmsRow; to: Ref[] }[]>();
+  /** Source key → target signatures of rows that need text. */
+  const textSigs = new Map<string, Set<string>>();
   for (const row of all) {
     let result: boolean | 'needs-text';
     let froms: Ref[];
@@ -221,52 +268,71 @@ export function compileTvtms(all: readonly TvtmsRow[], s: Scheme): Compiled {
     try {
       result = evaluateTests(row.tests, s, row.source.slice(0, 3));
       if (result === false) continue;
-      froms = parseStandardRefs(row.source);
-      tos = parseStandardRefs(row.standard);
+      froms = parseStandardRefs(row.source, ownLast);
+      tos = parseStandardRefs(row.standard, seedLast);
+      checkKjvExtent(tos, seed, row.standard);
     } catch (e) {
       skipped.push({ line: row.line, reason: (e as Error).message });
       continue;
     }
-    if (result === 'needs-text') {
-      needsText.push(row);
-      continue;
-    }
     for (const from of froms) {
       const k = refKey(from);
-      (candidates.get(k) ?? candidates.set(k, []).get(k)!).push({ from, row, to: tos });
+      if (result === 'needs-text') (textSigs.get(k) ?? textSigs.set(k, new Set()).get(k)!).add(verseSig(tos));
+      else (candidates.get(k) ?? candidates.set(k, []).get(k)!).push({ from, row, to: tos });
     }
+    if (result === 'needs-text') needsText.push(row);
   }
+
   const rows: MappingRow[] = [];
   const decided = new Set<string>();
-  const sig = (to: Ref[]) => to.map(refKey).sort().join();
-  for (const list of candidates.values()) {
-    // Rows that pass the count tests but disagree can only be told apart by
-    // the text (Hebrew Esther 1:1 versus Greek Esther 1:1 with an addition).
-    if (new Set(list.map((c) => sig(c.to))).size > 1) {
+  const identities: MappingRow[] = [];
+  for (const [k, list] of candidates) {
+    // Rows that name the same verses at different grain agree: TVTMS line
+    // 25819 sends 2Es.7:36-105 to 7:35 while lines 25820-25889 send each verse
+    // to a subverse of 7:35. Take the finest.
+    const verseSigs = new Set(list.map((c) => verseSig(c.to)));
+    const [onlyVerses] = verseSigs;
+    const finest = list.reduce((a, b) => (segmentCount(b.to) > segmentCount(a.to) ? b : a));
+    const textDisagrees = [...(textSigs.get(k) ?? [])].some((t) => t !== onlyVerses);
+    if (verseSigs.size > 1 || onlyVerses === '' || textDisagrees) {
       for (const c of list) if (!needsText.includes(c.row)) needsText.push(c.row);
       continue;
     }
-    const { from, to, row } = list[0];
-    decided.add(refKey(from));
-    if (to.length === 1 && refKey(to[0]) === refKey(from)) continue;
-    for (const t of to) rows.push({ scheme: s.id, from, to: t, kind: row.action, source: 'tvtms' });
+    const { from, to, row } = finest;
+    decided.add(k);
+    const mapped = to.map((t): MappingRow => ({ scheme: s.id, from, to: t, kind: row.action, source: 'tvtms' }));
+    if (to.length === 1 && refKey(to[0]) === k) identities.push(mapped[0]);
+    else rows.push(...mapped);
   }
+  // A whole verse that keeps its number must say so when one of its parts
+  // moves (Latin Sir 18:1 stays, 18:1b becomes 18:2), or the parts' rows
+  // would carry the whole verse with them.
+  const verse = (r: Ref) => `${r.book} ${r.chapter}:${r.verse}`;
+  const moved = new Set(rows.map((r) => verse(r.from)));
+  for (const id of identities) if (moved.has(verse(id.from))) rows.push(id);
   return { rows, decided, needsText, skipped };
 }
+
+/** The verses a target list names, ignoring segments. */
+const verseSig = (to: readonly Ref[]) => [...new Set(to.map((r) => `${r.book} ${r.chapter}:${r.verse}`))].sort().join();
+const segmentCount = (to: readonly Ref[]) => to.filter((r) => r.segment !== '').length;
 
 /**
  * Grow the pivot to hold every Standard reference TVTMS names: new books,
  * longer chapters, titles and subverses. Existing segments keep their order
- * and new ones are appended, so nothing is removed or reassigned.
+ * and new ones are appended, so no id is removed. References past KJV's
+ * extent in the 66 protestant books are left out (see checkKjvExtent).
  */
-export function extendPivot(pivot: Scheme, all: readonly TvtmsRow[]): Scheme {
+export function extendPivot(pivot: Scheme, all: readonly TvtmsRow[], seed: Scheme = pivot): Scheme {
   const verseCounts = new Map([...pivot.verseCounts].map(([b, c]) => [b, [...c]]));
   const segments = new Map([...pivot.segments].map(([k, v]) => [k, [...v]]));
   const titles = new Set(pivot.titles);
+  const seedLast: LastVerse = (b, c) => lastVerse(seed, b, c);
   for (const row of all) {
     let refs: Ref[];
     try {
-      refs = parseStandardRefs(row.standard);
+      refs = parseStandardRefs(row.standard, seedLast);
+      checkKjvExtent(refs, seed, row.standard);
     } catch {
       continue;
     }
@@ -296,8 +362,7 @@ export function engToPivotRows(eng: Compiled): { from: Ref; to: Ref | null }[] {
   const moved = new Set(eng.rows.map((r) => refKey(r.from)));
   for (const key of eng.decided) {
     if (moved.has(key)) continue;
-    const m = /^(\S+) (\d+):(\d+)([a-z0-9]*)$/.exec(key)!;
-    const r = { book: m[1], chapter: Number(m[2]), verse: Number(m[3]), segment: m[4] };
+    const r = parseRefKey(key);
     out.push({ from: r, to: r });
   }
   for (const f of ENG_TO_PIVOT) if (!eng.decided.has(refKey(f.from))) out.push(f);
@@ -338,8 +403,7 @@ export function diffWitnesses(
     const b = new Relation(vrsRows.filter((r) => r.scheme === id));
     const lines: string[] = [];
     for (const key of [...c.decided].sort()) {
-      const m = /^(\S+) (\d+):(\d+)([a-z0-9]*)$/.exec(key)!;
-      const r = { book: m[1], chapter: Number(m[2]), verse: Number(m[3]), segment: m[4] };
+      const r = parseRefKey(key);
       const ta = a.forward(r).map(refKey).sort();
       const tb = b.forward(r).map(refKey).sort();
       if (ta.join() !== tb.join()) lines.push(`${key}\ttvtms: ${ta.join(', ') || 'absent'}\tvrs: ${tb.join(', ') || 'absent'}`);
@@ -358,11 +422,19 @@ export interface CompiledMappings {
   readonly diff: Map<string, string[]>;
 }
 
-/** The whole ADR-0006 build: pivot, TVTMS per scheme, `.vrs` fill-in, and the witness diff. */
+/**
+ * The whole ADR-0006 build. The seed pivot (kjv's 66 books, eng's other books
+ * as eng numbers them) is only used to compile TVTMS. The stored pivot then
+ * takes eng's other books where TVTMS sends eng's verses, so a TVTMS Standard
+ * id means one thing in every row (2ES 7 has KJV's 70 verses, with NRSV
+ * 7:36-105 as subverses of 7:35), and grows by every Standard reference.
+ */
 export function compileMappings(schemes: ReadonlyMap<string, Scheme>, tvtms: readonly TvtmsRow[]): CompiledMappings {
-  const pivot = extendPivot(buildPivot(schemes), tvtms);
-  const perScheme = new Map([...schemes.keys()].map((id) => [id, compileTvtms(tvtms, schemes.get(id)!)]));
-  const vrsRows = allVrsPivotRows(schemes, engToPivotRows(perScheme.get('eng')!));
+  const seed = buildPivot(schemes);
+  const perScheme = new Map([...schemes.keys()].map((id) => [id, compileTvtms(tvtms, schemes.get(id)!, seed)]));
+  const engRows = engToPivotRows(perScheme.get('eng')!);
+  const pivot = extendPivot(buildPivot(schemes, engRows), tvtms, seed);
+  const vrsRows = allVrsPivotRows(schemes, engRows);
   return {
     pivot,
     rows: mergeWitnesses(perScheme, vrsRows),
