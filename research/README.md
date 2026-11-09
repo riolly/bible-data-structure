@@ -29,4 +29,6 @@ The model is done when these import and round-trip with no special cases:
 - One deuterocanonical chapter under a second scheme (ADR-0002 migration check)
 - The Greek additions to Daniel and Esther (later, with the traditions that include them)
 
+All but the last pass in `src/ingest/trouble-spots.test.ts` (2026-11-09), from excerpts in `src/ingest/fixtures/trouble-spots/`. The Greek Esther and Daniel of WEB and Brenton import as `ESG` and `DAG`, but nothing checks their additions yet.
+
 Already covered by the carried fixtures: tokenizer edge cases (`src/ingest/fixtures/adversarial.usfm`) and real `.vrs` mapping lines for the ADR-0006 cases (`src/ingest/fixtures/real-cases.vrs`).
