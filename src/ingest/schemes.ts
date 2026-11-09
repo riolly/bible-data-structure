@@ -220,8 +220,6 @@ export function loadSchemes(): Map<string, Scheme> {
   return out;
 }
 
-const inBooks = (books: ReadonlySet<string>) => (key: string) => books.has(key.slice(0, 3));
-
 /** Build one derived scheme from schemes already in the registry. */
 export function deriveScheme(def: DerivedSchemeDef, registry: ReadonlyMap<string, Scheme>): Scheme {
   const base = registry.get(def.base);
@@ -234,27 +232,34 @@ export function deriveScheme(def: DerivedSchemeDef, registry: ReadonlyMap<string
     const from = registry.get(def.addBooks.from);
     if (!from) throw new Error(`${def.id}: scheme "${def.addBooks.from}" is not defined before it`);
     const books = new Set(def.addBooks.books);
+    const inBooks = (key: string) => books.has(key.slice(0, 3));
     for (const book of books) {
       if (verseCounts.has(book)) throw new Error(`${def.id}: ${def.base} already has ${book}`);
       const counts = from.verseCounts.get(book);
       if (!counts) throw new Error(`${def.id}: ${def.addBooks.from} has no ${book}`);
       verseCounts.set(book, [...counts]);
     }
-    for (const k of [...from.excluded].filter(inBooks(books))) excluded.add(k);
-    for (const [k, v] of from.segments) if (books.has(k.slice(0, 3))) segments.set(k, v);
-    for (const t of from.titles) if (books.has(t.slice(0, 3))) titles.add(t);
+    for (const k of from.excluded) if (inBooks(k)) excluded.add(k);
+    for (const [k, v] of from.segments) if (inBooks(k)) segments.set(k, v);
+    for (const t of from.titles) if (inBooks(t)) titles.add(t);
   }
+  const newLast = new Map<string, number>();
   for (const [book, chapter, last] of def.lastVerses) {
     const counts = verseCounts.get(book);
     if (!counts) throw new Error(`${def.id}: no ${book} to change`);
     if (chapter < 1 || chapter > counts.length + 1) throw new Error(`${def.id}: ${book} ${chapter} is not a chapter or the next one`);
     if (counts[chapter - 1] === last) throw new Error(`${def.id}: ${book} ${chapter} already ends at ${last}`);
     counts[chapter - 1] = last;
-    for (const k of [...excluded, ...segments.keys()]) {
-      const m = /^(\S+) (\d+):(\d+)$/.exec(k)!;
-      if (m[1] === book && Number(m[2]) === chapter && Number(m[3]) > last) excluded.delete(k), segments.delete(k);
-    }
+    newLast.set(`${book} ${chapter}`, last);
   }
+  // Drop excluded verses and segments past a chapter's new end.
+  const past = (key: string) => {
+    const m = /^(\S+ \d+):(\d+)$/.exec(key)!;
+    const last = newLast.get(m[1]);
+    return last !== undefined && Number(m[2]) > last;
+  };
+  for (const k of [...excluded]) if (past(k)) excluded.delete(k);
+  for (const k of [...segments.keys()]) if (past(k)) segments.delete(k);
   return {
     id: def.id,
     name: def.name,

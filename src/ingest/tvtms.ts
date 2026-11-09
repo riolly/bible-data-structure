@@ -393,8 +393,9 @@ export function mergeWitnesses(
  * Where TVTMS and the `.vrs` files send the same verse to different pivot
  * references, over the verses TVTMS settled. Per scheme, one line per verse:
  * `REF<tab>tvtms: A, B<tab>vrs: C`. Reported, never resolved (ADR-0006).
- * Only Paratext schemes have a `.vrs` witness; `kjv` and the derived schemes
- * get an empty list.
+ * A scheme has a `.vrs` witness if it is a Paratext scheme or a derived
+ * scheme that takes `.vrs` rows from its base (pivot.ts). Schemes without one
+ * (`kjv`, `rp`, `web`) are left out of the map.
  */
 export function diffWitnesses(
   compiled: ReadonlyMap<string, Compiled>,
@@ -402,12 +403,10 @@ export function diffWitnesses(
 ): Map<string, string[]> {
   const out = new Map<string, string[]>();
   for (const [id, c] of compiled) {
-    if (!PARATEXT_SCHEMES.some((p) => p.id === id)) {
-      out.set(id, []);
-      continue;
-    }
+    const own = vrsRows.filter((r) => r.scheme === id);
+    if (!PARATEXT_SCHEMES.some((p) => p.id === id) && own.length === 0) continue;
     const a = new Relation(c.rows);
-    const b = new Relation(vrsRows.filter((r) => r.scheme === id));
+    const b = new Relation(own);
     const lines: string[] = [];
     for (const key of [...c.decided].sort()) {
       const r = parseRefKey(key);
@@ -425,7 +424,7 @@ export interface CompiledMappings {
   /** Rows to store: TVTMS where it decides, `.vrs` elsewhere. */
   readonly rows: MappingRow[];
   readonly perScheme: Map<string, Compiled>;
-  /** Per scheme, the verses where TVTMS and `.vrs` disagree. */
+  /** Per scheme with a `.vrs` witness, the verses where TVTMS and `.vrs` disagree. */
   readonly diff: Map<string, string[]>;
 }
 

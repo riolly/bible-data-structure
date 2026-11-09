@@ -113,13 +113,11 @@ export const SOURCES: readonly SourceDef[] = [
     dir: 'sblgnt',
     books: sectionBookCodes(PROTESTANT, 'nt'),
     rewriteVersifiedD: false,
+    // ebible.org left XML tags as text after the last verse of every book but
+    // Revelation, in two forms; upstream SBLGNT has neither. Applied in order.
     textFixes: [
-      {
-        find: ' ‘p /’ ‘/book’',
-        replace: '',
-        count: 26,
-        why: 'ebible.org left XML tags as text after the last verse of every book but Revelation; upstream SBLGNT has none',
-      },
+      { find: ' ‘p /’ ‘/book’', replace: '', count: 19, why: 'ebible XML leftover, with ‘p /’' },
+      { find: ' ‘/book’', replace: '', count: 7, why: 'ebible XML leftover, alone (MRK, JHN, ACT, 1CO, HEB, 1PE, JUD)' },
     ],
   },
   {

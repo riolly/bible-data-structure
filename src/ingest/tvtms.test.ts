@@ -199,7 +199,9 @@ describe.skipIf(!hasTvtms)('the pinned TVTMS file', () => {
   });
 
   it('reports where TVTMS and the .vrs files disagree', () => {
-    expect(diff.get('kjv')).toEqual([]);
+    expect(diff.has('kjv')).toBe(false);
+    expect(diff.has('rp')).toBe(false);
+    expect(diff.has('brenton')).toBe(true); // through the rows it takes from lxx
     for (const [id, lines] of diff) for (const l of lines) expect(l, id).toMatch(/^\S+ \d+:\d+\S*\ttvtms: .*\tvrs: /);
   });
 

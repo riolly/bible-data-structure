@@ -16,7 +16,7 @@ import { join } from 'node:path';
 import type { IngestStats } from './normalize';
 import { PIVOT, checkCoverage } from '../model/mapping';
 import { checkVerses, type Scheme } from '../model/scheme';
-import { PARATEXT_SCHEMES, loadSchemes } from './schemes';
+import { loadSchemes } from './schemes';
 import { computeEdition, type SourceFile } from './edition';
 import { normalizeUsj } from './normalize';
 import { usfmToUsj, usjBookCode } from './parse';
@@ -77,9 +77,8 @@ function main() {
     const c = perScheme.get(s.id)!;
     const own = mappingRows.filter((r) => r.scheme === s.id);
     const fromVrs = own.filter((r) => r.source === 'vrs').length;
-    const witness = PARATEXT_SCHEMES.some((p) => p.id === s.id)
-      ? `${diff.get(s.id)!.length} verses where the witnesses disagree`
-      : 'no .vrs witness';
+    const lines = diff.get(s.id);
+    const witness = lines ? `${lines.length} verses where the witnesses disagree` : 'no .vrs witness';
     console.log(
       `  ${s.id}: ${own.length - fromVrs} TVTMS rows, ${fromVrs} .vrs rows; ${c.needsText.length} TVTMS rows need text; ${witness}`,
     );

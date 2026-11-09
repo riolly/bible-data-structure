@@ -51,10 +51,12 @@ export function canonBookCodes(canon: Canon): string[] {
   return canon.entries.flatMap((e) => e.books);
 }
 
-/** The book codes of one top-level section (`ot`, `nt`), in canon order. */
+/** The book codes of one section and the sections under it, in canon order. */
 export function sectionBookCodes(canon: Canon, section: string): string[] {
   if (!canon.sections.some((s) => s.id === section)) throw new Error(`${canon.id} has no section "${section}"`);
-  return canon.entries.filter((e) => e.section === section).flatMap((e) => e.books);
+  const parent = new Map(canon.sections.map((s) => [s.id, s.parent]));
+  const under = (id: string | null): boolean => id !== null && (id === section || under(parent.get(id) ?? null));
+  return canon.entries.filter((e) => under(e.section)).flatMap((e) => e.books);
 }
 
 const one = (section: string) => (code: string): CanonEntry => ({

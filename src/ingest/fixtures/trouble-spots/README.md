@@ -5,7 +5,7 @@ Whole chapters copied from the pinned sources in `src/ingest/sources.ts` on 2026
 Two changes from the sources, so the fixtures stay small and carry no attribution-only data:
 
 - The `\w` attributes (`strong`, `x-morph`) are removed. The `\w` markers stay. This drops OSHB's CC BY 4.0 morphology from the WLC files, leaving the public-domain WLC text.
-- The SBLGNT files lose the ` ‘p /’ ‘/book’` that ebible.org leaves after a book's last verse (`textFixes` in sources.ts).
+- The SBLGNT files lose the ` ‘p /’ ‘/book’` or ` ‘/book’` that ebible.org leaves after a book's last verse (`textFixes` in sources.ts; `schemes.test.ts` checks the fixes against the full source).
 
 | Directory | Source | Chapters | License |
 |---|---|---|---|

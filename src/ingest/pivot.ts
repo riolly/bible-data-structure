@@ -200,8 +200,11 @@ export function allVrsPivotRows(
  * A derived scheme (ADR-0002 amendment) numbers every chapter it leaves
  * unchanged as its base does, so there it takes its base's `.vrs` rows, and
  * for the books it copies, the rows of the scheme it copies them from. Rows
- * from a chapter it changes are left out. With `kjv` or `eng` as the source
- * there are no rows to take; TVTMS alone maps those schemes.
+ * from a chapter it changes are left out, even for verses below both ends: a
+ * chapter whose length changed may be renumbered throughout (Brenton's
+ * 2 Esdras 14 has 17 verses where lxx has 23), so its base rows could be
+ * wrong. An unmapped verse is reported; a wrong row is not. With `kjv` or
+ * `eng` as the source there are no rows to take; TVTMS alone maps those.
  */
 export function derivedVrsPivotRows(paratextRows: readonly MappingRow[]): MappingRow[] {
   const byScheme = new Map<string, MappingRow[]>();

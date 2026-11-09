@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { BOOKS, BOOK_BY_CODE, ENGLISH_NAMES } from './books';
-import { CANONS, canonBookCodes } from './canon';
+import { CANONS, PROTESTANT, canonBookCodes, sectionBookCodes, type Canon } from './canon';
 
 describe('books (USFM spec)', () => {
   it('keys every book by its USFM code and skips peripherals', () => {
@@ -44,5 +44,31 @@ describe('protestant canon', () => {
   it('places every entry in a declared section', () => {
     const sections = new Set(canon.sections.map((s) => s.id));
     for (const e of canon.entries) expect(sections.has(e.section)).toBe(true);
+  });
+});
+
+describe('sectionBookCodes', () => {
+  it('splits the protestant canon into 39 and 27', () => {
+    expect(sectionBookCodes(PROTESTANT, 'ot')).toHaveLength(39);
+    expect(sectionBookCodes(PROTESTANT, 'nt').at(-1)).toBe('REV');
+    expect(() => sectionBookCodes(PROTESTANT, 'dc')).toThrow(/no section/);
+  });
+
+  it('includes the books of child sections', () => {
+    const nested: Canon = {
+      ...PROTESTANT,
+      sections: [
+        { id: 'ot', parent: null, labelKey: 'ot' },
+        { id: 'law', parent: 'ot', labelKey: 'law' },
+        { id: 'nt', parent: null, labelKey: 'nt' },
+      ],
+      entries: [
+        { id: 'GEN', section: 'law', status: 'canonical', labelKey: null, books: ['GEN'] },
+        { id: 'PSA', section: 'ot', status: 'canonical', labelKey: null, books: ['PSA'] },
+        { id: 'MAT', section: 'nt', status: 'canonical', labelKey: null, books: ['MAT'] },
+      ],
+    };
+    expect(sectionBookCodes(nested, 'ot')).toEqual(['GEN', 'PSA']);
+    expect(sectionBookCodes(nested, 'law')).toEqual(['GEN']);
   });
 });
