@@ -11,8 +11,17 @@ One book of scripture, identified by its **USFM book code** (`GEN`, `PSA`, `JHN`
 _Avoid_: using an English name or slug as an id
 
 **Canon** *(planned)*:
-A named, ordered list of book codes that a tradition counts as scripture: Protestant 66 now, Catholic 73, Orthodox and Ethiopian lists later. Testament, grouping and order are properties of a canon's list, not of the book. (ADR-0002)
+One specific list of what a tradition counts as scripture, in its order: Protestant now, Catholic, Orthodox, Tanakh and Ethiopian lists later. Grouping and order belong to the canon, not to the book. (ADR-0002)
 _Avoid_: assuming every Bible has 66 books or the same order
+
+**Canon entry** *(planned)*:
+One counted item in a canon, holding one or more book codes. Tanakh "Samuel" is one entry with `1SA` and `2SA`. Each entry has a status: `canonical`, `readable` (the Orthodox *anagignoskomena*) or `appendix`. Traditions count entries, not codes.
+
+**Canon section** *(planned)*:
+A group inside a canon (Old Testament, Pentateuch, Torah, Ketuvim, appendix). Sections form a tree and replace the old `testament` field.
+
+**Book name** *(planned)*:
+A book's long name, short name and abbreviation in one language, with optional overrides per canon (Vulgate `EZR` is "1 Esdras"). Parsing a human reference needs a canon and a language.
 
 ## Editions
 
@@ -31,15 +40,25 @@ The upstream URL plus the sha256 of the downloaded file (`src/ingest/sources.ts`
 **Versification scheme**:
 A numbering system for chapters and verses: KJV, Masoretic, Septuagint, Vulgate and others. The same `chapter:verse` can mean different text under different schemes (Psalm titles, Joel 2/3, Malachi 3/4, Revelation 12/13). (ADR-0002)
 
+**Scheme id**:
+A lowercase name from our registry: `kjv`, and the Paratext names `org`, `eng`, `lxx`, `vul`, `rso`, `rsc`. Paratext `eng` is not KJV numbering.
+_Avoid_: av11n (that is SWORD's name for its mapping feature, not a scheme)
+
 **Verse address**:
-A book, chapter and verse **under a named versification scheme**. An address without a scheme is ambiguous. *(Today's code still uses one fixed av11n/KJV scheme.)*
+A book, chapter, verse and optional segment **under a named versification scheme**. Verse 0 is a Psalm title. Written as a USFM reference plus `/scheme`: `PSA 51:3/org`, `REV 13:1a/kjv`. Stored as separate columns. (ADR-0002) *(Today's code still uses one fixed scheme it calls av11n.)*
 _Avoid_: reference, citation (those are human-written strings that resolve to an address)
 
+**Segment**:
+A lettered part of a verse (`13:1a`), used where schemes split a verse differently.
+
+**Pivot scheme** *(planned)*:
+A synthetic scheme that only grows, which all scheme mappings go through. Stored addresses never use it. (ADR-0006)
+
 **Scheme mapping**:
-Data that moves a verse address from one versification scheme to another, including splits, merges and verses absent in one scheme. *(Today: `versification_map`, a sparse table from an edition's native numbering to av11n, built from `.vrs` files.)*
+Data that moves a verse address from one scheme to the pivot and back, including partial verses, merges, cross-book moves and verses absent in one scheme. Compiled from STEPBible TVTMS, checked against Paratext `.vrs`. (ADR-0006) *(Today: `versification_map`, a sparse one-to-one table that can't express most of this.)*
 
 **Word address**:
-A verse address plus a **word index**: the 0-based ordinal of a word Token in that verse, punctuation excluded. A punctuation Token is addressed by the word it follows. Valid only for one edition, since editions differ in words. Its meaning depends on the tokenizer policy (ADR-0004).
+A verse address plus a **word index**: the 0-based ordinal of a word Token in that verse, punctuation excluded. In address strings the word number counts from 1 (`MAT 2:1!3/kjv` is index 2). A punctuation Token is addressed by the word it follows. Valid only for one edition, since editions differ in words. Its meaning depends on the tokenizer policy (ADR-0004).
 
 **Verse bridge**:
 A USFM verse marker covering several verses (`\v 17-18`). Today it collapses to its first number, and the later numbers get no address (ADR-0004, rule 6; open for revisiting).
@@ -66,7 +85,7 @@ Any further grouping laid over the token stream: sections, pericopes, literary u
 One lexical segment occurrence in an original-language edition: a whole word in Greek, a **morpheme** in Hebrew. Identified by a stable external id (`ow_id`). It is the shared hub that translation Tokens align to. (ADR-0003)
 _Avoid_: lemma (dictionary form), Strong's (lexical id); assuming one written word is one Original Word
 
-**Segment**:
+**Original-word segment**:
 The grain of an Original Word. A Greek word is one Segment, a Hebrew word several. Ordered siblings rebuild the **Written Word**.
 
 **Alignment**:

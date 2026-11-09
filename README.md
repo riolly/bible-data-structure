@@ -7,7 +7,12 @@ Started 2026-11-09 from the research in [bible-codex](https://github.com/riolly/
 ## Plan
 
 1. **Extract** the research from bible-codex. Done.
-2. **Model the Bible itself.** Research each topic in [research/](research/README.md) from primary sources and fold the findings into CONTEXT.md, ADRs and the code. The first model change is ADR-0002: USFM book codes as ids, scheme-named addresses, canons as data.
+2. **Model the Bible itself.** Research each topic in [research/](research/README.md) from primary sources and fold the findings into CONTEXT.md, ADRs and the code. Versification and canons are researched and decided (ADR-0002, ADR-0006). Next is the code that implements them, in this order, test first:
+   1. An address module: parse and format `PSA 51:3/org`, `REV 13:1a/kjv`, `GEN 1:1-31/kjv` and `MAT 2:1!3/kjv` (1-based word numbers in strings, 0-based in storage). Round-trip tests.
+   2. Book and canon tables keyed by USFM code (`book`, `canon`, `canon_section`, `canon_entry`, `canon_entry_book`, `book_name`), with the Protestant canon and English names seeded from the USFM spec. Remove `book.slug`, `testament` and `position`, and `src/ingest/books.ts` slugs.
+   3. A scheme registry seeded with `kjv` and the six Paratext schemes, with verse-count tables from the libpalaso `.vrs` files (MIT, pinned by commit). A test that KJV and BSB ingest under `kjv`.
+   4. A full `.vrs` parser (segments, cross-book lines, `#!` lines) and mapping rows to a pivot, replacing `versification_map` and the bijection check. Replace `divergent.vrs` with the real cases listed in ADR-0006.
+   5. TVTMS compiled to per-scheme mapping tables, pinned by URL and checksum, diffed against the `.vrs` mappings.
 3. **Test against texts that disagree.** Import KJV, BSB, a Bible with deuterocanonical books, OSHB Hebrew, a Greek New Testament and, if licensable, the Septuagint. Make the trouble-spot fixtures in research/README.md pass.
 4. **Design app projections.** Write the contract any Bible app needs (render a chapter, resolve "Ps 23", map a verse to another edition, anchor a user's mark, search), then compile the model into per-app packs and measure size and speed. Content changes become rebuilds. Only app user data needs migrations.
 
