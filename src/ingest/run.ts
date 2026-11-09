@@ -10,29 +10,29 @@
  * an asset; run this before a native/dev build that renders scripture.
  */
 
-import { existsSync, readdirSync, readFileSync, mkdirSync, rmSync } from 'node:fs';
+import { readdirSync, readFileSync, mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 
 import type { IngestStats } from './normalize';
 import { PROTESTANT, canonBookCodes } from '../model/canon';
+import { PIVOT, checkCoverage } from '../model/mapping';
 import { checkVerses, type Scheme } from '../model/scheme';
 import { loadSchemes } from './schemes';
 import { computeEdition, type SourceFile } from './edition';
 import { normalizeUsj } from './normalize';
 import { usfmToUsj, usjBookCode } from './parse';
 import { SOURCES } from './sources';
-import { parseVrs } from './vrs';
+import { allVrsPivotRows, buildPivot } from './pivot';
 import {
   createCorpusDb,
   insertBookRows,
   insertTranslation,
-  insertVersification,
+  insertMappings,
   seedBooksAndCanons,
   seedSchemes,
 } from './write-db';
 
 const SOURCES_ROOT = join(import.meta.dirname, 'sources');
-const VRS_ROOT = join(import.meta.dirname, 'vrs');
 const OUT_DIR = join(import.meta.dirname, '..', '..', 'build');
 const OUT_PATH = join(OUT_DIR, 'corpus.db');
 
@@ -70,7 +70,15 @@ function main() {
   const { db, sqlite } = createCorpusDb(OUT_PATH);
   seedBooksAndCanons(db);
   const schemes = loadSchemes();
-  seedSchemes(db, schemes);
+  const pivot = buildPivot(schemes);
+  seedSchemes(db, new Map(schemes).set(PIVOT, pivot));
+  const mappingRows = allVrsPivotRows(schemes);
+  insertMappings(db, mappingRows, 'vrs');
+  console.log(`schemes: ${[...schemes.keys()].join(', ')} + ${PIVOT}; ${mappingRows.length} mapping rows`);
+  for (const s of schemes.values()) {
+    const problems = checkCoverage(s, pivot, mappingRows);
+    if (problems.length > 0) console.warn(`  ⚠ ${s.id}: ${problems.length} verse(s) map outside the pivot: ${problems.slice(0, 3).join('; ')}`);
+  }
 
   for (const src of SOURCES) {
     const scheme = schemes.get(src.meta.scheme);
@@ -83,7 +91,6 @@ function main() {
     const totals: Record<string, number> = {};
     let blockCount = 0;
     let tokenCount = 0;
-    let vmapCount = 0;
     const ingestAll = sqlite.transaction(() => {
       for (const file of [...files].sort(
         (a, b) => BOOK_ORDER.get(a.code)! - BOOK_ORDER.get(b.code)!,
@@ -115,47 +122,15 @@ function main() {
         blockCount += blocks.length;
         tokenCount += tokens.length;
       }
-      // Sparse native↔canonical map (#12, ADR-0001): resolve the translation's
-      // versification scheme to its .vrs file. av11n == canonical → no file
-      // needed / zero rows; a divergent scheme drops its rows here.
-      vmapCount = insertVersificationForScheme(db, translationId, src.meta.scheme);
     });
     ingestAll();
-    console.log(`  ${blockCount} blocks, ${tokenCount} tokens, ${vmapCount} versification rows`);
+    console.log(`  ${blockCount} blocks, ${tokenCount} tokens`);
     console.log(`  not modelled in Phase 1 (dropped/unwrapped, counted): ${JSON.stringify(totals)}`);
   }
 
   sqlite.exec('VACUUM; ANALYZE;');
   sqlite.close();
   console.log(`\n✓ wrote ${OUT_PATH}`);
-}
-
-/**
- * Populate one translation's `versification_map` from its scheme's `.vrs` file
- * (vrs/<scheme>.vrs). Returns the row count. A missing file or an all-identity
- * (av11n) file yields 0 rows — the sparse-table contract. A row for a book not
- * in this corpus is a fixture/data error and fails the build.
- */
-function insertVersificationForScheme(
-  db: ReturnType<typeof createCorpusDb>['db'],
-  translationId: number,
-  scheme: string,
-): number {
-  const path = join(VRS_ROOT, `${scheme}.vrs`);
-  if (!existsSync(path)) return 0; // scheme without a divergence file = identity
-  const rows = parseVrs(readFileSync(path, 'utf8'));
-  const resolved = rows.map((r) => {
-    if (!BOOK_ORDER.has(r.book)) throw new Error(`${scheme}.vrs: maps book "${r.book}" absent from corpus`);
-    return {
-      book: r.book,
-      srcChapter: r.srcChapter,
-      srcVerse: r.srcVerse,
-      canonChapter: r.canonChapter,
-      canonVerse: r.canonVerse,
-    };
-  });
-  insertVersification(db, translationId, resolved);
-  return resolved.length;
 }
 
 /**

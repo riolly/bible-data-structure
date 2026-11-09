@@ -1,8 +1,8 @@
 /**
  * Versification schemes (ADR-0002). A scheme is defined by its verse-count
  * table: for each book, the last verse number of each chapter, plus any verses
- * inside that range the scheme leaves out. Verse 0 (a Psalm title or chapter
- * heading) is not counted here; mapping rows decide where it goes (ADR-0006).
+ * inside that range the scheme leaves out. Verse 0 (a Psalm title) is not in
+ * the counts; `titles` lists the chapters where the scheme has one.
  *
  * No Node-only import here: the registry is built in src/ingest/schemes.ts.
  */
@@ -17,6 +17,10 @@ export interface Scheme {
   readonly verseCounts: ReadonlyMap<string, readonly number[]>;
   /** `BOOK C:V` keys of verses inside the count range that the scheme lacks. */
   readonly excluded: ReadonlySet<string>;
+  /** `BOOK C:V` → the segments that verse is divided into, in order (`''` = unmarked first part). */
+  readonly segments: ReadonlyMap<string, readonly string[]>;
+  /** `BOOK C` of each chapter whose title the scheme numbers as verse 0. */
+  readonly titles: ReadonlySet<string>;
 }
 
 export const verseKey = (book: string, chapter: number, verse: number): string =>

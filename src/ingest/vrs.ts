@@ -1,80 +1,119 @@
 /**
- * Parse standard `.vrs` versification mapping data → sparse `versification_map`
- * rows (ADR-0001). A `.vrs` mapping line reconciles a translation's NATIVE
- * numbering to the av11n CANONICAL numbering:
+ * Paratext `.vrs` versification files (ADR-0006), read the way libpalaso's
+ * Versification.cs reads them (commit b4f7a6d, lines 603-1062). A file holds:
  *
- *     # comment
- *     JOL 3:1-5 = JOL 2:28-32      # native (left) = canonical (right)
- *     MAL 3:19-24 = MAL 4:1-6
- *     REV 12:18 = REV 13:1
+ *     GEN 1:31 2:25 ...            verse counts, one line per book
+ *     -GEN 31:51                   a verse the scheme leaves out
+ *     *JOS 9:2,-,a,b               the segments a verse is divided into
+ *     JOL 3:1-5 = JOL 2:28-32      a mapping: this scheme = org
+ *     &ACT 19:40-41 = ACT 19:40    a mapping of a range onto one verse
+ *     #! <any of the above>        a Paratext 7.3 line hidden in a comment
  *
- * Each side is `CODE chapter:verse` or `CODE chapter:vStart-vEnd` (a verse range
- * within one chapter). Ranges expand to one row per verse and MUST be
- * equal-length on both sides. Book codes are USFM codes (ADR-0002).
- *
- * Only DIVERGENT lines appear in a `.vrs`; an av11n translation's file has none
- * (or no file), so its map is empty and every address is identity — which is the
- * whole point of the sparse table.
+ * Mapping lines may cross books, carry segments, and repeat a left side to map
+ * one verse to several. Paratext reads a standard line's right side by its
+ * start only and counts up from it; lines where the two sides differ in length
+ * are read the same way and reported in `warnings`, never fixed.
  */
 
-import { BOOK_BY_CODE } from '../model/books';
-import type { VersificationRow } from '../model/versification';
-
-interface Ref {
-  readonly code: string;
+/** A verse or part of one, in one book. `segment` is `''` for the whole verse. */
+export interface VrsRef {
+  readonly book: string;
   readonly chapter: number;
-  readonly verses: readonly number[]; // one or more (expanded range), in order
+  readonly verse: number;
+  readonly segment: string;
 }
 
-/** Parse one `CODE C:V` or `CODE C:Va-Vb` side. */
-function parseRef(text: string, line: number): Ref {
-  const m = text.trim().match(/^([0-9A-Z]{3})\s+(\d+):(\d+)(?:-(\d+))?$/);
-  if (!m) throw new Error(`vrs: unparseable reference "${text}" (line ${line})`);
-  const [, code, chapterStr, startStr, endStr] = m;
-  if (!BOOK_BY_CODE.has(code)) throw new Error(`vrs: unknown book code "${code}" (line ${line})`);
-  const chapter = parseInt(chapterStr, 10);
-  const start = parseInt(startStr, 10);
-  const end = endStr ? parseInt(endStr, 10) : start;
-  if (end < start) throw new Error(`vrs: descending verse range "${text}" (line ${line})`);
-  const verses: number[] = [];
-  for (let v = start; v <= end; v++) verses.push(v);
-  return { code, chapter, verses };
+/** One expanded mapping pair: `from` in the file's scheme, `to` in org. */
+export interface VrsMapping {
+  readonly from: VrsRef;
+  readonly to: VrsRef;
+  /** 1-based line number in the file. */
+  readonly line: number;
 }
 
-/**
- * Parse `.vrs` mapping text → sparse rows. Non-mapping content (comments, blank
- * lines, and any leading non-mapping directives) is ignored; a malformed mapping
- * line throws so a bad file fails the build, not the reader.
- */
-export function parseVrs(text: string): VersificationRow[] {
-  const rows: VersificationRow[] = [];
+export interface VrsFile extends VrsCounts {
+  /** `BOOK C:V` → segment ids in order, `''` for the unmarked first part. */
+  readonly segments: Map<string, string[]>;
+  readonly mappings: VrsMapping[];
+  readonly warnings: string[];
+}
+
+interface Side {
+  readonly start: VrsRef;
+  /** Last verse of a range in the same chapter; equals start.verse for one verse. */
+  readonly endVerse: number;
+  readonly isRange: boolean;
+}
+
+const SIDE_RE = /^([0-9A-Z]{3}) (\d+):(\d+)([a-z]?)(?:-(\d+)([a-z]?))?$/;
+
+function parseSide(text: string, line: number): Side {
+  const m = SIDE_RE.exec(text.trim());
+  if (!m) throw new Error(`vrs: unreadable reference "${text.trim()}" (line ${line})`);
+  const [, book, c, v, seg, end, endSeg] = m;
+  if (end !== undefined && (seg !== '' || endSeg !== '')) {
+    throw new Error(`vrs: a range with segments is not supported (line ${line})`);
+  }
+  const start = { book, chapter: Number(c), verse: Number(v), segment: seg };
+  return { start, endVerse: end === undefined ? start.verse : Number(end), isRange: end !== undefined };
+}
+
+function expand(side: Side): VrsRef[] {
+  const out: VrsRef[] = [];
+  for (let v = side.start.verse; v <= side.endVerse; v++) out.push({ ...side.start, verse: v });
+  return out.length > 0 ? out : [side.start];
+}
+
+/** Parse a whole `.vrs` file: counts, excluded verses, segments and mappings. */
+export function parseVrs(text: string): VrsFile {
+  const { verseCounts, excluded } = parseVrsCounts(text);
+  const segments = new Map<string, string[]>();
+  const mappings: VrsMapping[] = [];
+  const warnings: string[] = [];
   const lines = text.split('\n');
   for (let i = 0; i < lines.length; i++) {
-    const raw = lines[i].replace(/#.*$/, '').trim(); // strip trailing comment
-    if (raw === '') continue;
-    if (!raw.includes('=')) continue; // not a mapping line (a scheme directive, etc.)
-    const [srcText, canonText, ...extra] = raw.split('=');
-    if (extra.length > 0) throw new Error(`vrs: multiple "=" on line ${i + 1}`);
-    const src = parseRef(srcText, i + 1);
-    const canon = parseRef(canonText, i + 1);
-    if (src.verses.length !== canon.verses.length) {
-      throw new Error(`vrs: mismatched range lengths on line ${i + 1} ("${raw}")`);
+    const n = i + 1;
+    const line = vrsLine(lines[i]);
+    if (line.startsWith('*')) {
+      const m = /^\*([0-9A-Z]{3}) (\d+):(\d+),(.*)$/.exec(line.replace(/(:.*)/, (t) => t.replace(/\s+/g, '')));
+      if (!m) throw new Error(`vrs: unreadable segment line ${n}: "${line}"`);
+      segments.set(
+        `${m[1]} ${Number(m[2])}:${Number(m[3])}`,
+        m[4].split(',').filter((x) => x !== '').map((x) => (x === '-' ? '' : x)),
+      );
+      continue;
     }
-    if (src.code !== canon.code) {
-      // A row is book-scoped; cross-book renumbering is not modelled in P1.
-      throw new Error(`vrs: cross-book mapping ${src.code}→${canon.code} on line ${i + 1}`);
+    if (!line.includes('=')) continue;
+    const manyToOne = line.startsWith('&');
+    const parts = (manyToOne ? line.slice(1) : line).split('=');
+    if (parts.length !== 2) throw new Error(`vrs: unreadable mapping line ${n}: "${line}"`);
+    const left = parseSide(parts[0], n);
+    const right = parseSide(parts[1], n);
+
+    if (manyToOne) {
+      const froms = expand(left);
+      const tos = expand(right);
+      if (froms.length !== 1 && tos.length !== 1) {
+        throw new Error(`vrs: an & line must have one verse on one side (line ${n})`);
+      }
+      for (const from of froms) for (const to of tos) mappings.push({ from, to, line: n });
+      continue;
     }
-    for (let k = 0; k < src.verses.length; k++) {
-      rows.push({
-        book: src.code,
-        srcChapter: src.chapter,
-        srcVerse: src.verses[k],
-        canonChapter: canon.chapter,
-        canonVerse: canon.verses[k],
-      });
+
+    const leftLen = left.endVerse - left.start.verse;
+    if (leftLen < 0 || (right.isRange && right.endVerse - right.start.verse !== leftLen)) {
+      warnings.push(`line ${n}: "${line}" has sides of different lengths; read by the right side's start, as Paratext does`);
+    }
+    let from = left.start;
+    let to = right.start;
+    for (;;) {
+      mappings.push({ from, to, line: n });
+      if (from.verse >= left.endVerse) break;
+      from = { ...from, verse: from.verse + 1 };
+      to = { ...to, verse: to.verse + 1 };
     }
   }
-  return rows;
+  return { verseCounts, excluded, segments, mappings, warnings };
 }
 
 /** The verse-count part of a `.vrs` file: count lines and `-` excluded-verse lines. */
@@ -96,7 +135,7 @@ export function vrsLine(raw: string): string {
 }
 
 /**
- * Read the lines that define a scheme, following libpalaso's
+ * Read only the lines that define a scheme's verses, following libpalaso's
  * ParseChapterVerseLine and ParseExcludedVerseLine:
  *
  *     GEN 1:31 2:25 ...   last verse per chapter; chapter numbers are explicit,

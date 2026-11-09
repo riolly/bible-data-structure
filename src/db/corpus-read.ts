@@ -2,11 +2,8 @@ import { and, asc, eq, inArray, isNull, max, or } from 'drizzle-orm';
 import type { BaseSQLiteDatabase } from 'drizzle-orm/sqlite-core';
 
 import type { Block, Token } from '../model/corpus';
-import {
-  buildVersificationMap,
-  type VersificationMap,
-  type VersificationRow,
-} from '../model/versification';
+import { Mappings, type MappingRow } from '../model/mapping';
+import type { Scheme } from '../model/scheme';
 import * as schema from './corpus-schema';
 
 /**
@@ -157,33 +154,63 @@ export function readChapter(
   return { blocks, tokens };
 }
 
-/**
- * A translation's sparse native↔canonical divergence rows (#12). Empty for an
- * av11n translation (KJV/BSB) — the map is identity there. The USFM book code
- * is returned, never a storage id (ADR-0002).
- */
-export function readVersification(
-  db: SyncSqliteDb,
-  translationAbbrev: string,
-): VersificationRow[] {
-  return db
-    .select({
-      book: schema.versificationMap.book,
-      srcChapter: schema.versificationMap.srcChapter,
-      srcVerse: schema.versificationMap.srcVerse,
-      canonChapter: schema.versificationMap.canonChapter,
-      canonVerse: schema.versificationMap.canonVerse,
-    })
-    .from(schema.versificationMap)
-    .innerJoin(schema.translation, eq(schema.versificationMap.translationId, schema.translation.id))
-    .where(eq(schema.translation.abbrev, translationAbbrev))
+/** Every scheme in the corpus, the pivot included, rebuilt from its tables. */
+export function readSchemes(db: SyncSqliteDb): Map<string, Scheme> {
+  interface Parts {
+    id: string;
+    name: string;
+    sourceUrl: string;
+    note: string;
+    verseCounts: Map<string, number[]>;
+    excluded: Set<string>;
+    segments: Map<string, string[]>;
+    titles: Set<string>;
+  }
+  const parts = new Map<string, Parts>();
+  for (const s of db.select().from(schema.scheme).all()) {
+    parts.set(s.id, { ...s, verseCounts: new Map(), excluded: new Set(), segments: new Map(), titles: new Set() });
+  }
+  const counts = db
+    .select()
+    .from(schema.schemeVerseCount)
+    .orderBy(asc(schema.schemeVerseCount.scheme), asc(schema.schemeVerseCount.book), asc(schema.schemeVerseCount.chapter))
     .all();
+  for (const c of counts) {
+    const m = parts.get(c.scheme)!.verseCounts;
+    const list = m.get(c.book) ?? m.set(c.book, []).get(c.book)!;
+    list[c.chapter - 1] = c.verseCount;
+  }
+  for (const e of db.select().from(schema.schemeExcludedVerse).all()) {
+    parts.get(e.scheme)!.excluded.add(`${e.book} ${e.chapter}:${e.verse}`);
+  }
+  const segs = db.select().from(schema.schemeSegment).orderBy(asc(schema.schemeSegment.ordinal)).all();
+  for (const g of segs) {
+    const m = parts.get(g.scheme)!.segments;
+    const k = `${g.book} ${g.chapter}:${g.verse}`;
+    (m.get(k) ?? m.set(k, []).get(k)!).push(g.segment);
+  }
+  for (const t of db.select().from(schema.schemeTitle).all()) parts.get(t.scheme)!.titles.add(`${t.book} ${t.chapter}`);
+  return new Map<string, Scheme>(parts);
 }
 
-/** Build the in-memory native↔canonical map for a translation (identity if empty). */
-export function loadVersificationMap(
-  db: SyncSqliteDb,
-  translationAbbrev: string,
-): VersificationMap {
-  return buildVersificationMap(readVersification(db, translationAbbrev));
+/** Every mapping row to the pivot (ADR-0006). */
+export function readMappings(db: SyncSqliteDb): MappingRow[] {
+  return db
+    .select()
+    .from(schema.schemeMapping)
+    .all()
+    .map((r) => ({
+      scheme: r.scheme,
+      from: { book: r.book, chapter: r.chapter, verse: r.verse, segment: r.segment },
+      to:
+        r.pivotBook === null
+          ? null
+          : { book: r.pivotBook, chapter: r.pivotChapter!, verse: r.pivotVerse!, segment: r.pivotSegment ?? '' },
+      kind: r.kind,
+    }));
+}
+
+/** Load the schemes and mappings, ready to move addresses between schemes. */
+export function loadMappings(db: SyncSqliteDb): Mappings {
+  return new Mappings(readMappings(db), readSchemes(db));
 }

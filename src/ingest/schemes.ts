@@ -19,7 +19,7 @@ import { join } from 'node:path';
 
 import { PROTESTANT, canonBookCodes } from '../model/canon';
 import type { Scheme } from '../model/scheme';
-import { parseVrsCounts } from './vrs';
+import { parseVrs } from './vrs';
 
 export const LIBPALASO_COMMIT = 'f1f70e93a79d55b1769a4e20fb36047f2fa08d99';
 const LIBPALASO_URL = `https://github.com/sillsdev/libpalaso/blob/${LIBPALASO_COMMIT}/SIL.Scripture/Resources`;
@@ -71,7 +71,9 @@ export function readParatextVrs(id: string): string {
 export function loadSchemes(): Map<string, Scheme> {
   const out = new Map<string, Scheme>();
   for (const def of PARATEXT_SCHEMES) {
-    const { verseCounts, excluded } = parseVrsCounts(readParatextVrs(def.id));
+    const { verseCounts, excluded, segments, mappings } = parseVrs(readParatextVrs(def.id));
+    // A title is verse 0 where the scheme's own mapping lines number one.
+    const titles = new Set(mappings.filter((m) => m.from.verse === 0).map((m) => `${m.from.book} ${m.from.chapter}`));
     for (const code of OBSOLETE_CODES) verseCounts.delete(code);
     out.set(def.id, {
       id: def.id,
@@ -80,6 +82,8 @@ export function loadSchemes(): Map<string, Scheme> {
       note: 'Paratext versification, libpalaso (MIT).',
       verseCounts,
       excluded: new Set([...excluded].filter((k) => !OBSOLETE_CODES.has(k.slice(0, 3)))),
+      segments,
+      titles,
     });
   }
 
@@ -91,9 +95,12 @@ export function loadSchemes(): Map<string, Scheme> {
     id: 'kjv',
     name: 'King James',
     sourceUrl: `${LIBPALASO_URL}/eng.vrs.txt`,
-    note: 'SWORD KJV numbering: eng counts for the 66 protestant books, with REV 12 ending at 17 and 3JN at 14.',
+    note: 'SWORD KJV numbering: eng counts and titles for the 66 protestant books, with REV 12 ending at 17 and 3JN at 14.',
     verseCounts: kjvCounts,
     excluded: new Set(),
+    segments: new Map(),
+    // KJV prints the same Psalm titles eng numbers as verse 0.
+    titles: new Set([...eng.titles].filter((t) => kjvCounts.has(t.split(' ')[0]))),
   });
   return out;
 }

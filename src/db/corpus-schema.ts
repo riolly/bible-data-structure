@@ -211,24 +211,67 @@ export const token = sqliteTable(
   ],
 );
 
-/**
- * Sparse native↔canonical reconciliation: a row exists ONLY where a
- * translation's native numbering differs from canonical. Populated in #12.
- */
-export const versificationMap = sqliteTable(
-  'versification_map',
+/** The segments a verse is divided into, in order (`''` = the unmarked first part). */
+export const schemeSegment = sqliteTable(
+  'scheme_segment',
   {
-    id: integer('id').primaryKey({ autoIncrement: true }),
-    translationId: integer('translation_id')
+    scheme: text('scheme')
       .notNull()
-      .references(() => translation.id),
+      .references(() => scheme.id),
     book: text('book')
       .notNull()
       .references(() => book.code),
-    srcChapter: integer('src_chapter').notNull(),
-    srcVerse: integer('src_verse').notNull(),
-    canonChapter: integer('canon_chapter').notNull(),
-    canonVerse: integer('canon_verse').notNull(),
+    chapter: integer('chapter').notNull(),
+    verse: integer('verse').notNull(),
+    ordinal: integer('ordinal').notNull(),
+    segment: text('segment').notNull(),
   },
-  (t) => [index('vmap_src').on(t.translationId, t.book, t.srcChapter, t.srcVerse)],
+  (t) => [primaryKey({ columns: [t.scheme, t.book, t.chapter, t.verse, t.ordinal] })],
+);
+
+/** A chapter whose title the scheme numbers as verse 0. */
+export const schemeTitle = sqliteTable(
+  'scheme_title',
+  {
+    scheme: text('scheme')
+      .notNull()
+      .references(() => scheme.id),
+    book: text('book')
+      .notNull()
+      .references(() => book.code),
+    chapter: integer('chapter').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.scheme, t.book, t.chapter] })],
+);
+
+/**
+ * Sparse mapping rows from a scheme to the pivot (ADR-0006). A verse with no
+ * row maps to the same reference in the pivot. Rows may be many-to-many and
+ * cross books; a row with NULL pivot columns marks the verse absent.
+ */
+export const schemeMapping = sqliteTable(
+  'scheme_mapping',
+  {
+    scheme: text('scheme')
+      .notNull()
+      .references(() => scheme.id),
+    book: text('book')
+      .notNull()
+      .references(() => book.code),
+    chapter: integer('chapter').notNull(),
+    verse: integer('verse').notNull(),
+    segment: text('segment').notNull(),
+    pivotBook: text('pivot_book').references(() => book.code),
+    pivotChapter: integer('pivot_chapter'),
+    pivotVerse: integer('pivot_verse'),
+    pivotSegment: text('pivot_segment'),
+    /** TVTMS action, or how a `.vrs` line read. */
+    kind: text('kind').notNull(),
+    /** Where the row came from: `tvtms` or `vrs`. */
+    source: text('source').notNull(),
+  },
+  (t) => [
+    index('mapping_from').on(t.scheme, t.book, t.chapter, t.verse),
+    index('mapping_to').on(t.scheme, t.pivotBook, t.pivotChapter, t.pivotVerse),
+  ],
 );

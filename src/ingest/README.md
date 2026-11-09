@@ -19,6 +19,12 @@ bun run ingest            # sources → build/corpus.db (gitignored)
 - `parse.ts` — usfm-grammar wrapper (strict first, lenient with logged errors;
   versified-`\d` grammar-gap preprocess).
 - Books, canons and English names live in `src/model/books.ts` and `src/model/canon.ts`; `write-db.ts` seeds them.
+- `schemes.ts` — the scheme registry: `kjv` plus six Paratext schemes from
+  `vrs/libpalaso/` (MIT, pinned by commit and sha256).
+- `vrs.ts` — the Paratext `.vrs` parser (counts, excluded verses, segments,
+  mappings, `#!` lines), read the way libpalaso reads them.
+- `pivot.ts` — the extend-only pivot (`fixtures/pivot.json` is the previous
+  build) and the `.vrs` mappings compiled to pivot rows (ADR-0006).
 - `edition.ts` — deterministic `translation.edition` stamp (ADR-0005): sha256
   over the source text, immune to zip repackaging.
 - `sources.ts` / `download.ts` — pinned upstream zips + checksums. A checksum

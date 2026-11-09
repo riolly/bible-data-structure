@@ -1,0 +1,27 @@
+# Real .vrs mapping lines, copied from libpalaso commit f1f70e9 (MIT,
+# src/ingest/vrs/libpalaso/), one per case in ADR-0006. Each line reads
+# SCHEME = org. Replaces divergent.vrs, which shifted Rev 13 by one verse,
+# a difference no source has.
+
+# The two-verse Hebrew title of Psalm 51, many-to-one (eng.vrs lines 230-232).
+PSA 51:0 = PSA 51:1
+PSA 51:0 = PSA 51:2
+PSA 51:1-19 = PSA 51:3-21
+
+# Romans 16:25-27 printed at 14:24-26, cross-chapter (rso.vrs line 385).
+ROM 14:24-26 = ROM 16:25-27
+
+# The Greek additions in Daniel 3 as their own book, cross-book (vul.vrs lines 528-529).
+DAN 3:24-90 = S3Y 1:1-67
+DAN 3:91-100 = DAN 3:24-33
+
+# A Paratext 7.3 #! line mapping two verses to one (eng.vrs line 307).
+#! &ACT 19:40-41 = ACT 19:40
+
+# A segment definition (lxx.vrs line 875) and a mapping onto a segment (eng.vrs line 324).
+#! *JOS 9:2,-,a,b,c,d,e,f
+ESG 1:1 = ESG 1:1a
+
+# A line whose right side is longer than its left. Paratext reads only the
+# right side's start, so 142:1 is dropped (rsc.vrs line 295).
+PSA 141:0 = PSA 142:0-1

@@ -14,6 +14,7 @@ import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
 import { BOOKS, ENGLISH_NAMES } from '../model/books';
 import { CANONS } from '../model/canon';
 import type { Block, Token } from '../model/corpus';
+import { PIVOT, type MappingRow } from '../model/mapping';
 import type { Scheme } from '../model/scheme';
 import * as schema from '../db/corpus-schema';
 
@@ -123,16 +124,36 @@ CREATE TABLE token (
 );
 CREATE INDEX token_render ON token (translation_id, book, chapter, verse, seq);
 CREATE INDEX token_anchor ON token (translation_id, book, chapter, verse, word_index);
-CREATE TABLE versification_map (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  translation_id INTEGER NOT NULL REFERENCES translation(id),
+CREATE TABLE scheme_segment (
+  scheme TEXT NOT NULL REFERENCES scheme(id),
   book TEXT NOT NULL REFERENCES book(code),
-  src_chapter INTEGER NOT NULL,
-  src_verse INTEGER NOT NULL,
-  canon_chapter INTEGER NOT NULL,
-  canon_verse INTEGER NOT NULL
+  chapter INTEGER NOT NULL,
+  verse INTEGER NOT NULL,
+  ordinal INTEGER NOT NULL,
+  segment TEXT NOT NULL,
+  PRIMARY KEY (scheme, book, chapter, verse, ordinal)
 );
-CREATE INDEX vmap_src ON versification_map (translation_id, book, src_chapter, src_verse);
+CREATE TABLE scheme_title (
+  scheme TEXT NOT NULL REFERENCES scheme(id),
+  book TEXT NOT NULL REFERENCES book(code),
+  chapter INTEGER NOT NULL,
+  PRIMARY KEY (scheme, book, chapter)
+);
+CREATE TABLE scheme_mapping (
+  scheme TEXT NOT NULL REFERENCES scheme(id),
+  book TEXT NOT NULL REFERENCES book(code),
+  chapter INTEGER NOT NULL,
+  verse INTEGER NOT NULL,
+  segment TEXT NOT NULL,
+  pivot_book TEXT REFERENCES book(code),
+  pivot_chapter INTEGER,
+  pivot_verse INTEGER,
+  pivot_segment TEXT,
+  kind TEXT NOT NULL,
+  source TEXT NOT NULL
+);
+CREATE INDEX mapping_from ON scheme_mapping (scheme, book, chapter, verse);
+CREATE INDEX mapping_to ON scheme_mapping (scheme, pivot_book, pivot_chapter, pivot_verse);
 `;
 
 export function createCorpusDb(path: string): { db: CorpusDb; sqlite: Database.Database } {
@@ -158,6 +179,7 @@ export interface TranslationMeta {
 }
 
 export function insertTranslation(db: CorpusDb, meta: TranslationMeta): number {
+  if (meta.scheme === PIVOT) throw new Error(`${meta.abbrev}: an edition cannot use the pivot scheme (ADR-0006)`);
   const [row] = db
     .insert(schema.translation)
     .values(meta)
@@ -209,6 +231,10 @@ export function seedBooksAndCanons(db: CorpusDb): void {
 
 /** Write the scheme registry: one row per scheme plus its verse-count table. */
 export function seedSchemes(db: CorpusDb, schemes: ReadonlyMap<string, Scheme>): void {
+  db.transaction((tx) => seedSchemesIn(tx as unknown as CorpusDb, schemes));
+}
+
+function seedSchemesIn(db: CorpusDb, schemes: ReadonlyMap<string, Scheme>): void {
   for (const s of schemes.values()) {
     db.insert(schema.scheme).values({ id: s.id, name: s.name, sourceUrl: s.sourceUrl, note: s.note }).run();
     const counts = [...s.verseCounts].flatMap(([book, chapters]) =>
@@ -220,6 +246,18 @@ export function seedSchemes(db: CorpusDb, schemes: ReadonlyMap<string, Scheme>):
       return { scheme: s.id, book: m[1], chapter: Number(m[2]), verse: Number(m[3]) };
     });
     for (const chunk of chunks(excluded, 2000)) db.insert(schema.schemeExcludedVerse).values(chunk).run();
+    const segments = [...s.segments].flatMap(([k, segs]) => {
+      const m = /^(\S+) (\d+):(\d+)$/.exec(k)!;
+      return segs.map((segment, i) => ({
+        scheme: s.id, book: m[1], chapter: Number(m[2]), verse: Number(m[3]), ordinal: i + 1, segment,
+      }));
+    });
+    for (const chunk of chunks(segments, 2000)) db.insert(schema.schemeSegment).values(chunk).run();
+    const titles = [...s.titles].map((k) => {
+      const [book, chapter] = k.split(' ');
+      return { scheme: s.id, book, chapter: Number(chapter) };
+    });
+    for (const chunk of chunks(titles, 2000)) db.insert(schema.schemeTitle).values(chunk).run();
   }
 }
 
@@ -273,30 +311,33 @@ export function insertBookRows(
   }
 }
 
-/** One `versification_map` row, resolved to storage ids (native → canonical). */
-export interface VersificationInsert {
-  book: string;
-  srcChapter: number;
-  srcVerse: number;
-  canonChapter: number;
-  canonVerse: number;
-}
-
-/**
- * Insert one translation's sparse native↔canonical divergence rows (#12). An
- * av11n translation diverges nowhere, so `rows` is empty and this is a no-op —
- * exactly the sparse-table contract (a row exists ONLY where native != canon).
- */
-export function insertVersification(
-  db: CorpusDb,
-  translationId: number,
-  rows: readonly VersificationInsert[],
-): void {
-  for (const chunk of chunks([...rows], 2000)) {
-    db.insert(schema.versificationMap)
-      .values(chunk.map((r) => ({ translationId, ...r })))
-      .run();
-  }
+/** Write mapping rows to the pivot (ADR-0006), tagged with where they came from. */
+export function insertMappings(db: CorpusDb, rows: readonly MappingRow[], source: 'tvtms' | 'vrs'): void {
+  const values = rows.map((r) => ({
+    scheme: r.scheme,
+    book: r.from.book,
+    chapter: r.from.chapter,
+    verse: r.from.verse,
+    segment: r.from.segment,
+    pivotBook: r.to?.book ?? null,
+    pivotChapter: r.to?.chapter ?? null,
+    pivotVerse: r.to?.verse ?? null,
+    pivotSegment: r.to?.segment ?? null,
+    kind: r.kind,
+    source,
+  }));
+  // A prepared statement: drizzle's builder takes seconds for tens of thousands of rows.
+  const sqlite = (db as unknown as { $client: Database.Database }).$client;
+  const stmt = sqlite.prepare(
+    `INSERT INTO scheme_mapping (scheme, book, chapter, verse, segment, pivot_book, pivot_chapter,
+       pivot_verse, pivot_segment, kind, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  );
+  sqlite.transaction(() => {
+    for (const v of values) {
+      stmt.run(v.scheme, v.book, v.chapter, v.verse, v.segment, v.pivotBook, v.pivotChapter,
+        v.pivotVerse, v.pivotSegment, v.kind, v.source);
+    }
+  })();
 }
 
 function* chunks<T>(arr: T[], size: number): Generator<T[]> {

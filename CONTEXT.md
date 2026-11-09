@@ -51,11 +51,11 @@ _Avoid_: reference, citation (those are human-written strings that resolve to an
 **Segment**:
 A lettered part of a verse (`13:1a`), used where schemes split a verse differently.
 
-**Pivot scheme** *(planned)*:
-A synthetic scheme that only grows, which all scheme mappings go through. Stored addresses never use it. (ADR-0006)
+**Pivot scheme**:
+A synthetic scheme that only grows, which all scheme mappings go through. Its id is `pivot`. Stored addresses never use it. (ADR-0006)
 
 **Scheme mapping**:
-Data that moves a verse address from one scheme to the pivot and back, including partial verses, merges, cross-book moves and verses absent in one scheme. Compiled from STEPBible TVTMS, checked against Paratext `.vrs`. (ADR-0006) *(Today: `versification_map`, a sparse one-to-one table that can't express most of this.)*
+Data that moves a verse address from one scheme to the pivot and back, including partial verses, merges, cross-book moves and verses absent in one scheme. Compiled from STEPBible TVTMS, checked against Paratext `.vrs`. (ADR-0006) *(Today compiled from the Paratext `.vrs` files only.)*
 
 **Word address**:
 A verse address plus a **word index**: the 0-based ordinal of a word Token in that verse, punctuation excluded. In address strings the word number counts from 1 (`MAT 2:1!3/kjv` is index 2). A punctuation Token is addressed by the word it follows. Valid only for one edition, since editions differ in words. Its meaning depends on the tokenizer policy (ADR-0004).

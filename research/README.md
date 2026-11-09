@@ -29,4 +29,4 @@ The model is done when these import and round-trip with no special cases:
 - One deuterocanonical chapter under a second scheme (ADR-0002 migration check)
 - The Greek additions to Daniel and Esther (later, with the traditions that include them)
 
-Already covered by the carried fixtures: tokenizer edge cases (`src/ingest/fixtures/adversarial.usfm`) and a divergent `.vrs` mapping (`src/ingest/fixtures/divergent.vrs`).
+Already covered by the carried fixtures: tokenizer edge cases (`src/ingest/fixtures/adversarial.usfm`) and real `.vrs` mapping lines for the ADR-0006 cases (`src/ingest/fixtures/real-cases.vrs`).
