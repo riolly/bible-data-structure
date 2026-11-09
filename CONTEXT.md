@@ -32,6 +32,9 @@ _Avoid_: version (ambiguous between translation and revision)
 **Edition stamp**:
 A deterministic id for an edition's revision, computed as sha256 over its source text (`src/ingest/edition.ts`). A text change gives a new stamp; repackaging the zip doesn't. (ADR-0005)
 
+**Words stamp**:
+A deterministic id for what an edition's word addresses hold: sha256 over every word address and the word stored there (`translation.words_stamp`). Unlike the edition stamp, it changes when a text fix, the tokenizer or the parser changes stored words. Reconciliation compares this one. (ADR-0005 amendment)
+
 **Source pin**:
 The upstream URL plus the sha256 of the downloaded file (`src/ingest/sources.ts`). A mismatch stops the download. Updating a pin is a new edition.
 

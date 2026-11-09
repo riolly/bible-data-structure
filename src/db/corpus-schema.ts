@@ -71,6 +71,13 @@ export const translation = sqliteTable('translation', {
    * the consent-gated quote-witness reconciliation pass.
    */
   edition: text('edition').notNull(),
+  /**
+   * WORDS stamp (ADR-0005 amendment): sha256 over every word address and the
+   * word stored there. It changes when a text fix, the tokenizer or the parser
+   * changes stored words, which the edition stamp can't see. Set after the
+   * edition's books are written.
+   */
+  wordsStamp: text('words_stamp'),
 });
 
 /**

@@ -9,6 +9,7 @@
  */
 
 import Database from 'better-sqlite3';
+import { eq } from 'drizzle-orm';
 import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 
 import { BOOKS, ENGLISH_NAMES, USFM_SPEC_URL } from '../model/books';
@@ -60,7 +61,8 @@ CREATE TABLE translation (
   year INTEGER,
   license TEXT,
   scheme TEXT NOT NULL REFERENCES scheme(id),
-  edition TEXT NOT NULL
+  edition TEXT NOT NULL,
+  words_stamp TEXT
 );
 CREATE TABLE book (
   code TEXT PRIMARY KEY,
@@ -214,6 +216,11 @@ export function insertTranslation(db: CorpusDb, meta: TranslationMeta): number {
     .returning({ id: schema.translation.id })
     .all();
   return row.id;
+}
+
+/** Record an edition's words stamp once its books are written (ADR-0005 amendment). */
+export function setWordsStamp(db: CorpusDb, translationId: number, stamp: string): void {
+  db.update(schema.translation).set({ wordsStamp: stamp }).where(eq(schema.translation.id, translationId)).run();
 }
 
 /** Write the data sources, every USFM book, every canon and the default English names (ADR-0002). */

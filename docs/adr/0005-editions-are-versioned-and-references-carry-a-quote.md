@@ -19,3 +19,11 @@ Word addresses survive a re-ingest because they are coordinates, not row ids. Th
 - The same pass catches tokenizer-policy drift (ADR-0004).
 - Rules 2 and 3 apply to whatever holds references: app user data, cross-reference datasets, structure overlays keyed by word index. The data model supplies the edition stamp and the quote lookup.
 - The 2026-11-09 pin update has no stamp from July to compare against, so whether the text changed or only the packaging is unknown. From now on the README records each edition stamp beside its pin.
+
+## Amendment: a words stamp beside the edition stamp (2026-11-09)
+
+The edition stamp hashes only the upstream files. Stored words also depend on the counted text fixes in `sources.ts`, the tokenizer (ADR-0004), the normalizer and the USFM parser version. Any of these can change what a word address holds while the edition stamp stays the same, so rule 3's reconciliation pass would never start. ADR-0004 v1.3 and v1.4 are such changes.
+
+- Each edition also gets a **words stamp**, `translation.words_stamp`: sha256 over every word address (book, chapter, verse, segment, word index) and the word text stored there, in book order (`wordsStamp` in `src/ingest/edition.ts`).
+- Punctuation is left out, for the reason ADR-0004 leaves it out of word indexes.
+- **Rule 3 keys on the words stamp.** A changed words stamp starts the reconciliation pass, whatever caused it. The edition stamp stays the name of the upstream text, and the README records both.

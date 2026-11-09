@@ -23,6 +23,7 @@ import { usjBookCode, type ParseOutcome } from './parse';
 import { createParsePool, type ParsePool } from './parse-pool';
 import { SOURCES, type SourceDef } from './sources';
 import { readSource } from './source-files';
+import { wordsStamp } from './edition';
 import { checkExtendOnly, formatPivotSnapshot, pivotSnapshot, type PivotSnapshot } from './pivot';
 import {
   TVTMS_PATH,
@@ -42,6 +43,7 @@ import {
   insertBookRows,
   insertTranslation,
   insertMappings,
+  setWordsStamp,
   seedBooksAndCanons,
   seedSchemes,
 } from './write-db';
@@ -90,6 +92,7 @@ async function main() {
       // A source that fails to prepare throws again when its turn comes, so errors keep source order.
       if (i + 1 < SOURCES.length) try { prepare(i + 1); } catch {}
       const translationId = insertTranslation(db, { ...src.meta, edition });
+      const words = wordsStamp();
       const text = editionText(src.meta.abbrev);
       texts.set(scheme.id, [...(texts.get(scheme.id) ?? []), text]);
       editions.push({ scheme: scheme.id, text });
@@ -126,17 +129,19 @@ async function main() {
           checkScheme(scheme, file.code, tokens);
           insertBookRows(db, { translationId, book: file.code }, { blocks, tokens });
           addBookText(text, file.code, blocks, tokens);
+          words.add(file.code, tokens);
           addStats(totals, stats);
           blockCount += blocks.length;
           tokenCount += tokens.length;
         }
+        setWordsStamp(db, translationId, words.digest());
         sqlite.exec('COMMIT');
         prepared.delete(i); // free this edition's parse results
       } catch (e) {
         sqlite.exec('ROLLBACK');
         throw e;
       }
-      console.log(`  ${blockCount} blocks, ${tokenCount} tokens`);
+      console.log(`  ${blockCount} blocks, ${tokenCount} tokens, words stamp ${words.digest()}`);
       console.log(`  not modelled in Phase 1 (dropped/unwrapped, counted): ${JSON.stringify(totals)}`);
       console.log(`  ${seconds(started)}`);
     }
