@@ -175,7 +175,7 @@ export function normalizeUsj(usj: UsjDoc): NormalizeResult {
     // glyph run. Also keeps decomposed base+mark from splitting a word apart
     // (a combining mark is category M, which the tokenizer's punct branch
     // would otherwise capture). Idempotent on already-NFC (ASCII) text.
-    const raw = tokenize(buf.normalize('NFC'));
+    const raw = tokenize(buf.normalize('NFC'), { paragraphMarks: !inHeading });
     buf = '';
     if (raw.length === 0) return;
     const blk = ensureBlock();

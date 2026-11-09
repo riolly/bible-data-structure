@@ -102,8 +102,19 @@ describe('registered tokenization policy (ADR-0004)', () => {
     expect(texts('וַֽיְהִי־ עֶ֥רֶב')).toEqual(['w:וַֽיְהִי', 'p:־', 'w:עֶ֥רֶב']);
     // a maqaf inside one OSHB \w still splits: a word index is not an OSHB word number
     expect(texts('זַרְעוֹ־ב֖וֹ')).toEqual(['w:זַרְעוֹ', 'p:־', 'w:ב֖וֹ']);
-    // the petuha letter after a verse is a word, last in its verse
+    // without the verse-text option (headings), a standalone פ is a word
     expect(texts('אֶחָֽד׃ פ')).toEqual(['w:אֶחָֽד', 'p:׃', 'w:פ']);
+  });
+
+  it('Hebrew: in verse text a standalone פ or ס is a paragraph mark, punct (v1.3)', () => {
+    const verse = (s: string) => tokenize(s, { paragraphMarks: true }).map((t) => `${t.kind[0]}:${t.text}`);
+    expect(verse('אֶחָֽד׃ פ')).toEqual(['w:אֶחָֽד', 'p:׃', 'p:פ']);
+    // GEN 35:22: the mark sits mid-verse, so the words after it keep their index
+    expect(verse('יִשְׂרָאֵ֑ל פ וַיִּֽהְי֥וּ')).toEqual(['w:יִשְׂרָאֵ֑ל', 'p:פ', 'w:וַיִּֽהְי֥וּ']);
+    expect(verse('עָשָֽׂר׃ ס')).toEqual(['w:עָשָֽׂר', 'p:׃', 'p:ס']);
+    // the letters inside a word, or pointed, stay words
+    expect(verse('פֶּה סֵ֖פֶר')).toEqual(['w:פֶּה', 'w:סֵ֖פֶר']);
+    expect(verse('ס SAMECH')).toEqual(['p:ס', 'w:SAMECH']);
   });
 
   it('Greek: elision with ʼ (a letter) stays in the word, with ’ it is punct (v1.2)', () => {

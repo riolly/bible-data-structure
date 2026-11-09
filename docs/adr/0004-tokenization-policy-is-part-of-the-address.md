@@ -17,7 +17,7 @@ A word address is a verse plus a `word_index`: the 0-based ordinal of a word Tok
 
 - Rule 6 (a verse bridge collapses to its first number) loses information. Surfacing verse ranges needs re-ingest and is an address migration. Decide before any external reference exists.
 - The rules were written for English. Amendment v1.2 registers what they do with Hebrew and Greek. A script without spaces between words still needs its own policy.
-- The petuha and setuma letters (פ, ס) that WLC prints after a verse are word tokens (v1.2). Moving them to structure later is an address migration for those tokens only.
+- The petuha and setuma marks (פ, ס) are punctuation since v1.3. Reading them as paragraph structure later needs no address change, since punctuation has no word index.
 
 ## The registered policy (v1 — fixed 2026-07-04, issue #6)
 
@@ -81,6 +81,13 @@ Skia-free ingest tests.
 WLC (Hebrew) and SBLGNT (Greek) ingest through the same `tokenize.ts`. No rule changed, so no English address moved. These tests in `tokenize.test.ts` pin the results with text from the pinned sources:
 
 1. Maqaf (`־`, U+05BE), sof pasuq (`׃`, U+05C3) and paseq (`׀`, U+05C0) are punctuation. A maqaf compound is two words, even inside one OSHB `\w` (`זַרְעוֹ־ב֖וֹ`, GEN 1:11). So a word index is not an OSHB word number. ADR-0003 links original words by external id, never by index.
-2. The petuha and setuma letters (`פ`, `ס`) after a WLC verse are words. They come last in their verse, so no other word's index depends on them.
+2. ~~The petuha and setuma letters (`פ`, `ס`) after a WLC verse are words. They come last in their verse, so no other word's index depends on them.~~ Wrong, replaced by v1.3.
 3. SBLGNT marks elision with `ʼ` (U+02BC), which Unicode classes as a letter, so `κατʼ` is one word. An elision written with `’` (U+2019) splits off as punctuation under rule 3. The same elision tokenizes differently by character, so a source that switches characters is an address migration.
 4. Ano teleia (`·`), the Greek question mark (U+037E, NFC `;`) and SBLGNT's critical signs (`⸀ ⸁ ⸂ ⸃ ⟦ ⟧`) are punctuation.
+
+## Amendment v1.3: the Hebrew paragraph marks are punctuation (2026-11-09)
+
+פ (petuha, an open paragraph break) and ס (setuma, a closed one) are scribal layout marks, not words. v1.2 kept them as words on the claim that they always end their verse. They don't: in the pinned WLC, 90 of the 3,161 marks sit mid-verse, in 88 verses (GEN 35:22 breaks after "and Israel heard it"). In those verses every later word index counted the mark.
+
+- **Rule 6.** In verse text, a standalone unpointed `פ` or `ס`, with no letter or combining mark touching it, is a punctuation token. In headings it stays a word, because KJV's Psalm 119 stanza labels (`ס SAMECH`) use the same letters beside the other 20 letter names. `normalize.ts` passes `paragraphMarks` outside headings, and `tokenize.test.ts` pins both cases.
+- **Migration.** Word indexes after a mid-verse mark drop by one in those 88 WLC verses, and the 3,071 end-of-verse marks lose their word index. No English or Greek address moves. No outside reference existed yet.
