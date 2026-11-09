@@ -14,10 +14,10 @@ import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
 
 import { BOOKS, ENGLISH_NAMES, USFM_SPEC_URL } from '../model/books';
 import { CANONS } from '../model/canon';
-import type { Block, Token } from '../model/corpus';
+import type { Block, Reading, Token } from '../model/corpus';
 import { PIVOT, type MappingRow } from '../model/mapping';
 import { LIBPALASO_URL } from './schemes';
-import { TVTMS } from './sources';
+import { OSHB, TVTMS } from './sources';
 import { WORD_TEST_MARGIN } from './tvtms';
 import type { Scheme } from '../model/scheme';
 import * as schema from '../db/corpus-schema';
@@ -138,6 +138,20 @@ CREATE TABLE token (
 );
 CREATE INDEX token_render ON token (translation_id, book, chapter, verse, seq);
 CREATE UNIQUE INDEX token_anchor ON token (translation_id, book, chapter, verse, segment, word_index);
+CREATE TABLE reading (
+  translation_id INTEGER NOT NULL REFERENCES translation(id),
+  book TEXT NOT NULL REFERENCES book(code),
+  chapter INTEGER NOT NULL,
+  verse INTEGER NOT NULL,
+  segment TEXT NOT NULL DEFAULT '',
+  word_index INTEGER NOT NULL,
+  word_count INTEGER NOT NULL,
+  kind TEXT NOT NULL,
+  text TEXT NOT NULL,
+  ow_ids TEXT NOT NULL,
+  source TEXT NOT NULL REFERENCES data_source(id),
+  PRIMARY KEY (translation_id, book, chapter, verse, segment, word_index, word_count)
+);
 CREATE TABLE scheme_segment (
   scheme TEXT NOT NULL REFERENCES scheme(id),
   book TEXT NOT NULL REFERENCES book(code),
@@ -352,6 +366,19 @@ export function insertBookRows(
   for (; i < rows.tokens.length; i++) token.run(values(rows.tokens[i]));
 }
 
+/** Write an edition's readings (ADR-0007). run.ts checks them against the stored tokens first. */
+export function insertReadings(db: CorpusDb, translationId: number, source: string, readings: readonly Reading[]): void {
+  const sqlite = (db as unknown as { $client: Database.Database }).$client;
+  const stmt = sqlite.prepare(
+    `INSERT INTO reading (translation_id, book, chapter, verse, segment, word_index, word_count, kind, text, ow_ids, source)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  );
+  for (const r of readings) {
+    stmt.run(translationId, r.book, r.chapter, r.verse, r.segment ?? '', r.wordIndex, r.wordCount, r.kind, r.text,
+      r.owIds.join(' '), source);
+  }
+}
+
 /** Where seeded data came from, with attribution and a note of changes. */
 export const DATA_SOURCES = [
   {
@@ -375,6 +402,16 @@ export const DATA_SOURCES = [
       'the larger; rows no test decides, or that disagree for one verse, are left out; Ade rows (no USFM ' +
       'code) are skipped; 4Es is read as 2ES; a test without a book uses the row\'s source book; identity ' +
       'rows are dropped.',
+  },
+  {
+    id: 'oshb',
+    url: OSHB.url,
+    sha256: OSHB.sha256,
+    license: 'CC BY 4.0',
+    attribution: OSHB.attribution,
+    changes:
+      'Only the word ids of qere readings are kept (reading.ow_ids); lemma, morphology and notes are dropped. ' +
+      'The WLC text itself is public domain.',
   },
   {
     id: 'vrs',

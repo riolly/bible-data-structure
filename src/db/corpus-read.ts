@@ -1,7 +1,7 @@
 import { and, asc, eq, inArray, isNull, max, or } from 'drizzle-orm';
 import type { BaseSQLiteDatabase } from 'drizzle-orm/sqlite-core';
 
-import type { Block, Token } from '../model/corpus';
+import type { Block, Reading, Token } from '../model/corpus';
 import { Mappings, type MappingRow } from '../model/mapping';
 import type { Scheme } from '../model/scheme';
 import * as schema from './corpus-schema';
@@ -153,6 +153,29 @@ export function readChapter(
     .all();
 
   return { blocks, tokens };
+}
+
+/** One chapter's readings (ADR-0007), in word order. The ketiv they cover are the chapter's tokens. */
+export function readReadings(db: SyncSqliteDb, translationAbbrev: string, bookCode: string, chapter: number): Reading[] {
+  const r = schema.reading;
+  return db
+    .select({
+      book: r.book,
+      chapter: r.chapter,
+      verse: r.verse,
+      segment: r.segment,
+      wordIndex: r.wordIndex,
+      wordCount: r.wordCount,
+      kind: r.kind,
+      text: r.text,
+      owIds: r.owIds,
+    })
+    .from(r)
+    .innerJoin(schema.translation, eq(r.translationId, schema.translation.id))
+    .where(and(eq(schema.translation.abbrev, translationAbbrev), eq(r.book, bookCode), eq(r.chapter, chapter)))
+    .orderBy(asc(r.verse), asc(r.segment), asc(r.wordIndex), asc(r.wordCount))
+    .all()
+    .map((row) => ({ ...row, owIds: row.owIds ? row.owIds.split(' ') : [] }));
 }
 
 /** Every scheme in the corpus, the pivot included, rebuilt from its tables. */

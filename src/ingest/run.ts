@@ -23,6 +23,7 @@ import { usjBookCode, type ParseOutcome } from './parse';
 import { createParsePool, type ParsePool } from './parse-pool';
 import { SOURCES, type SourceDef } from './sources';
 import { readSource } from './source-files';
+import type { OshbReading } from './oshb-xml';
 import { wordsStamp } from './edition';
 import { checkExtendOnly, formatPivotSnapshot, pivotSnapshot, type PivotSnapshot } from './pivot';
 import {
@@ -41,6 +42,7 @@ import {
   createIndexes,
   type CorpusDb,
   insertBookRows,
+  insertReadings,
   insertTranslation,
   insertMappings,
   setWordsStamp,
@@ -88,7 +90,7 @@ async function main() {
       const started = performance.now();
       const scheme = schemes.get(src.meta.scheme);
       if (!scheme) throw new Error(`${src.meta.abbrev}: unknown scheme "${src.meta.scheme}"`);
-      const { edition, files, outcomes } = prepare(i);
+      const { edition, files, readings, outcomes } = prepare(i);
       // A source that fails to prepare throws again when its turn comes, so errors keep source order.
       if (i + 1 < SOURCES.length) try { prepare(i + 1); } catch {}
       const translationId = insertTranslation(db, { ...src.meta, edition });
@@ -128,6 +130,9 @@ async function main() {
           warnVerseGaps(file.code, tokens);
           checkScheme(scheme, file.code, tokens);
           insertBookRows(db, { translationId, book: file.code }, { blocks, tokens });
+          const bookReadings = readings.filter((r) => r.book === file.code);
+          checkReadings(file.code, bookReadings, tokens);
+          insertReadings(db, translationId, 'oshb', bookReadings);
           addBookText(text, file.code, blocks, tokens);
           words.add(file.code, tokens);
           addStats(totals, stats);
@@ -142,6 +147,7 @@ async function main() {
         throw e;
       }
       console.log(`  ${blockCount} blocks, ${tokenCount} tokens, words stamp ${words.digest()}`);
+      if (readings.length > 0) console.log(`  ${readings.length} qere readings (ADR-0007)`);
       console.log(`  not modelled in Phase 1 (dropped/unwrapped, counted): ${JSON.stringify(totals)}`);
       console.log(`  ${seconds(started)}`);
     }
@@ -171,10 +177,10 @@ const seconds = (since: number) => `${((performance.now() - since) / 1000).toFix
  * still stop the ingest in book order.
  */
 function prepareSource(src: SourceDef, pool: ParsePool) {
-  const { edition, files } = readSource(src);
+  const { edition, files, readings } = readSource(src);
   const outcomes = files.map((f) => pool.parse(f.usfm, { rewriteVersifiedD: src.rewriteVersifiedD }));
   for (const o of outcomes) o.catch(() => {}); // awaited later; keep an early rejection from counting as unhandled
-  return { edition, files, outcomes };
+  return { edition, files, readings, outcomes };
 }
 
 /**
@@ -260,6 +266,35 @@ function checkScheme(scheme: Scheme, code: string, tokens: { chapter: number; ve
   }
   for (const s of short) {
     console.warn(`  ⚠ ${code} ${s.chapter}: ends at verse ${s.last}, scheme ${scheme.id} has ${s.expected}`);
+  }
+}
+
+/**
+ * Every reading must sit on the words its converter saw (ADR-0007): the word
+ * tokens in its range are its ketiv, and a reading with no written word sits
+ * at most one past the verse's last word.
+ */
+function checkReadings(code: string, readings: readonly OshbReading[], tokens: readonly Token[]) {
+  if (readings.length === 0) return;
+  const verses = new Map<string, string[]>();
+  for (const t of tokens) {
+    if (t.wordIndex === null) continue;
+    const key = `${t.chapter}:${t.verse}${t.segment}`;
+    const words = verses.get(key) ?? verses.set(key, []).get(key)!;
+    if (words.length !== t.wordIndex) throw new Error(`${code} ${key}: word indexes are not dense`);
+    words.push(t.text);
+  }
+  for (const r of readings) {
+    const key = `${r.chapter}:${r.verse}${r.segment ?? ''}`;
+    const words = verses.get(key);
+    if (!words) throw new Error(`${code} ${key}: a reading on a verse with no words`);
+    const covered = words.slice(r.wordIndex, r.wordIndex + r.wordCount);
+    if (r.wordIndex > words.length || covered.length !== r.wordCount || covered.join(' ') !== r.ketiv.join(' ')) {
+      throw new Error(
+        `${code} ${key}!${r.wordIndex + 1}: reading "${r.text}" expects the written words "${r.ketiv.join(' ')}", ` +
+          `the tokens have "${covered.join(' ')}"`,
+      );
+    }
   }
 }
 
