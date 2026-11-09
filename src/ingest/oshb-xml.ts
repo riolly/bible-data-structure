@@ -19,7 +19,7 @@
  * qere words' `id`s are kept, as the ids an alignment points at (ADR-0003).
  */
 
-import type { Reading } from '../model/corpus';
+import type { Reading, Token } from '../model/corpus';
 import { tokenize } from './tokenize';
 
 /** Upstream file name (without `.xml`) → USFM book code. */
@@ -35,6 +35,8 @@ export const OSHB_BOOKS: Readonly<Record<string, string>> = {
 export interface OshbReading extends Reading {
   /** The ketiv words the reading covers, tokenized as the verse is. Checked against the tokens, not stored. */
   readonly ketiv: readonly string[];
+  /** Every written word of the reading's verse, as the converter tokenized it. Checked against the tokens, not stored. */
+  readonly verseWords: readonly string[];
 }
 
 /** Characters a `<seg>` outside a word stands for, by type. */
@@ -94,6 +96,8 @@ function convertVerse(body: string, where: string): { text: string; readings: Ve
   const readings: VerseReading[] = [];
   /** Word index where the open run of ketiv words starts. */
   let ketivStart: number | null = null;
+  /** The words before each reading, to check against the whole verse's words at the end. */
+  const before: string[][] = [];
   let ketivText = '';
   for (const m of body.matchAll(VERSE_ITEM)) {
     const [, noteAttrs, note, wAttrs, w, segType, seg, space, stray] = m;
@@ -104,7 +108,10 @@ function convertVerse(body: string, where: string): { text: string; readings: Ve
     } else if (w !== undefined) {
       const t = wordText(w, where);
       if (attr(wAttrs, 'type') === 'x-ketiv') {
-        ketivStart ??= words(text).length;
+        if (ketivStart === null) {
+          before.push(words(text));
+          ketivStart = before[before.length - 1].length;
+        }
         ketivText += t;
       } else if (ketivStart !== null) {
         throw new Error(`${where}: a ketiv with no qere note before "${t}"`);
@@ -125,19 +132,64 @@ function convertVerse(body: string, where: string): { text: string; readings: Ve
       }
     } else if (attr(noteAttrs, 'type') === 'variant') {
       const ketiv = words(ketivText);
+      if (ketivStart === null) before.push(words(text));
       readings.push({
-        wordIndex: ketivStart ?? words(text).length,
+        wordIndex: ketivStart ?? before[before.length - 1].length,
         wordCount: ketiv.length,
         kind: 'qere',
         ...qere(note, where),
         ketiv,
+        verseWords: [],
       });
       ketivStart = null;
       ketivText = '';
     } // other notes are dropped, also between a ketiv and its qere (JER 48:44)
   }
   if (ketivStart !== null) throw new Error(`${where}: a ketiv with no qere note`);
-  return { text: text.replace(/\s+/g, ' ').trim(), readings };
+  if (readings.length === 0) return { text: text.replace(/\s+/g, ' ').trim(), readings };
+  // A word count taken mid-verse must agree with the whole verse's tokenization.
+  const verseWords = words(text);
+  for (const [i, r] of readings.entries()) {
+    const covered = verseWords.slice(r.wordIndex, r.wordIndex + r.wordCount);
+    if (before[i].join(' ') !== verseWords.slice(0, r.wordIndex).join(' ') || covered.join(' ') !== r.ketiv.join(' ')) {
+      throw new Error(`${where}: reading ${i + 1} does not fall on word boundaries of the verse`);
+    }
+  }
+  return { text: text.replace(/\s+/g, ' ').trim(), readings: readings.map((r) => ({ ...r, verseWords })) };
+}
+
+/**
+ * Every reading must sit where its converter put it (ADR-0007): the stored
+ * words of its verse are the words the converter counted, so its range covers
+ * its ketiv and a reading with no written word sits before the same word.
+ * Stops the ingest otherwise.
+ */
+export function checkReadings(code: string, readings: readonly OshbReading[], tokens: readonly Token[]): void {
+  if (readings.length === 0) return;
+  const verses = new Map<string, string[]>();
+  for (const t of tokens) {
+    if (t.wordIndex === null) continue;
+    const key = `${t.chapter}:${t.verse}${t.segment}`;
+    const stored = verses.get(key) ?? verses.set(key, []).get(key)!;
+    if (stored.length !== t.wordIndex) throw new Error(`${code} ${key}: word indexes are not dense`);
+    stored.push(t.text);
+  }
+  for (const r of readings) {
+    const key = `${r.chapter}:${r.verse}${r.segment ?? ''}`;
+    const stored = verses.get(key) ?? [];
+    const covered = stored.slice(r.wordIndex, r.wordIndex + r.wordCount);
+    if (
+      stored.join(' ') !== r.verseWords.join(' ') ||
+      r.wordIndex > stored.length ||
+      covered.length !== r.wordCount ||
+      covered.join(' ') !== r.ketiv.join(' ')
+    ) {
+      throw new Error(
+        `${code} ${key}!${r.wordIndex + 1}: reading "${r.text}" was placed among the words "${r.verseWords.join(' ')}", ` +
+          `the tokens have "${stored.join(' ')}"`,
+      );
+    }
+  }
 }
 
 /** The qere of a `<note type="variant">`: its pointed text and the ids of its words. */

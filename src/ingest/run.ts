@@ -23,7 +23,7 @@ import { usjBookCode, type ParseOutcome } from './parse';
 import { createParsePool, type ParsePool } from './parse-pool';
 import { SOURCES, type SourceDef } from './sources';
 import { readSource } from './source-files';
-import type { OshbReading } from './oshb-xml';
+import { checkReadings } from './oshb-xml';
 import { wordsStamp } from './edition';
 import { checkExtendOnly, formatPivotSnapshot, pivotSnapshot, type PivotSnapshot } from './pivot';
 import {
@@ -266,35 +266,6 @@ function checkScheme(scheme: Scheme, code: string, tokens: { chapter: number; ve
   }
   for (const s of short) {
     console.warn(`  ⚠ ${code} ${s.chapter}: ends at verse ${s.last}, scheme ${scheme.id} has ${s.expected}`);
-  }
-}
-
-/**
- * Every reading must sit on the words its converter saw (ADR-0007): the word
- * tokens in its range are its ketiv, and a reading with no written word sits
- * at most one past the verse's last word.
- */
-function checkReadings(code: string, readings: readonly OshbReading[], tokens: readonly Token[]) {
-  if (readings.length === 0) return;
-  const verses = new Map<string, string[]>();
-  for (const t of tokens) {
-    if (t.wordIndex === null) continue;
-    const key = `${t.chapter}:${t.verse}${t.segment}`;
-    const words = verses.get(key) ?? verses.set(key, []).get(key)!;
-    if (words.length !== t.wordIndex) throw new Error(`${code} ${key}: word indexes are not dense`);
-    words.push(t.text);
-  }
-  for (const r of readings) {
-    const key = `${r.chapter}:${r.verse}${r.segment ?? ''}`;
-    const words = verses.get(key);
-    if (!words) throw new Error(`${code} ${key}: a reading on a verse with no words`);
-    const covered = words.slice(r.wordIndex, r.wordIndex + r.wordCount);
-    if (r.wordIndex > words.length || covered.length !== r.wordCount || covered.join(' ') !== r.ketiv.join(' ')) {
-      throw new Error(
-        `${code} ${key}!${r.wordIndex + 1}: reading "${r.text}" expects the written words "${r.ketiv.join(' ')}", ` +
-          `the tokens have "${covered.join(' ')}"`,
-      );
-    }
   }
 }
 

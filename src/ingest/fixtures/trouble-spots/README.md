@@ -4,7 +4,7 @@ Whole chapters copied from the pinned sources in `src/ingest/sources.ts` on 2026
 
 Two changes from the sources, so the fixtures stay small and carry no attribution-only data, and match what the ingest reads:
 
-- The `\w` attributes (`strong`, `x-morph`) are removed. The `\w` markers stay. This drops OSHB's CC BY 4.0 morphology from the WLC files, leaving the public-domain WLC text.
+- In the ebible files, the `\w` attributes (`strong`, `x-morph`) are removed and the `\w` markers stay.
 - The SBLGNT files are upstream's XML converted to USFM by `src/ingest/sblgnt-xml.ts`, and the WLC files upstream OSHB's XML converted by `src/ingest/oshb-xml.ts`, as the ingest reads them. The OSHB conversion keeps only the public-domain WLC text.
 
 | Directory | Source | Chapters | License |

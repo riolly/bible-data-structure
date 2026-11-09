@@ -3,7 +3,8 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { OSHB_BOOKS, oshbXmlToUsfm } from './oshb-xml';
+import type { Token } from '../model/corpus';
+import { OSHB_BOOKS, checkReadings, oshbXmlToUsfm, type OshbReading } from './oshb-xml';
 import { SOURCES_ROOT } from './source-files';
 import { SOURCES } from './sources';
 import { tokenize } from './tokenize';
@@ -69,7 +70,7 @@ describe('oshbXmlToUsfm', () => {
 
   it('keys each qere by the range of written words its note follows (ADR-0007)', () => {
     const nfc = (s: string) => s.normalize('NFC');
-    expect(readings).toEqual([
+    expect(readings.map(({ verseWords, ...r }) => r)).toEqual([
       // two written words read as one
       { book: '1SA', chapter: 9, verse: 1, wordIndex: 2, wordCount: 2, kind: 'qere', text: nfc('מִבִּנְיָמִ֗ין'), owIds: ['09EC9'], ketiv: ['מבן', 'ימין'] },
       // read and not written, after the verse's last word
@@ -81,12 +82,40 @@ describe('oshbXmlToUsfm', () => {
     ]);
   });
 
+  it("carries its verse's words, so the ingest can check where it sits", () => {
+    expect(readings[1].verseWords).toEqual(['בִּֽנְהַר'.normalize('NFC')]);
+  });
+
   it('rejects a ketiv with no qere note, and markup it does not know', () => {
     const wrap = (verse: string) => `<div type="book" osisID="Gen"><chapter osisID="Gen.1"><verse osisID="Gen.1.1">${verse}</verse></chapter></div></osisText>`;
     expect(() => oshbXmlToUsfm(wrap('<w type="x-ketiv" id="a">הוצא</w>'), 'GEN')).toThrow(/ketiv with no qere/);
     expect(() => oshbXmlToUsfm(wrap('<w type="x-ketiv" id="a">הוצא</w> <w id="b">אִתָּ֑ךְ</w>'), 'GEN')).toThrow(/ketiv with no qere/);
     expect(() => oshbXmlToUsfm(wrap('<seg type="x-new">*</seg>'), 'GEN')).toThrow(/unknown <seg/);
     expect(() => oshbXmlToUsfm(wrap('stray'), 'GEN')).toThrow(/outside an element/);
+  });
+});
+
+describe('checkReadings', () => {
+  // GEN 8:17 cut down: הוצא is the ketiv, read הַיְצֵא
+  const words = ['עַל', 'הָאָ֖רֶץ', 'הוצא', 'אִתָּ֑ךְ'];
+  const tokens = (texts: readonly string[]) =>
+    texts.map((text, i) => ({ chapter: 8, verse: 17, segment: '', wordIndex: i, text, kind: 'word' }) as Token);
+  const reading = (r: Partial<OshbReading>): OshbReading => ({
+    book: 'GEN', chapter: 8, verse: 17, wordIndex: 2, wordCount: 1, kind: 'qere', text: 'הַיְצֵ֣א', owIds: ['01S7t'],
+    ketiv: ['הוצא'], verseWords: words, ...r,
+  });
+
+  it('passes a reading on the words it was converted from', () => {
+    expect(() => checkReadings('GEN', [reading({}), reading({ wordIndex: 4, wordCount: 0, ketiv: [] })], tokens(words))).not.toThrow();
+  });
+
+  it('stops on a range that misses its ketiv, or a verse whose stored words differ', () => {
+    expect(() => checkReadings('GEN', [reading({ wordIndex: 1 })], tokens(words))).toThrow(/GEN 8:17!2/);
+    expect(() => checkReadings('GEN', [reading({ wordIndex: 5, wordCount: 0, ketiv: [] })], tokens(words))).toThrow();
+    // a qere with no written word can't be checked by its range alone: the verse's words catch a shift
+    const shifted = ['עַל', 'הָאָ֖רֶץ', 'הוצא', 'אִתָּ', 'ךְ'];
+    expect(() => checkReadings('GEN', [reading({ wordIndex: 4, wordCount: 0, ketiv: [] })], tokens(shifted))).toThrow(/the tokens have/);
+    expect(() => checkReadings('GEN', [reading({ chapter: 9 })], tokens(words))).toThrow();
   });
 });
 
@@ -97,6 +126,25 @@ const ebibleDir = join(SOURCES_ROOT, 'wlc');
 
 /** The words ebible's copy got wrong: it leaked OSHB markup as text around a large, small or suspended letter. */
 const LEAKED_MARKUP = ['DEU 6:4', 'ISA 44:14', 'JDG 18:30', 'JER 39:13', 'JOB 38:13', 'JOB 38:15', 'LEV 11:42', 'NUM 27:5', 'PRO 16:28', 'PSA 80:14'];
+
+describe.skipIf(!oshbDir || !existsSync(oshbDir))('the pinned OSHB', () => {
+  it('has 1,260 qere notes in the shapes ADR-0007 counts', () => {
+    const shapes = new Map<string, number>();
+    let ids = 0;
+    for (const name of readdirSync(oshbDir)) {
+      const code = OSHB_BOOKS[name.replace('.xml', '')];
+      if (!code) continue;
+      for (const r of oshbXmlToUsfm(readFileSync(join(oshbDir, name), 'utf8'), code).readings) {
+        const shape = `${r.wordCount}:${r.owIds.length}`;
+        shapes.set(shape, (shapes.get(shape) ?? 0) + 1);
+        ids += r.owIds.length;
+      }
+    }
+    // written words : read words. 2KI 6:25 and JER 18:3 have two ketiv elements in one written word.
+    expect(Object.fromEntries([...shapes].sort())).toEqual({ '0:1': 9, '1:0': 6, '1:1': 1214, '1:2': 16, '2:1': 7, '2:2': 8 });
+    expect(ids).toBe(1278);
+  }, 60_000);
+});
 
 describe.skipIf(!oshbDir || !existsSync(oshbDir) || !existsSync(ebibleDir))('the pinned OSHB against ebible hboWLC', () => {
   it('converts to the same verses and the same word addresses, except where ebible leaked markup', () => {

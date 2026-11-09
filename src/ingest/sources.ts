@@ -218,9 +218,10 @@ export const SOURCES: readonly SourceDef[] = [
 ];
 
 /** The OSHB pin, for the data_source row of the qere word ids it supplies (ADR-0007). */
+const wlc = SOURCES.find((s) => s.meta.abbrev === 'WLC')!;
 export const OSHB = {
-  url: SOURCES.find((s) => s.meta.abbrev === 'WLC')!.url,
-  sha256: SOURCES.find((s) => s.meta.abbrev === 'WLC')!.sha256,
+  url: wlc.url,
+  sha256: wlc.sha256,
   attribution: 'Original work of the Open Scriptures Hebrew Bible available at https://github.com/openscriptures/morphhb (CC BY 4.0)',
 } as const;
 
