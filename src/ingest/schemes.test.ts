@@ -189,6 +189,8 @@ describe.each(SOURCE_DEFS.map((s) => [s.meta.abbrev, s] as const))('%s source te
     expect(files.map((f) => f.code)).toEqual([...src.books]);
     for (const { code, usfm } of files) {
       expect(usfm, code).not.toMatch(/‘\/?(book|p)\b/);
+      // a footnote or cross-reference standing between two letters runs two words together (WEB 2ES 7:36)
+      expect(usfm, code).not.toMatch(/[\p{L}\p{M}](?:\\w\*)?\\[fx] [^\\]*(?:\\(?![fx]\*)[^\\]*)*\\[fx]\*(?:\\w )?\p{L}/u);
       expect(checkVerses(scheme, code, versesWithText(usfm)).unknown, code).toEqual([]);
     }
   });

@@ -170,6 +170,21 @@ export const SOURCES: readonly SourceDef[] = [
         count: 17,
         why: 'grammar gap: nested \\+w inside \\qs',
       },
+      // A footnote stands where the space between two words should be, so the
+      // words ran together ("hellwill", "willheap"). Only whitespace is added;
+      // no other source has a note between two letters.
+      {
+        find: '\\fqa Gehenna. \\f*will be shown',
+        replace: '\\fqa Gehenna. \\f* will be shown',
+        count: 1,
+        why: 'missing space after a footnote, 2ES 7:36',
+      },
+      {
+        find: '\\fqa set in order.\\f*heap up',
+        replace: '\\fqa set in order.\\f* heap up',
+        count: 1,
+        why: 'missing space after a footnote, 2ES 12:32',
+      },
     ],
   },
   {
