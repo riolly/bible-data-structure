@@ -11,7 +11,7 @@ CXXFLAGS='-std=gnu++20' bun install   # the flag is needed for tree-sitter's nat
 bun run test                          # vitest, runs under Node
 bun run typecheck
 bun run ingest:download               # fetch pinned ebible.org zips and TVTMS, verify sha256 → src/ingest/sources/
-bun run ingest                        # sources → build/corpus.db, mapping-diff.tsv, pivot.json (several minutes)
+bun run ingest                        # sources → build/corpus.db, mapping-diff.tsv, pivot.json (4 min; 2 min when build/usj-cache has the parses)
 ```
 
 ## Product principle

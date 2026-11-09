@@ -23,6 +23,10 @@ the `.vrs` files disagree.
   stats bag of everything Phase 1 deliberately drops. Unknown structure throws.
 - `parse.ts` — usfm-grammar wrapper (strict first, lenient with logged errors;
   versified-`\d` grammar-gap preprocess).
+- `parse-pool.ts` / `parse-worker.ts`: run `parse.ts` in worker threads and
+  cache each result in `build/usj-cache/`, keyed by the USFM text, the parse
+  options, `parse.ts` and the parser versions. Delete the directory to force
+  fresh parses.
 - Books, canons and English names live in `src/model/books.ts` and `src/model/canon.ts`; `write-db.ts` seeds them.
 - `schemes.ts`: the scheme registry, `kjv` plus six Paratext schemes from
   `vrs/libpalaso/` (MIT, pinned by commit and sha256), plus the derived
@@ -42,7 +46,9 @@ the `.vrs` files disagree.
   A checksum mismatch stops the download. Updating a text pin is a new edition;
   updating the TVTMS pin changes mapping rows (see CLAUDE.md).
 - `write-db.ts` / `run.ts` — Drizzle(better-sqlite3) writer + CLI with
-  invariant validation and verse-coverage warnings.
+  invariant validation and verse-coverage warnings. Blocks and tokens go in
+  through prepared statements, and the indexes are built after the last
+  edition.
 
 ## Golden fixtures
 

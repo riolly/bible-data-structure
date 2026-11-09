@@ -19,13 +19,15 @@ import { checkVerses, type Scheme } from '../model/scheme';
 import { loadSchemes } from './schemes';
 import { computeEdition, type SourceFile } from './edition';
 import { normalizeUsj } from './normalize';
-import { usfmToUsj, usjBookCode } from './parse';
+import { usjBookCode, type ParseOutcome } from './parse';
+import { createParsePool, type ParsePool } from './parse-pool';
 import { SOURCES, type SourceDef } from './sources';
 import { applyTextFixes } from './text-fixes';
 import { checkExtendOnly, formatPivotSnapshot, pivotSnapshot, type PivotSnapshot } from './pivot';
 import { TVTMS_PATH, compileMappings, readTvtms, type TvtmsRow } from './tvtms';
 import {
   createCorpusDb,
+  createIndexes,
   insertBookRows,
   insertTranslation,
   insertMappings,
@@ -62,10 +64,11 @@ const addStats = (into: Record<string, number>, from: IngestStats) => {
   }
 };
 
-function main() {
+async function main() {
+  const mainStarted = performance.now();
   mkdirSync(OUT_DIR, { recursive: true });
   rmSync(OUT_PATH, { force: true });
-  const { db, sqlite } = createCorpusDb(OUT_PATH);
+  const { db, sqlite } = createCorpusDb(OUT_PATH, { deferIndexes: true });
   seedBooksAndCanons(db);
   const schemes = loadSchemes();
   const { pivot, rows: mappingRows, perScheme, diff } = compileMappings(schemes, readTvtmsOrExplain());
@@ -89,57 +92,98 @@ function main() {
   writeFileSync(diffPath, [...diff].flatMap(([id, lines]) => lines.map((l) => `${id}\t${l}`)).join('\n') + '\n');
   console.log(`  witness diff → ${diffPath}`);
 
-  for (const src of SOURCES) {
-    const scheme = schemes.get(src.meta.scheme);
-    if (!scheme) throw new Error(`${src.meta.abbrev}: unknown scheme "${src.meta.scheme}"`);
-    const raw = readSourceFiles(src);
-    const edition = computeEdition(raw);
-    const files = applyTextFixes(raw, src.textFixes);
-    const translationId = insertTranslation(db, { ...src.meta, edition });
-    console.log(`\n${src.meta.abbrev} — edition ${edition}`);
-    for (const fix of src.textFixes ?? []) console.log(`  text fix ×${fix.count}: ${JSON.stringify(fix.find)} (${fix.why})`);
+  // Parse one edition ahead: the workers parse the next edition's books while
+  // this thread normalizes and writes the current one.
+  const pool = createParsePool(join(OUT_DIR, 'usj-cache'));
+  const prepared = SOURCES.map((src) => lazy(() => prepareSource(src, pool)));
+  try {
+    for (const [i, src] of SOURCES.entries()) {
+      const started = performance.now();
+      const scheme = schemes.get(src.meta.scheme);
+      if (!scheme) throw new Error(`${src.meta.abbrev}: unknown scheme "${src.meta.scheme}"`);
+      const { edition, files, outcomes } = prepared[i]();
+      // A source that fails to prepare throws again when its turn comes, so errors keep source order.
+      if (i + 1 < SOURCES.length) try { prepared[i + 1](); } catch {}
+      const translationId = insertTranslation(db, { ...src.meta, edition });
+      console.log(`\n${src.meta.abbrev} — edition ${edition}`);
+      for (const fix of src.textFixes ?? []) console.log(`  text fix ×${fix.count}: ${JSON.stringify(fix.find)} (${fix.why})`);
 
-    const totals: Record<string, number> = {};
-    let blockCount = 0;
-    let tokenCount = 0;
-    const ingestAll = sqlite.transaction(() => {
-      for (const file of files) {
-        const { usj, parseErrors, versifiedTitleRewrites } = usfmToUsj(file.usfm, {
-          rewriteVersifiedD: src.rewriteVersifiedD,
-        });
-        if (versifiedTitleRewrites > 0) {
-          console.warn(
-            `  ⚠ ${file.code}: ${versifiedTitleRewrites} versified \\d title(s) rewritten to \\qd (grammar gap, see parse.ts)`,
-          );
+      const totals: Record<string, number> = {};
+      let blockCount = 0;
+      let tokenCount = 0;
+      // One transaction per edition, held open across awaits: each book is
+      // written as soon as it is parsed, in book order.
+      sqlite.exec('BEGIN');
+      try {
+        for (const [j, file] of files.entries()) {
+          const { usj, parseErrors, versifiedTitleRewrites } = JSON.parse(await outcomes[j]) as ParseOutcome;
+          if (versifiedTitleRewrites > 0) {
+            console.warn(
+              `  ⚠ ${file.code}: ${versifiedTitleRewrites} versified \\d title(s) rewritten to \\qd (grammar gap, see parse.ts)`,
+            );
+          }
+          if (parseErrors.length > 0) {
+            console.warn(
+              `  ⚠ ${file.code}: usfm-grammar strict parse failed, ingested with ignoreErrors —\n` +
+                parseErrors.map((e) => `      ${e}`).join('\n'),
+            );
+          }
+          const usjCode = usjBookCode(usj);
+          if (usjCode !== file.code) {
+            throw new Error(`${file.code}: USJ book code mismatch ("${usjCode}")`);
+          }
+          const { blocks, tokens, stats } = normalizeUsj(usj);
+          validate(file.code, blocks.length, tokens);
+          warnVerseGaps(file.code, tokens);
+          checkScheme(scheme, file.code, tokens);
+          insertBookRows(db, { translationId, book: file.code }, { blocks, tokens });
+          addStats(totals, stats);
+          blockCount += blocks.length;
+          tokenCount += tokens.length;
         }
-        if (parseErrors.length > 0) {
-          console.warn(
-            `  ⚠ ${file.code}: usfm-grammar strict parse failed, ingested with ignoreErrors —\n` +
-              parseErrors.map((e) => `      ${e}`).join('\n'),
-          );
-        }
-        const usjCode = usjBookCode(usj);
-        if (usjCode !== file.code) {
-          throw new Error(`${file.code}: USJ book code mismatch ("${usjCode}")`);
-        }
-        const { blocks, tokens, stats } = normalizeUsj(usj);
-        validate(file.code, blocks.length, tokens);
-        warnVerseGaps(file.code, tokens);
-        checkScheme(scheme, file.code, tokens);
-        insertBookRows(db, { translationId, book: file.code }, { blocks, tokens });
-        addStats(totals, stats);
-        blockCount += blocks.length;
-        tokenCount += tokens.length;
+        sqlite.exec('COMMIT');
+      } catch (e) {
+        sqlite.exec('ROLLBACK');
+        throw e;
       }
-    });
-    ingestAll();
-    console.log(`  ${blockCount} blocks, ${tokenCount} tokens`);
-    console.log(`  not modelled in Phase 1 (dropped/unwrapped, counted): ${JSON.stringify(totals)}`);
+      console.log(`  ${blockCount} blocks, ${tokenCount} tokens`);
+      console.log(`  not modelled in Phase 1 (dropped/unwrapped, counted): ${JSON.stringify(totals)}`);
+      console.log(`  ${seconds(started)}`);
+    }
+  } finally {
+    await pool.close();
   }
+  console.log(`\nparses: ${pool.counts.parsed} fresh, ${pool.counts.hits} from ${join(OUT_DIR, 'usj-cache')}`);
 
-  sqlite.exec('VACUUM; ANALYZE;');
+  // No VACUUM: a database that was only inserted into has no free pages to reclaim.
+  const finishStarted = performance.now();
+  createIndexes(sqlite);
+  sqlite.exec('ANALYZE;');
   sqlite.close();
-  console.log(`\n✓ wrote ${OUT_PATH}`);
+  console.log(`indexes and ANALYZE ${seconds(finishStarted)}`);
+  console.log(`\n✓ wrote ${OUT_PATH} in ${seconds(mainStarted)}`);
+}
+
+const seconds = (since: number) => `${((performance.now() - since) / 1000).toFixed(1)} s`;
+
+/** Run `f` once, on first call. */
+function lazy<T>(f: () => T): () => T {
+  let done: { value: T } | null = null;
+  return () => (done ??= { value: f() }).value;
+}
+
+/**
+ * Read a source's files, stamp its edition, apply its text fixes and queue
+ * its parses. A parse failure surfaces when its book's turn comes, so errors
+ * still stop the ingest in book order.
+ */
+function prepareSource(src: SourceDef, pool: ParsePool) {
+  const raw = readSourceFiles(src);
+  const edition = computeEdition(raw);
+  const files = applyTextFixes(raw, src.textFixes);
+  const outcomes = files.map((f) => pool.parse(f.usfm, { rewriteVersifiedD: src.rewriteVersifiedD }));
+  for (const o of outcomes) o.catch(() => {}); // awaited later; keep an early rejection from counting as unhandled
+  return { edition, files, outcomes };
 }
 
 function readTvtmsOrExplain(): TvtmsRow[] {
@@ -223,4 +267,7 @@ function warnVerseGaps(code: string, tokens: { chapter: number; verse: number | 
   }
 }
 
-main();
+main().catch((e: unknown) => {
+  console.error(e);
+  process.exitCode = 1;
+});

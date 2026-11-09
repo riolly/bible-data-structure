@@ -166,15 +166,31 @@ CREATE INDEX mapping_from ON scheme_mapping (scheme, book, chapter, verse);
 CREATE INDEX mapping_to ON scheme_mapping (scheme, pivot_book, pivot_chapter, pivot_verse);
 `;
 
-export function createCorpusDb(path: string): { db: CorpusDb; sqlite: Database.Database } {
+const INDEX_DDL = DDL.match(/^CREATE INDEX .*;$/gm)!.join('\n');
+const TABLE_DDL = DDL.replace(/^CREATE INDEX .*;\n/gm, '');
+
+/**
+ * `deferIndexes` leaves the indexes out until createIndexes runs. Sorting the
+ * rows once after a bulk load is faster than updating the indexes on every
+ * insert.
+ */
+export function createCorpusDb(
+  path: string,
+  { deferIndexes = false }: { deferIndexes?: boolean } = {},
+): { db: CorpusDb; sqlite: Database.Database } {
   const sqlite = new Database(path);
   sqlite.pragma('journal_mode = OFF'); // build artifact — no crash safety needed
   sqlite.pragma('synchronous = OFF');
   sqlite.pragma('foreign_keys = ON');
-  sqlite.exec(DDL);
+  sqlite.exec(deferIndexes ? TABLE_DDL : DDL);
   // rc.4 driver: the client must be passed via config (the positional
   // (client, config) form silently opens a NEW anonymous database)
   return { db: drizzle({ client: sqlite, schema }), sqlite };
+}
+
+/** Create the indexes a `deferIndexes` database left out. */
+export function createIndexes(sqlite: Database.Database): void {
+  sqlite.exec(INDEX_DDL);
 }
 
 export interface TranslationMeta {
@@ -272,54 +288,58 @@ function seedSchemesIn(db: CorpusDb, schemes: ReadonlyMap<string, Scheme>): void
   }
 }
 
-/** Insert one book's normalized rows; maps local block ordinals → rowids. */
+/** Tokens per multi-row INSERT: one call into SQLite per row was most of the insert time. */
+const TOKENS_PER_INSERT = 100;
+const TOKEN_INSERT = `INSERT INTO token (translation_id, book, chapter, verse, word_index, seq, kind, text, block_id,
+  verse_start, ow_id) VALUES `;
+const TOKEN_VALUES = '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+
+/** Prepared once per connection: drizzle's insert builder took about 6 s for a 51k-token book. */
+const bookStatements = new WeakMap<
+  Database.Database,
+  { block: Database.Statement; token: Database.Statement; tokens: Database.Statement }
+>();
+
+/**
+ * Insert one book's normalized rows; maps local block ordinals → rowids. The
+ * statements follow the column order of src/db/corpus-schema.ts, and
+ * roundtrip.test.ts reads the rows back through that schema.
+ */
 export function insertBookRows(
   db: CorpusDb,
   ids: { translationId: number; book: string },
   rows: { blocks: Block[]; tokens: Token[] },
 ): void {
+  const sqlite = (db as unknown as { $client: Database.Database }).$client;
+  let stmts = bookStatements.get(sqlite);
+  if (!stmts) {
+    stmts = {
+      block: sqlite.prepare(
+        'INSERT INTO block (translation_id, book, chapter, genre, role, indent, seq) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      ),
+      token: sqlite.prepare(TOKEN_INSERT + TOKEN_VALUES),
+      tokens: sqlite.prepare(TOKEN_INSERT + Array(TOKENS_PER_INSERT).fill(TOKEN_VALUES).join(', ')),
+    };
+    bookStatements.set(sqlite, stmts);
+  }
+  const { block, token, tokens } = stmts;
   const blockRowId = new Map<number, number>();
-  for (const chunk of chunks(rows.blocks, 2000)) {
-    const inserted = db
-      .insert(schema.block)
-      .values(
-        chunk.map((b) => ({
-          translationId: ids.translationId,
-          book: ids.book,
-          chapter: b.chapter,
-          genre: b.genre,
-          role: b.role,
-          indent: b.indent,
-          seq: b.seq,
-        })),
-      )
-      .returning({ id: schema.block.id })
-      .all();
-    chunk.forEach((b, i) => blockRowId.set(b.id, inserted[i].id));
+  for (const b of rows.blocks) {
+    const { lastInsertRowid } = block.run(ids.translationId, ids.book, b.chapter, b.genre, b.role, b.indent, b.seq);
+    blockRowId.set(b.id, Number(lastInsertRowid));
   }
-  for (const chunk of chunks(rows.tokens, 2000)) {
-    db.insert(schema.token)
-      .values(
-        chunk.map((t) => {
-          const blockId = blockRowId.get(t.blockId);
-          if (blockId == null) throw new Error(`token ${t.id} references unknown block ${t.blockId}`);
-          return {
-            translationId: ids.translationId,
-            book: ids.book,
-            chapter: t.chapter,
-            verse: t.verse,
-            wordIndex: t.wordIndex,
-            seq: t.seq,
-            kind: t.kind,
-            text: t.text,
-            blockId,
-            verseStart: t.verseStart,
-            owId: t.owId,
-          };
-        }),
-      )
-      .run();
+  const values = (t: Token) => {
+    const blockId = blockRowId.get(t.blockId);
+    if (blockId == null) throw new Error(`token ${t.id} references unknown block ${t.blockId}`);
+    return [ids.translationId, ids.book, t.chapter, t.verse, t.wordIndex, t.seq, t.kind, t.text, blockId,
+      t.verseStart ? 1 : 0, t.owId];
+  };
+  // Rows go in token order either way, so the rowids match one insert per row.
+  let i = 0;
+  for (; i + TOKENS_PER_INSERT <= rows.tokens.length; i += TOKENS_PER_INSERT) {
+    tokens.run(rows.tokens.slice(i, i + TOKENS_PER_INSERT).flatMap(values));
   }
+  for (; i < rows.tokens.length; i++) token.run(values(rows.tokens[i]));
 }
 
 /** Where seeded data came from, with attribution and a note of changes. */

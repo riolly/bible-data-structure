@@ -21,9 +21,38 @@
  * new translation never gets its markers silently rewritten (issue #20).
  */
 
+import { createRequire } from 'node:module';
+
 import { USFMParser } from 'usfm-grammar';
 
 import type { UsjDoc } from './normalize';
+
+/**
+ * node-tree-sitter's `children` getter copies every child out of the native
+ * tree on each read, and usfm-grammar reads `node.children[i]` inside loops
+ * over the same node (nodeToUSJChar, checkforMissing). A `\wj` span with
+ * hundreds of nested `\+w` children costs quadratic time: KJV Matthew took
+ * 25 s to parse, 6 s with this memo. The tree is never edited after parsing
+ * and usfm-grammar never mutates the arrays, so each node object keeps its
+ * first result. parse.test.ts pins the USJ output.
+ */
+function memoizeTreeSitterChildren(): void {
+  const treeSitter = createRequire(createRequire(import.meta.url).resolve('usfm-grammar'))('tree-sitter') as {
+    SyntaxNode: { prototype: object };
+  };
+  const proto = treeSitter.SyntaxNode.prototype;
+  const get = Object.getOwnPropertyDescriptor(proto, 'children')?.get;
+  if (!get) throw new Error('tree-sitter SyntaxNode has no `children` getter: recheck the memo in parse.ts');
+  Object.defineProperty(proto, 'children', {
+    configurable: true,
+    get(this: object) {
+      const children: unknown = get.call(this);
+      Object.defineProperty(this, 'children', { value: children });
+      return children;
+    },
+  });
+}
+memoizeTreeSitterChildren();
 
 export interface ParseOutcome {
   usj: UsjDoc;
