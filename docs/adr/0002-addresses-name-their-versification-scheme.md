@@ -22,7 +22,7 @@ MAT 2:1!3/kjv      the third word of the verse
 
 - The scheme goes in a suffix because the standard reserves the prefix slot for language and translation ids, where `eng` already reads as English. Paratext's `GEN 3:11/4` is precedent for the suffix.
 - One string uses one scheme. A range or list never mixes schemes.
-- Scheme ids are lowercase names from our own registry, seeded with `kjv` and the six Paratext names `org`, `eng`, `lxx`, `vul`, `rso`, `rsc`. KJV and BSB both declare `kjv`. Paratext `eng` is not KJV numbering: it has Revelation 12:18 and 3 John 15, and KJV has neither.
+- Scheme ids are lowercase names from our own registry, seeded with `kjv` and the six Paratext names `org`, `eng`, `lxx`, `vul`, `rso`, `rsc`. KJV declared `kjv` from the start. BSB did too until the TVTMS text tests moved it to the derived scheme `bsb` (amendment below). Paratext `eng` is not KJV numbering: it has Revelation 12:18 and 3 John 15, and KJV has neither.
 - **Word numbers in strings count from 1**, as the standard does. Stored word indexes count from 0 (ADR-0004). The parser and formatter convert, and a test covers it.
 
 The storage form is separate columns, never a packed string or integer:

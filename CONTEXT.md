@@ -44,7 +44,7 @@ The upstream URL plus the sha256 of the downloaded file (`src/ingest/sources.ts`
 A numbering system for chapters and verses: KJV, Masoretic, Septuagint, Vulgate and others. The same `chapter:verse` can mean different text under different schemes (Psalm titles, Joel 2/3, Malachi 3/4, Revelation 12/13). (ADR-0002)
 
 **Scheme id**:
-A lowercase name from our registry: `kjv`, the Paratext names `org`, `eng`, `lxx`, `vul`, `rso`, `rsc`, and the derived schemes `rp`, `web`, `brenton`. Paratext `eng` is not KJV numbering.
+A lowercase name from our registry: `kjv`, the Paratext names `org`, `eng`, `lxx`, `vul`, `rso`, `rsc`, and the derived schemes `rp`, `web`, `brenton`, `bsb`. Paratext `eng` is not KJV numbering.
 _Avoid_: av11n (that is SWORD's name for its mapping feature, not a scheme)
 
 **Verse address**:

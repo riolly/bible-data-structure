@@ -10,6 +10,7 @@ import { buildPivot, checkExtendOnly, pivotSnapshot } from './pivot';
 import { DERIVED_SCHEMES, loadSchemes } from './schemes';
 import {
   TVTMS_PATH,
+  WORD_TEST_MARGIN,
   addBookText,
   compileTvtms,
   compileMappings,
@@ -111,6 +112,12 @@ const edition = (name: string, words: Record<string, number>, titled: string[] =
   books: new Set(books),
   words: new Map(Object.entries(words)),
   titled: new Set(titled),
+});
+
+describe('the word-test margin', () => {
+  it('is the registered value (ADR-0006: changing it is a mapping migration)', () => {
+    expect(WORD_TEST_MARGIN).toBe(0.2);
+  });
 });
 
 describe('text tests against an edition', () => {

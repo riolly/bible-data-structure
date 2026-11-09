@@ -18,6 +18,7 @@ import type { Block, Token } from '../model/corpus';
 import { PIVOT, type MappingRow } from '../model/mapping';
 import { LIBPALASO_URL } from './schemes';
 import { TVTMS } from './sources';
+import { WORD_TEST_MARGIN } from './tvtms';
 import type { Scheme } from '../model/scheme';
 import * as schema from '../db/corpus-schema';
 
@@ -369,9 +370,11 @@ export const DATA_SOURCES = [
     attribution: TVTMS.attribution,
     changes:
       'Compiled per scheme: each row kept when its =Exist, =NotExist and =Last tests hold for the scheme\'s ' +
-      'verse counts; rows that also need word-count or TextBeforeV1 tests, or that disagree for one verse, ' +
-      'are left out; Ade rows (no USFM code) are skipped; 4Es is read as 2ES; a test without a book uses ' +
-      'the row\'s source book; identity rows are dropped.',
+      'verse counts and its word-count and TextBeforeV1 tests hold for every edition ingested under the ' +
+      `scheme; a word test decides only when its two sides differ by at least ${WORD_TEST_MARGIN * 100}% of ` +
+      'the larger; rows no test decides, or that disagree for one verse, are left out; Ade rows (no USFM ' +
+      'code) are skipped; 4Es is read as 2ES; a test without a book uses the row\'s source book; identity ' +
+      'rows are dropped.',
   },
   {
     id: 'vrs',

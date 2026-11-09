@@ -44,3 +44,11 @@ Findings in [research/tvtms-text-tests.md](../../research/tvtms-text-tests.md).
 - **The tested verses' word counts and titled Psalms are committed as `src/ingest/fixtures/edition-text.json`**, so tests compile the same mappings without a built corpus. The ingest writes `build/edition-text.json` and warns when it differs from the fixture. They are counts, not text.
 
 Rejected: mapping rows per edition, which would let one scheme address map two ways. Rejected: rejecting an edition whose results conflict, which would have dropped BSB.
+
+### Same-number swaps stay versification; the margin is registered policy (2026-11-09)
+
+A review asked whether Philippians 1:16-17 belongs in schemes at all, since KJV and BSB both number the verses 16 and 17 and only the content differs, like the "stood on the sand" clause. Decided: it stays.
+
+- **A whole-verse swap is versification.** A scheme maps numbers to text, and `PHP 1:16` names different text in KJV ("contention") and BSB ("love"). The Revelation clause differs: it moves part of a verse, which verse mapping can't express at any grain. TVTMS rows 27455-27456 map the swap, and mark it `Opt.`, a note "not needed if Versification is used because each verse retains its own number code and aligns using Mappings" (TVTMS line 4161). That is this model: `PHP 1:16/bsb` keeps its number, and the mapping pairs it with `PHP 1:17/kjv`. A parallel view shows each edition's own number beside the same content. Mapping by number alone would put "love" beside "contention", and SBLGNT under `org` has the same order as BSB.
+- **The 20% margin (`WORD_TEST_MARGIN`) is registered policy, like the tokenizer rules (ADR-0004).** Changing it can change which rows a scheme takes and which editions conflict. A change needs an amendment here, and `build/mapping-diff.tsv` and the conflicts compared before and after. `tvtms.test.ts` pins the value.
+- **An ingested edition keeps its scheme.** When a new edition's text conflicts with its scheme's rows, the ingest stops (`stops BSB from sharing the kjv scheme`), and the new edition gets a derived scheme. Adding an edition never moves an existing edition's addresses.
