@@ -46,14 +46,14 @@ Started 2026-11-09 from the research in [bible-codex](https://github.com/riolly/
 
 ## Editions
 
-Every pin update in `src/ingest/sources.ts` is a new edition (ADR-0005). Record it here.
+Every pin update in `src/ingest/sources.ts` is a new edition (ADR-0005). Record it here. The words stamp (ADR-0005 amendment) changes whenever stored words change, so record it after any ingest that changes one.
 
-| Edition | Pinned zip sha256 | Edition stamp | Pinned on | Note |
-|---|---|---|---|---|
-| KJV | `c7ba60db…621aaf` | `sha256:7ead3d28b2b34c9b` | 2026-11-09 | July pin no longer matched. No July stamp exists, so a text change can't be confirmed |
-| BSB | `75ca91d5…f7fbc4` | `sha256:3b0004861fcf2481` | 2026-11-09 | Same as KJV. Scheme `bsb` since the TVTMS text tests (ADR-0006 amendment) |
-| WLC | `464225e1…bd1df7` | `sha256:a548fe69e09108f4` | 2026-11-09 | ebible `hboWLC`, scheme `org` |
-| SBLGNT | `04c5c536…b10a73` | `sha256:89a22750abd8cdbe` | 2026-11-09 | ebible `grcsbl`, scheme `org`. Stamp is before the text fix |
-| RP | `33b208ee…874048` | `sha256:1defb25636d232d6` | 2026-11-09 | ebible `grcmt`, scheme `rp` |
-| WEB | `05b0440b…3589c8` | `sha256:5f722b4d8f3f4e8e` | 2026-11-09 | ebible `eng-web`, scheme `web` |
-| Brenton | `9de434f4…86e9a4` | `sha256:3db40d92c53c8d1d` | 2026-11-09 | ebible `grcbrent`, scheme `brenton` |
+| Edition | Pinned zip sha256 | Edition stamp | Words stamp | Pinned on | Note |
+|---|---|---|---|---|---|
+| KJV | `c7ba60db…621aaf` | `sha256:7ead3d28b2b34c9b` | `sha256:13f8787f02884340` | 2026-11-09 | July pin no longer matched. No July stamp exists, so a text change can't be confirmed |
+| BSB | `75ca91d5…f7fbc4` | `sha256:3b0004861fcf2481` | `sha256:f5dbe0632c8c21ad` | 2026-11-09 | Same as KJV. Scheme `bsb` since the TVTMS text tests (ADR-0006 amendment) |
+| WLC | `464225e1…bd1df7` | `sha256:a548fe69e09108f4` | `sha256:496bcbfec1bf8375` | 2026-11-09 | ebible `hboWLC`, scheme `org` |
+| SBLGNT | `bcb9cfd8…3cbf56` | `sha256:33876ae1d14e3756` | `sha256:b029321cde54e6b7` | 2026-11-09 | Upstream LogosBible/SBLGNT at `d7f35ad`, scheme `org`. Replaced ebible `grcsbl` (`04c5c536…b10a73`, stamp `sha256:89a22750abd8cdbe`), whose text was damaged (research/licensing.md) |
+| RP | `33b208ee…874048` | `sha256:1defb25636d232d6` | `sha256:f991602ae5d26c3f` | 2026-11-09 | ebible `grcmt`, scheme `rp` |
+| WEB | `05b0440b…3589c8` | `sha256:5f722b4d8f3f4e8e` | `sha256:8fa638d577ba7d01` | 2026-11-09 | ebible `eng-web`, scheme `web` |
+| Brenton | `9de434f4…86e9a4` | `sha256:3db40d92c53c8d1d` | `sha256:968ebb8e2132bf89` | 2026-11-09 | ebible `grcbrent`, scheme `brenton` |
