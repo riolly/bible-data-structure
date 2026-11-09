@@ -15,7 +15,7 @@ One file per topic, written from primary sources with links. A finding that chan
 | Structure | `structure.md` | not started | Paragraphing and section headings across editions. Pericope systems. Literary units that cross chapters. |
 | Notes and cross-references | `apparatus.md` | not started | USFM footnotes (`\f`), cross-references (`\x`), the Treasury of Scripture Knowledge, OpenBible.info. |
 | Tokenization beyond English | `tokenization.md` | not started | Rules for Greek, Hebrew and other scripts. Verse bridges (ADR-0004 open item). |
-| Licensing | `licensing.md` | not started | Per source, whether it can be redistributed in an app. The old repo's licensing notes were lost and need redoing. |
+| Licensing | `licensing.md` | done 2026-11-09 for the step 3 sources | Per source, whether it can be redistributed in an app, its attribution, and whether raw files may be committed. |
 
 ## Trouble-spot fixtures
 

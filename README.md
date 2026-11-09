@@ -33,7 +33,7 @@ Started 2026-11-09 from the research in [bible-codex](https://github.com/riolly/
 | Ingest pipeline, tokenizer, `.vrs` parser, fixtures | `src/ingest/` | Keep. The `.vrs` parser was rewritten for the full format (step 2.4), `divergent.vrs` replaced |
 | Corpus schema and reader | `src/db/` | Keep. `listBooks` became `canonBooks`, which reads order and names from the canon tables |
 | Interlinear sourcing (old issue #2) | research/interlinear-corpus-sourcing.md | Keep, open |
-| Licensing notes (an old agent memory) | research/README.md | Lost, needs redoing |
+| Licensing notes (an old agent memory) | research/licensing.md | Lost, redone in step 3 |
 | User data, storage and sync design (old ADR-0006, 0009, 0011) | docs/prior-art/ | Input for step 4 |
 | Literary edition (old ADR-0017), hub sourcing (old ADR-0021) | docs/prior-art/ | Input for structure and sourcing research |
 | Reading modes, presets, library ring, ink, typography (old ADR-0002 to 0005, 0008, 0012, 0015, 0016, 0018 to 0020) | not carried | Drop: app-specific |
