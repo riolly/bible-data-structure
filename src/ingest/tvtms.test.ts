@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { Mappings, PIVOT, checkCoverage, refKey, type Ref } from '../model/mapping';
 import type { Scheme } from '../model/scheme';
 import { buildPivot, checkExtendOnly, pivotSnapshot } from './pivot';
-import { loadSchemes } from './schemes';
+import { DERIVED_SCHEMES, loadSchemes } from './schemes';
 import {
   TVTMS_PATH,
   compileTvtms,
@@ -205,11 +205,25 @@ describe.skipIf(!hasTvtms)('the pinned TVTMS file', () => {
 
   /** The upstream ESG inconsistencies of pivot.test.ts, now only through `.vrs` fill-in rows. */
   const KNOWN: Record<string, number> = { org: 2, vul: 2, rso: 15 };
+  /**
+   * Derived schemes: verses in a chapter the scheme changes, where TVTMS
+   * decides nothing without the edition's text (`needsText`) and no base
+   * `.vrs` row applies. Brenton's are 2 Esdras 14 and 19, Proverbs 24:35-62
+   * and Sirach 30 and 36; WEB's are Baruch 1:22 and 4 Maccabees 7:24-25.
+   */
+  const KNOWN_DERIVED: Record<string, number> = { web: 3, brenton: 102 };
 
-  it.each([...schemes.keys()])('maps every %s verse into the pivot, apart from known upstream ESG lines', (id) => {
+  it.each([...schemes.keys()])('maps every %s verse into the pivot, apart from known gaps', (id) => {
     const problems = checkCoverage(schemes.get(id)!, pivot, rows);
-    expect(problems.length, problems.join('\n')).toBe(KNOWN[id] ?? 0);
-    expect(problems.every((p) => p.startsWith('ESG '))).toBe(true);
+    const derived = DERIVED_SCHEMES.find((d) => d.id === id);
+    if (!derived) {
+      expect(problems.length, problems.join('\n')).toBe(KNOWN[id] ?? 0);
+      expect(problems.every((p) => p.startsWith('ESG '))).toBe(true);
+      return;
+    }
+    expect(problems.length, problems.slice(0, 10).join('\n')).toBe(KNOWN_DERIVED[id] ?? 0);
+    const changed = new Set(derived.lastVerses.map(([b, c]) => `${b} ${c}`));
+    for (const p of problems) expect(changed.has(p.replace(/:.*/, '')), p).toBe(true);
   });
 
   it('extends the committed pivot without removing anything', () => {

@@ -19,7 +19,7 @@
 import { PIVOT, Relation, parseRefKey, refExists, refKey, type MappingRow, type Ref } from '../model/mapping';
 import type { Scheme } from '../model/scheme';
 import { PROTESTANT, canonBookCodes } from '../model/canon';
-import { PARATEXT_SCHEMES, readParatextVrs } from './schemes';
+import { DERIVED_SCHEMES, PARATEXT_SCHEMES, readParatextVrs } from './schemes';
 import { TVTMS } from './sources';
 import { parseVrs, type VrsMapping } from './vrs';
 
@@ -183,8 +183,8 @@ export function vrsPivotRows(
 }
 
 /**
- * Rows for every Paratext scheme. `kjv` is the pivot's own numbering and needs
- * none. `engToPivotRows` is how eng reaches the pivot: ENG_TO_PIVOT by default,
+ * Rows for every Paratext scheme, and the rows derived schemes take from
+ * them. `kjv` is the pivot's own numbering and needs none. `engToPivotRows` is how eng reaches the pivot: ENG_TO_PIVOT by default,
  * or TVTMS's eng rows once compiled (tvtms.ts `engToPivotRows`), so both
  * witnesses give pivot ids the same meaning.
  */
@@ -192,7 +192,35 @@ export function allVrsPivotRows(
   schemes: ReadonlyMap<string, Scheme>,
   engToPivotRows: readonly { from: Ref; to: Ref | null }[] = ENG_TO_PIVOT,
 ): MappingRow[] {
-  return PARATEXT_SCHEMES.flatMap((s) => vrsPivotRows(s.id, schemes, engToPivotRows));
+  const paratext = PARATEXT_SCHEMES.flatMap((s) => vrsPivotRows(s.id, schemes, engToPivotRows));
+  return [...paratext, ...derivedVrsPivotRows(paratext)];
+}
+
+/**
+ * A derived scheme (ADR-0002 amendment) numbers every chapter it leaves
+ * unchanged as its base does, so there it takes its base's `.vrs` rows, and
+ * for the books it copies, the rows of the scheme it copies them from. Rows
+ * from a chapter it changes are left out. With `kjv` or `eng` as the source
+ * there are no rows to take; TVTMS alone maps those schemes.
+ */
+export function derivedVrsPivotRows(paratextRows: readonly MappingRow[]): MappingRow[] {
+  const byScheme = new Map<string, MappingRow[]>();
+  for (const r of paratextRows) (byScheme.get(r.scheme) ?? byScheme.set(r.scheme, []).get(r.scheme)!).push(r);
+  const out: MappingRow[] = [];
+  for (const def of DERIVED_SCHEMES) {
+    const changed = new Set(def.lastVerses.map(([book, chapter]) => `${book} ${chapter}`));
+    const added = new Set(def.addBooks?.books ?? []);
+    const inherited = [
+      ...(byScheme.get(def.base) ?? []).filter((r) => !added.has(r.from.book)),
+      ...(def.addBooks ? (byScheme.get(def.addBooks.from) ?? []).filter((r) => added.has(r.from.book)) : []),
+    ];
+    const rows = inherited
+      .filter((r) => !changed.has(`${r.from.book} ${r.from.chapter}`))
+      .map((r) => ({ ...r, scheme: def.id }));
+    byScheme.set(def.id, rows);
+    out.push(...rows);
+  }
+  return out;
 }
 
 /** The pivot as committed in fixtures/pivot.json: the previous build. */

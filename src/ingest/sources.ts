@@ -122,6 +122,67 @@ export const SOURCES: readonly SourceDef[] = [
       },
     ],
   },
+  {
+    meta: {
+      name: 'Robinson-Pierpont Byzantine Text 2018',
+      abbrev: 'RP',
+      language: 'greek',
+      year: 2018,
+      license: 'Public Domain',
+      scheme: 'rp',
+      edition: '',
+    },
+    url: 'https://ebible.org/Scriptures/grcmt_usfm.zip',
+    sha256: '33b208ee58a1862696689dcd5db69ed0ae891cd08aea3c7c68a5055501874048',
+    dir: 'rp',
+    books: sectionBookCodes(PROTESTANT, 'nt'),
+    rewriteVersifiedD: false,
+  },
+  {
+    meta: {
+      name: 'World English Bible Classic',
+      abbrev: 'WEB',
+      language: 'english',
+      year: 2020,
+      license: 'Public Domain',
+      scheme: 'web',
+      edition: '',
+    },
+    url: 'https://ebible.org/Scriptures/eng-web_usfm.zip',
+    sha256: '05b0440bd8994dd4da7cc53dd8167a759ed7c09617e4a562c64eb9b3343589c8',
+    dir: 'web',
+    // ebible's file order: the 39, the deuterocanon, the 27
+    books: [
+      ...sectionBookCodes(PROTESTANT, 'ot'),
+      ...['TOB', 'JDT', 'ESG', 'WIS', 'SIR', 'BAR', '1MA', '2MA', '1ES', 'MAN', 'PS2', '3MA', '2ES', '4MA', 'DAG'],
+      ...sectionBookCodes(PROTESTANT, 'nt'),
+    ],
+    rewriteVersifiedD: false,
+  },
+  {
+    meta: {
+      name: 'Brenton Greek Septuagint',
+      abbrev: 'Brenton',
+      language: 'greek',
+      year: 1851,
+      license: 'Public Domain',
+      scheme: 'brenton',
+      edition: '',
+    },
+    url: 'https://ebible.org/Scriptures/grcbrent_usfm.zip',
+    sha256: '9de434f4922f85a475276e4754f6d114dee0f3bf5323d90dcd559a1f8286e9a4',
+    dir: 'brenton',
+    // ebible's file order. EZR is 2 Esdras (Ezra and Nehemiah), as in lxx;
+    // Esther and Daniel are the Greek books ESG and DAG.
+    // prettier-ignore
+    books: [
+      'GEN', 'EXO', 'LEV', 'NUM', 'DEU', 'JOS', 'JDG', 'RUT', '1SA', '2SA', '1KI', '2KI', '1CH', '2CH',
+      'EZR', 'JOB', 'PSA', 'PRO', 'ECC', 'SNG', 'ISA', 'JER', 'LAM', 'EZK', 'HOS', 'JOL', 'AMO', 'OBA',
+      'JON', 'MIC', 'NAM', 'HAB', 'ZEP', 'HAG', 'ZEC', 'MAL', 'TOB', 'JDT', 'ESG', 'WIS', 'SIR', 'BAR',
+      'LJE', 'SUS', 'BEL', '1MA', '2MA', '1ES', 'MAN', '3MA', '4MA', 'DAG',
+    ],
+    rewriteVersifiedD: false,
+  },
 ];
 
 /**

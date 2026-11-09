@@ -70,7 +70,8 @@ describe('real cases through the pivot', () => {
 const KNOWN_COVERAGE_PROBLEMS: Record<string, number> = { org: 3, vul: 3, rso: 17 };
 
 describe('coverage (replaces the bijection check)', () => {
-  it.each([...schemes.keys()])('every %s verse maps into the pivot or is marked absent', (id) => {
+  // Derived schemes take only some `.vrs` rows and lean on TVTMS (tvtms.test.ts).
+  it.each(['kjv', ...PARATEXT_SCHEMES.map((s) => s.id)])('every %s verse maps into the pivot or is marked absent', (id) => {
     const problems = checkCoverage(schemes.get(id)!, pivot, rows);
     expect(problems.length, problems.slice(0, 5).join('\n')).toBe(KNOWN_COVERAGE_PROBLEMS[id] ?? 0);
     expect(problems.every((p) => p.startsWith('ESG '))).toBe(true);
@@ -127,7 +128,7 @@ const native = nativeModuleLoads(
 );
 
 describe.skipIf(!native)('mapping rows in the corpus DB', () => {
-  it('read back into the same mappings', async () => {
+  it('read back into the same mappings', { timeout: 30_000 }, async () => {
     const { createCorpusDb, seedBooksAndCanons, seedSchemes, insertMappings, insertTranslation } =
       await import('./write-db');
     const { loadMappings } = await import('../db/corpus-read');

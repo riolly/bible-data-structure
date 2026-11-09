@@ -69,4 +69,17 @@ book_name         book_code, lang (BCP 47), canon_id NULL, long, short, abbr, so
 - Adding a tradition later means adding canon rows, a scheme and its mapping data. No stored address changes.
 - A small fixture (one deuterocanonical chapter under a second scheme) must import with no model changes.
 - The carried code still uses the old shape. `src/ingest/books.ts` maps USFM codes to English slugs used as ids, `book` has `testament` and `position`, and `versification_map` maps to the non-existent "av11n" canonical scheme. Replacing these is the first code change. Done in step 2 (2026-11-09).
-- Open: whether an edition that mixes traditions gets its own scheme id, which Catholic order becomes the default when a Catholic canon is added, and the Ethiopian narrow and broad lists (two canons or one with statuses). See the "What to decide next" sections of both research files.
+- Decided 2026-11-09 (amendment below): an edition that fits no registered scheme gets a derived scheme. Open: which Catholic order becomes the default when a Catholic canon is added, and the Ethiopian narrow and broad lists (two canons or one with statuses). See the "What to decide next" sections of both research files.
+
+## Amendment: derived schemes (2026-11-09, step 3)
+
+Some editions fit no registered scheme. Robinson-Pierpont 2018 and the World English Bible put the Romans doxology at 14:24-26. Brenton's Septuagint has 74 verses that `lxx` lacks. WEB's deuterocanon differs from `eng` in 13 chapter lengths.
+
+Such an edition gets a **derived scheme**: a registered base plus a list of changes, in `DERIVED_SCHEMES` (`src/ingest/schemes.ts`). A change sets one chapter's last verse, and a derived scheme may also copy whole books from another scheme. It has its own lowercase id, so its addresses never claim the base's numbering. `kjv` is the first derived scheme (`eng` plus two changes), and it stays hand-built.
+
+- A change that matches the base fails the load, so every listed change is a real difference.
+- TVTMS maps a derived scheme the same way as the others, by running its tests against the derived counts (ADR-0006). There is no `.vrs` witness, so the witness diff covers Paratext schemes only.
+- Each edition's text is checked against its scheme (`schemes.test.ts`). A verse the edition lacks in the middle of a chapter stays in the scheme and only warns, as for BSB.
+- Seeded: `rp` (`kjv`, Romans 14 to 26 and 16 to 24), `web` (`rp` plus `eng`'s deuterocanon, 13 changes) and `brenton` (`lxx`, 30 changes).
+
+Rejected: rejecting editions that fit no scheme, which would leave out the deuterocanon and the Septuagint. Also rejected: building a scheme from each edition's text automatically, which makes every edition its own scheme and leaves no reviewed list of differences.

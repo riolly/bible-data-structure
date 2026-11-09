@@ -254,11 +254,11 @@ Add a generated `bcv` integer (BBBCCCVVV with Paratext book numbers) only as a s
 ### What must be decided next
 
 1. **Word index base.** SRS `!n` counts from 1. CONTEXT.md's word index counts from 0. Pick one for the string form, or convert at the boundary.
-2. **Per-edition schemes.** TVTMS tests run against an edition's text, and one Bible can mix traditions. Decide whether a mixed edition gets its own scheme id (for example `kjv+x`), or whether the ingest rejects editions that match no registered scheme.
+2. **Per-edition schemes.** TVTMS tests run against an edition's text, and one Bible can mix traditions. Decide whether a mixed edition gets its own scheme id (for example `kjv+x`), or whether the ingest rejects editions that match no registered scheme. Decided 2026-11-09: derived schemes, ADR-0002 amendment.
 3. **Pivot details.** Name the pivot. Write the extend-only check as a test.
 4. **TVTMS attribution.** Decide where the attribution and change log live in compiled outputs.
 5. **Fixtures.** Fix `divergent.vrs` (Rev 13 is a partial verse, not a shift). Add fixtures for 3 John 14-15, the two-verse title of Psalm 51 (many-to-one), Romans 14:24-26 and Daniel 3 to S3Y (cross-book).
-6. **OSHB.** Verify OSHB's numbering against `org` before ingesting it.
+6. **OSHB.** Verify OSHB's numbering against `org` before ingesting it. Done 2026-11-09: ebible's `hboWLC` has no verse `org` lacks (`schemes.test.ts`) and no chapter that ends early.
 7. **Canon research.** `S3Y` versus `PrAzar`, and `ESG` versus `ADE` versus 16-chapter `EST`, are book-identity questions for `canons.md`.
 
 [lp-res]: https://github.com/sillsdev/libpalaso/tree/f1f70e93a79d55b1769a4e20fb36047f2fa08d99/SIL.Scripture/Resources

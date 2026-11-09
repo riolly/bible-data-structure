@@ -52,7 +52,107 @@ export const PARATEXT_SCHEMES: readonly ParatextScheme[] = [
   { id: 'rsc', name: 'Russian Protestant', sha256: '10beba712a98f9175268b770c24193897a1e6cdc0e5f2bb413423a839781471a' },
 ];
 
-export const SCHEME_IDS: readonly string[] = ['kjv', ...PARATEXT_SCHEMES.map((s) => s.id)];
+/**
+ * A scheme defined as a registered scheme plus listed changes (ADR-0002
+ * amendment, 2026-11-09), for an edition whose verses fit no registered
+ * scheme. `kjv` is the first such scheme and is built by hand below. Every
+ * change must differ from the base, and schemes.test.ts checks each edition's
+ * text against its scheme. TVTMS maps a derived scheme the same way as the
+ * others, by running its tests against the derived counts.
+ */
+export interface DerivedSchemeDef {
+  readonly id: string;
+  readonly name: string;
+  /** A scheme defined earlier in the registry. */
+  readonly base: string;
+  readonly sourceUrl: string;
+  readonly note: string;
+  /** Books copied whole from another scheme: counts, excluded verses, segments and titles. */
+  readonly addBooks?: { readonly from: string; readonly books: readonly string[] };
+  /** `[book, chapter, last verse]`. A chapter past the end is added; 0 leaves a chapter with no verses. */
+  readonly lastVerses: readonly (readonly [string, number, number])[];
+}
+
+export const DERIVED_SCHEMES: readonly DerivedSchemeDef[] = [
+  {
+    id: 'rp',
+    name: 'Robinson-Pierpont',
+    base: 'kjv',
+    sourceUrl: 'https://ebible.org/grcmt/',
+    note: 'kjv with the Romans doxology at 14:24-26 and Romans 16 ending at 24, as in Robinson-Pierpont 2018 and the World English Bible.',
+    lastVerses: [
+      ['ROM', 14, 26],
+      ['ROM', 16, 24],
+    ],
+  },
+  {
+    id: 'web',
+    name: 'World English Bible',
+    base: 'rp',
+    sourceUrl: 'https://ebible.org/eng-web/',
+    note: "rp plus eng's deuterocanonical books, with the World English Bible's own chapter lengths in Tobit, Greek Esther, Sirach, Baruch and 4 Maccabees.",
+    addBooks: {
+      from: 'eng',
+      books: ['TOB', 'JDT', 'ESG', 'WIS', 'SIR', 'BAR', '1MA', '2MA', '1ES', 'MAN', 'PS2', '3MA', '2ES', '4MA', 'DAG'],
+    },
+    lastVerses: [
+      ['TOB', 5, 22],
+      ['TOB', 10, 12],
+      ['ESG', 1, 22],
+      ['ESG', 3, 15],
+      ['ESG', 5, 14],
+      ['ESG', 8, 17],
+      ['ESG', 10, 14],
+      ['SIR', 23, 28],
+      ['SIR', 33, 33],
+      ['SIR', 41, 24],
+      ['BAR', 1, 22],
+      ['4MA', 7, 25],
+      ['4MA', 12, 20],
+    ],
+  },
+  {
+    id: 'brenton',
+    name: 'Brenton Septuagint',
+    base: 'lxx',
+    sourceUrl: 'https://ebible.org/grcbrent/',
+    note: "lxx (Rahlfs) with the chapter lengths of Brenton's 1851 Greek text: Proverbs 24 runs to 62 and 30 is empty, and Sirach 30-36, 1 Esdras and Tobit differ.",
+    lastVerses: [
+      ['NUM', 6, 27],
+      ['DEU', 28, 68],
+      ['DEU', 29, 29],
+      ['EZR', 14, 17],
+      ['EZR', 19, 37],
+      ['PRO', 24, 62],
+      ['PRO', 30, 0],
+      ['TOB', 5, 22],
+      ['TOB', 6, 17],
+      ['TOB', 7, 18],
+      ['TOB', 10, 13],
+      ['JDT', 15, 13],
+      ['WIS', 17, 21],
+      ['SIR', 30, 40],
+      ['SIR', 31, 26],
+      ['SIR', 32, 20],
+      ['SIR', 33, 12],
+      ['SIR', 34, 31],
+      ['SIR', 36, 31],
+      ['SIR', 41, 24],
+      ['BAR', 3, 37],
+      ['LJE', 1, 73],
+      ['1ES', 1, 58],
+      ['1ES', 2, 30],
+      ['1ES', 5, 73],
+      ['1ES', 6, 34],
+      ['1ES', 8, 96],
+      ['4MA', 7, 25],
+      ['4MA', 8, 27],
+      ['4MA', 12, 20],
+    ],
+  },
+];
+
+export const SCHEME_IDS: readonly string[] = ['kjv', ...PARATEXT_SCHEMES.map((s) => s.id), ...DERIVED_SCHEMES.map((s) => s.id)];
 
 // prettier-ignore
 export const KJV_TITLES: readonly number[] = [
@@ -116,5 +216,53 @@ export function loadSchemes(): Map<string, Scheme> {
     segments: new Map(),
     titles: new Set(kjvTitles),
   });
+  for (const def of DERIVED_SCHEMES) out.set(def.id, deriveScheme(def, out));
   return out;
+}
+
+const inBooks = (books: ReadonlySet<string>) => (key: string) => books.has(key.slice(0, 3));
+
+/** Build one derived scheme from schemes already in the registry. */
+export function deriveScheme(def: DerivedSchemeDef, registry: ReadonlyMap<string, Scheme>): Scheme {
+  const base = registry.get(def.base);
+  if (!base) throw new Error(`${def.id}: base scheme "${def.base}" is not defined before it`);
+  const verseCounts = new Map([...base.verseCounts].map(([b, c]) => [b, [...c]]));
+  const excluded = new Set(base.excluded);
+  const segments = new Map(base.segments);
+  const titles = new Set(base.titles);
+  if (def.addBooks) {
+    const from = registry.get(def.addBooks.from);
+    if (!from) throw new Error(`${def.id}: scheme "${def.addBooks.from}" is not defined before it`);
+    const books = new Set(def.addBooks.books);
+    for (const book of books) {
+      if (verseCounts.has(book)) throw new Error(`${def.id}: ${def.base} already has ${book}`);
+      const counts = from.verseCounts.get(book);
+      if (!counts) throw new Error(`${def.id}: ${def.addBooks.from} has no ${book}`);
+      verseCounts.set(book, [...counts]);
+    }
+    for (const k of [...from.excluded].filter(inBooks(books))) excluded.add(k);
+    for (const [k, v] of from.segments) if (books.has(k.slice(0, 3))) segments.set(k, v);
+    for (const t of from.titles) if (books.has(t.slice(0, 3))) titles.add(t);
+  }
+  for (const [book, chapter, last] of def.lastVerses) {
+    const counts = verseCounts.get(book);
+    if (!counts) throw new Error(`${def.id}: no ${book} to change`);
+    if (chapter < 1 || chapter > counts.length + 1) throw new Error(`${def.id}: ${book} ${chapter} is not a chapter or the next one`);
+    if (counts[chapter - 1] === last) throw new Error(`${def.id}: ${book} ${chapter} already ends at ${last}`);
+    counts[chapter - 1] = last;
+    for (const k of [...excluded, ...segments.keys()]) {
+      const m = /^(\S+) (\d+):(\d+)$/.exec(k)!;
+      if (m[1] === book && Number(m[2]) === chapter && Number(m[3]) > last) excluded.delete(k), segments.delete(k);
+    }
+  }
+  return {
+    id: def.id,
+    name: def.name,
+    sourceUrl: def.sourceUrl,
+    note: `Derived from ${def.base}. ${def.note}`,
+    verseCounts,
+    excluded,
+    segments,
+    titles,
+  };
 }

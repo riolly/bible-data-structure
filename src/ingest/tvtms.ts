@@ -24,6 +24,7 @@ import { PROTESTANT, canonBookCodes } from '../model/canon';
 import { Relation, parseRefKey, refKey, type MappingRow, type Ref } from '../model/mapping';
 import { lastVerse, type Scheme } from '../model/scheme';
 import { ENG_TO_PIVOT, allVrsPivotRows, buildPivot } from './pivot';
+import { PARATEXT_SCHEMES } from './schemes';
 import { TVTMS } from './sources';
 
 export const TVTMS_PATH = join(import.meta.dirname, 'sources', TVTMS.file);
@@ -392,6 +393,8 @@ export function mergeWitnesses(
  * Where TVTMS and the `.vrs` files send the same verse to different pivot
  * references, over the verses TVTMS settled. Per scheme, one line per verse:
  * `REF<tab>tvtms: A, B<tab>vrs: C`. Reported, never resolved (ADR-0006).
+ * Only Paratext schemes have a `.vrs` witness; `kjv` and the derived schemes
+ * get an empty list.
  */
 export function diffWitnesses(
   compiled: ReadonlyMap<string, Compiled>,
@@ -399,6 +402,10 @@ export function diffWitnesses(
 ): Map<string, string[]> {
   const out = new Map<string, string[]>();
   for (const [id, c] of compiled) {
+    if (!PARATEXT_SCHEMES.some((p) => p.id === id)) {
+      out.set(id, []);
+      continue;
+    }
     const a = new Relation(c.rows);
     const b = new Relation(vrsRows.filter((r) => r.scheme === id));
     const lines: string[] = [];

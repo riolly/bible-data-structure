@@ -16,7 +16,7 @@ import { join } from 'node:path';
 import type { IngestStats } from './normalize';
 import { PIVOT, checkCoverage } from '../model/mapping';
 import { checkVerses, type Scheme } from '../model/scheme';
-import { loadSchemes } from './schemes';
+import { PARATEXT_SCHEMES, loadSchemes } from './schemes';
 import { computeEdition, type SourceFile } from './edition';
 import { normalizeUsj } from './normalize';
 import { usfmToUsj, usjBookCode } from './parse';
@@ -77,9 +77,11 @@ function main() {
     const c = perScheme.get(s.id)!;
     const own = mappingRows.filter((r) => r.scheme === s.id);
     const fromVrs = own.filter((r) => r.source === 'vrs').length;
+    const witness = PARATEXT_SCHEMES.some((p) => p.id === s.id)
+      ? `${diff.get(s.id)!.length} verses where the witnesses disagree`
+      : 'no .vrs witness';
     console.log(
-      `  ${s.id}: ${own.length - fromVrs} TVTMS rows, ${fromVrs} .vrs rows; ${c.needsText.length} TVTMS rows need text; ` +
-        `${diff.get(s.id)!.length} verses where the witnesses disagree`,
+      `  ${s.id}: ${own.length - fromVrs} TVTMS rows, ${fromVrs} .vrs rows; ${c.needsText.length} TVTMS rows need text; ${witness}`,
     );
     const problems = checkCoverage(s, pivot, mappingRows);
     if (problems.length > 0) console.warn(`  ⚠ ${s.id}: ${problems.length} verse(s) map outside the pivot: ${problems.slice(0, 3).join('; ')}`);

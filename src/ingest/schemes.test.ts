@@ -7,14 +7,14 @@ import { BOOK_BY_CODE } from '../model/books';
 import { PROTESTANT, canonBookCodes } from '../model/canon';
 import { checkVerses, hasVerse, lastVerse } from '../model/scheme';
 import { nativeModuleLoads } from './native-probe';
-import { KJV_TITLES, SCHEME_IDS, loadSchemes } from './schemes';
+import { DERIVED_SCHEMES, KJV_TITLES, SCHEME_IDS, deriveScheme, loadSchemes } from './schemes';
 import { SOURCES as SOURCE_DEFS } from './sources';
 
 const schemes = loadSchemes();
 
 describe('scheme registry', () => {
-  it('holds kjv and the six Paratext schemes', () => {
-    expect([...schemes.keys()].sort()).toEqual(['eng', 'kjv', 'lxx', 'org', 'rsc', 'rso', 'vul']);
+  it('holds kjv, the six Paratext schemes and the derived schemes', () => {
+    expect([...schemes.keys()].sort()).toEqual(['brenton', 'eng', 'kjv', 'lxx', 'org', 'rp', 'rsc', 'rso', 'vul', 'web']);
     expect([...SCHEME_IDS].sort()).toEqual([...schemes.keys()].sort());
   });
 
@@ -59,6 +59,48 @@ describe('scheme registry', () => {
   });
 });
 
+describe('derived schemes (ADR-0002 amendment)', () => {
+  it('moves the Romans doxology to 14:24-26 in rp, and web inherits it', () => {
+    for (const id of ['rp', 'web']) {
+      const s = schemes.get(id)!;
+      expect(lastVerse(s, 'ROM', 14)).toBe(26);
+      expect(hasVerse(s, 'ROM', 16, 25)).toBe(false);
+      expect(lastVerse(s, 'REV', 12)).toBe(17);
+    }
+    expect(schemes.get('rp')!.verseCounts.has('TOB')).toBe(false);
+  });
+
+  it("gives web eng's deuterocanon with its own chapter lengths", () => {
+    const web = schemes.get('web')!;
+    const eng = schemes.get('eng')!;
+    expect(lastVerse(web, 'TOB', 5)).toBe(22);
+    expect(lastVerse(eng, 'TOB', 5)).toBe(21);
+    expect(web.verseCounts.get('1MA')).toEqual(eng.verseCounts.get('1MA'));
+    expect(web.titles.has('PSA 3')).toBe(true);
+  });
+
+  it("leaves Brenton's Proverbs 30 with no verses", () => {
+    const brenton = schemes.get('brenton')!;
+    expect(lastVerse(brenton, 'PRO', 24)).toBe(62);
+    expect(lastVerse(brenton, 'PRO', 30)).toBe(0);
+    expect(hasVerse(brenton, 'PRO', 30, 1)).toBe(false);
+    // lxx's excluded verses carry over, except those past a chapter's new end
+    const lxx = schemes.get('lxx')!;
+    const dropped = [...lxx.excluded].filter((k) => !brenton.excluded.has(k));
+    expect([...brenton.excluded].every((k) => lxx.excluded.has(k))).toBe(true);
+    for (const k of dropped) {
+      const [, book, c, v] = /^(\S+) (\d+):(\d+)$/.exec(k)!;
+      expect(Number(v), k).toBeGreaterThan(lastVerse(brenton, book, Number(c))!);
+    }
+  });
+
+  it('rejects a change that changes nothing, and an unknown base', () => {
+    const def = { ...DERIVED_SCHEMES[0], lastVerses: [['ROM', 14, 23] as const] };
+    expect(() => deriveScheme(def, schemes)).toThrow(/already ends at 23/);
+    expect(() => deriveScheme({ ...def, base: 'nope' }, schemes)).toThrow(/not defined before it/);
+  });
+});
+
 describe('checkVerses', () => {
   const kjv = schemes.get('kjv')!;
 
@@ -87,6 +129,24 @@ function usfmVerses(usfm: string): { chapter: number; verse: number }[] {
   for (const m of usfm.matchAll(/\\c (\d+)|\\v (\d+)(?:-(\d+))?/g)) {
     if (m[1]) chapter = Number(m[1]);
     else out.push({ chapter, verse: Number(m[3] ?? m[2]) });
+  }
+  return out;
+}
+
+/**
+ * The verses that carry text, as the ingest's scheme check sees them: a `\v`
+ * holding only a footnote (WEB ROM 16:25) makes no token, so it is no verse.
+ */
+function versesWithText(usfm: string): { chapter: number; verse: number }[] {
+  const out: { chapter: number; verse: number }[] = [];
+  const parts = usfm.replace(/\\f .*?\\f\*/gs, '').split(/(\\c \d+|\\v \d+(?:-\d+)?)/);
+  let chapter = 0;
+  for (let i = 1; i < parts.length; i += 2) {
+    const [marker, num] = parts[i].split(' ');
+    if (marker === '\\c') chapter = Number(num);
+    else if (/\p{L}/u.test(parts[i + 1].replace(/\\[a-z0-9+]+\*?/g, ''))) {
+      out.push({ chapter, verse: Number(num.split('-').pop()) });
+    }
   }
   return out;
 }
@@ -130,7 +190,7 @@ describe.each(SOURCE_DEFS.map((s) => [s.meta.abbrev, s] as const))('%s source te
       const usfm = readFileSync(join(SOURCES, src.dir, name), 'utf8');
       const code = usfm.match(/^\\id (\w{3})/)?.[1];
       if (!code || !wanted.has(code)) continue;
-      expect(checkVerses(scheme, code, usfmVerses(usfm)).unknown, code).toEqual([]);
+      expect(checkVerses(scheme, code, versesWithText(usfm)).unknown, code).toEqual([]);
       seen.push(code);
     }
     expect(seen.sort()).toEqual([...src.books].sort());
@@ -149,7 +209,7 @@ describe.skipIf(!native)('scheme tables', () => {
     seedSchemes(db, schemes);
 
     const ids = (sqlite.prepare('SELECT id FROM scheme ORDER BY id').all() as { id: string }[]).map((r) => r.id);
-    expect(ids).toEqual(['eng', 'kjv', 'lxx', 'org', 'rsc', 'rso', 'vul']);
+    expect(ids).toEqual(['brenton', 'eng', 'kjv', 'lxx', 'org', 'rp', 'rsc', 'rso', 'vul', 'web']);
     const rev12 = sqlite
       .prepare("SELECT scheme, verse_count FROM scheme_verse_count WHERE book = 'REV' AND chapter = 12 ORDER BY scheme")
       .all();
