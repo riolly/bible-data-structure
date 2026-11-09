@@ -1,4 +1,4 @@
-import { index, integer, primaryKey, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
 import type { BlockRole } from '../model/corpus';
 
@@ -191,8 +191,10 @@ export const token = sqliteTable(
      * (incl. mid-chapter \s) carries NULL — never 0, never the preceding verse.
      */
     verse: integer('verse'),
+    /** The verse's lettered part (`1KI 2:35a` in Brenton), `''` when the source letters none. */
+    segment: text('segment').notNull().default(''),
     /**
-     * Word ordinal within verse, punct excluded; NULL on punct tokens and on
+     * Word ordinal within the verse segment, punct excluded; NULL on punct tokens and on
      * heading/non-verse word tokens.
      */
     wordIndex: integer('word_index'),
@@ -210,7 +212,8 @@ export const token = sqliteTable(
   },
   (t) => [
     index('token_render').on(t.translationId, t.book, t.chapter, t.verse, t.seq),
-    index('token_anchor').on(t.translationId, t.book, t.chapter, t.verse, t.wordIndex),
+    // A word address names one word (NULL word indexes are distinct in SQLite).
+    uniqueIndex('token_anchor').on(t.translationId, t.book, t.chapter, t.verse, t.segment, t.wordIndex),
   ],
 );
 

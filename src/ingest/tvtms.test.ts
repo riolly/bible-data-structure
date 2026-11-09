@@ -164,7 +164,7 @@ describe('text tests against an edition', () => {
 describe('addBookText', () => {
   const block = (id: number, role: Block['role']): Block => ({ id, chapter: 3, genre: 'heading', role, indent: 0, seq: 0 });
   const token = (blockId: number, verse: number | null, seq: number, kind: Token['kind'] = 'word'): Token => ({
-    id: seq, blockId, chapter: 3, verse, wordIndex: null, seq, kind, text: 'x', verseStart: false, owId: null,
+    id: seq, blockId, chapter: 3, verse, segment: '', wordIndex: null, seq, kind, text: 'x', verseStart: false, owId: null,
   });
 
   it('counts word tokens per verse and finds a psalm title before verse 1', () => {

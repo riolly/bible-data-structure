@@ -10,10 +10,11 @@ Two changes from the sources, so the fixtures stay small and carry no attributio
 | Directory | Source | Chapters | License |
 |---|---|---|---|
 | `kjv` | ebible `eng-kjv` | PSA 51, JOL 2-3, MAL 3-4, REV 12-13, 3JN 1, ROM 14 and 16, MRK 16, JHN 7-8, ACT 8 | Public domain |
-| `kjva` | ebible `eng-kjv`, Apocrypha | TOB 1, declared under `eng` | Public domain |
+| `kjva` | ebible `eng-kjv`, Apocrypha | TOB 1 and 10, declared under `eng` | Public domain |
 | `wlc` | ebible `hboWLC` | PSA 51, JOL 2-4, MAL 3 | Public domain |
 | `sblgnt` | ebible `grcsbl` | REV 12-13, 3JN 1, ROM 14 and 16, MRK 16, JHN 7-8, ACT 8 | SBL Greek New Testament, © 2010 Society of Biblical Literature and Logos Bible Software, CC BY 4.0. Excerpted and changed as above |
 | `rp` | ebible `grcmt` | ROM 14 and 16 | Public domain |
 | `web` | ebible `eng-web` | ROM 14 and 16, TOB 1 | Public domain |
+| `brenton` | ebible `grcbrent` | 1KI 2 (lettered verses 35a-35o), TOB 10 | Public domain |
 
 Licensing verdicts: `research/licensing.md`.

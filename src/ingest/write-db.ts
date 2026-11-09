@@ -124,6 +124,7 @@ CREATE TABLE token (
   book TEXT NOT NULL REFERENCES book(code),
   chapter INTEGER NOT NULL,
   verse INTEGER,
+  segment TEXT NOT NULL DEFAULT '',
   word_index INTEGER,
   seq INTEGER NOT NULL,
   kind TEXT NOT NULL,
@@ -133,7 +134,7 @@ CREATE TABLE token (
   ow_id TEXT
 );
 CREATE INDEX token_render ON token (translation_id, book, chapter, verse, seq);
-CREATE INDEX token_anchor ON token (translation_id, book, chapter, verse, word_index);
+CREATE UNIQUE INDEX token_anchor ON token (translation_id, book, chapter, verse, segment, word_index);
 CREATE TABLE scheme_segment (
   scheme TEXT NOT NULL REFERENCES scheme(id),
   book TEXT NOT NULL REFERENCES book(code),
@@ -166,8 +167,8 @@ CREATE INDEX mapping_from ON scheme_mapping (scheme, book, chapter, verse);
 CREATE INDEX mapping_to ON scheme_mapping (scheme, pivot_book, pivot_chapter, pivot_verse);
 `;
 
-const INDEX_DDL = DDL.match(/^CREATE INDEX .*;$/gm)!.join('\n');
-const TABLE_DDL = DDL.replace(/^CREATE INDEX .*;\n/gm, '');
+const INDEX_DDL = DDL.match(/^CREATE (?:UNIQUE )?INDEX .*;$/gm)!.join('\n');
+const TABLE_DDL = DDL.replace(/^CREATE (?:UNIQUE )?INDEX .*;\n/gm, '');
 if (/\bINDEX\b/.test(TABLE_DDL)) throw new Error('write-db.ts: an index in DDL is not one line of `CREATE INDEX ...;`');
 
 /**
@@ -291,9 +292,9 @@ function seedSchemesIn(db: CorpusDb, schemes: ReadonlyMap<string, Scheme>): void
 
 /** Tokens per multi-row INSERT: one call into SQLite per row was most of the insert time. */
 const TOKENS_PER_INSERT = 100;
-const TOKEN_INSERT = `INSERT INTO token (translation_id, book, chapter, verse, word_index, seq, kind, text, block_id,
-  verse_start, ow_id) VALUES `;
-const TOKEN_VALUES = '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+const TOKEN_INSERT = `INSERT INTO token (translation_id, book, chapter, verse, segment, word_index, seq, kind, text,
+  block_id, verse_start, ow_id) VALUES `;
+const TOKEN_VALUES = '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
 
 /** Prepared once per connection: drizzle's insert builder took about 6 s for a 51k-token book. */
 const bookStatements = new WeakMap<
@@ -332,7 +333,7 @@ export function insertBookRows(
   const values = (t: Token) => {
     const blockId = blockRowId.get(t.blockId);
     if (blockId == null) throw new Error(`token ${t.id} references unknown block ${t.blockId}`);
-    return [ids.translationId, ids.book, t.chapter, t.verse, t.wordIndex, t.seq, t.kind, t.text, blockId,
+    return [ids.translationId, ids.book, t.chapter, t.verse, t.segment, t.wordIndex, t.seq, t.kind, t.text, blockId,
       t.verseStart ? 1 : 0, t.owId];
   };
   // Rows go in token order either way, so the rowids match one insert per row.

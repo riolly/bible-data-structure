@@ -3,12 +3,13 @@ import { join } from 'node:path';
 
 import { beforeAll, describe, expect, it } from 'vitest';
 
+import type { Token } from '../model/corpus';
 import type { Mappings, Ref } from '../model/mapping';
 import { PIVOT } from '../model/mapping';
 import { checkVerses } from '../model/scheme';
 import { nativeModuleLoads } from './native-probe';
 import { loadSchemes } from './schemes';
-import { TVTMS_PATH, compileMappings, readTvtms } from './tvtms';
+import { TVTMS_PATH, compileMappings, editionTextsFromSnapshot, readTvtms, type EditionTextSnapshot } from './tvtms';
 
 /**
  * The trouble spots of research/README.md, imported from excerpts of the
@@ -27,6 +28,7 @@ const EDITIONS = [
   { dir: 'sblgnt', abbrev: 'SBLGNT', scheme: 'org', language: 'greek' },
   { dir: 'rp', abbrev: 'RP', scheme: 'rp', language: 'greek' },
   { dir: 'web', abbrev: 'WEB', scheme: 'web', language: 'english' },
+  { dir: 'brenton', abbrev: 'Brenton', scheme: 'brenton', language: 'greek' },
 ] as const;
 
 const native = nativeModuleLoads(
@@ -41,6 +43,9 @@ describe.skipIf(!native || !hasTvtms)('trouble spots (research/README.md)', () =
   let mappings: Mappings;
   let words: (abbrev: string, book: string, chapter: number, verse: number) => string[];
   let tokens: (abbrev: string, book: string, chapter: number, verse: number) => string[];
+  let verseTokens: (abbrev: string, book: string, chapter: number, verse: number) => Token[];
+  const segTokens = (abbrev: string, book: string, chapter: number, verse: number, segment: string) =>
+    verseTokens(abbrev, book, chapter, verse).filter((t) => t.segment === segment);
 
   beforeAll(async () => {
     const { usfmToUsj } = await import('./parse');
@@ -49,7 +54,9 @@ describe.skipIf(!native || !hasTvtms)('trouble spots (research/README.md)', () =
     const { readChapter, loadMappings } = await import('../db/corpus-read');
 
     const schemes = loadSchemes();
-    const { pivot, rows } = compileMappings(schemes, readTvtms());
+    // the editions' text-test facts as the last ingest saw them, so word-count rows decide as they do there
+    const snapshot = JSON.parse(readFileSync(join(import.meta.dirname, 'fixtures', 'edition-text.json'), 'utf8')) as EditionTextSnapshot;
+    const { pivot, rows } = compileMappings(schemes, readTvtms(), editionTextsFromSnapshot(snapshot));
     const { db } = w.createCorpusDb(':memory:');
     w.seedBooksAndCanons(db);
     w.seedSchemes(db, new Map(schemes).set(PIVOT, pivot));
@@ -78,7 +85,7 @@ describe.skipIf(!native || !hasTvtms)('trouble spots (research/README.md)', () =
     }
 
     mappings = loadMappings(db);
-    const verseTokens = (abbrev: string, book: string, chapter: number, verse: number) =>
+    verseTokens = (abbrev, book, chapter, verse) =>
       readChapter(db, abbrev, book, chapter).tokens.filter((t) => t.verse === verse);
     words = (...a) => verseTokens(...a).filter((t) => t.kind === 'word').map((t) => t.text);
     tokens = (...a) => verseTokens(...a).map((t) => t.text);
@@ -145,10 +152,24 @@ describe.skipIf(!native || !hasTvtms)('trouble spots (research/README.md)', () =
     expect(map('kjv', 'org', ref('ACT', 8, 37))).toEqual(['ACT 8:37']);
   });
 
-  it('a deuterocanonical chapter imports under a second scheme: Tobit 1 under eng and web', () => {
+  it('a deuterocanonical chapter imports under a second scheme: Tobit 10 under eng and brenton', () => {
     expect(words('KJVA', 'TOB', 1, 1).slice(0, 3)).toEqual(['The', 'book', 'of']);
     expect(words('WEB', 'TOB', 1, 1).length).toBeGreaterThan(0);
-    expect(map('eng', 'web', ref('TOB', 1, 1))).toEqual(['TOB 1:1']);
-    expect(map('web', 'eng', ref('TOB', 1, 22))).toEqual(['TOB 1:22']);
+    // Brenton splits KJV-A's 10:7 in two, so its later verses run one ahead
+    expect(words('KJVA', 'TOB', 10, 8).slice(0, 4)).toEqual(['But', 'his', 'father', 'in']); // "his father in law said"
+    expect(words('Brenton', 'TOB', 10, 9).slice(0, 5)).toEqual(['Εἶπε', 'δὲ', 'αὐτῷ', 'ὁ', 'πενθερὸς']); // the same speech
+    expect(map('brenton', 'eng', ref('TOB', 10, 9))).toEqual(['TOB 10:8']);
+    expect(map('eng', 'brenton', ref('TOB', 10, 12))).toEqual(['TOB 10:13']);
+  });
+
+  it("Brenton's lettered verses (1KI 2:35a-35o) are segments, so each word address names one word", () => {
+    const seg = (s: string) => segTokens('Brenton', '1KI', 2, 35, s).filter((t) => t.kind === 'word');
+    expect(seg('').map((t) => t.text).slice(0, 3)).toEqual(['Καὶ', 'ἔδωκεν', 'ὁ']);
+    expect(seg('a').map((t) => t.text).slice(0, 3)).toEqual(['καὶ', 'ἔδωκε', 'Κύριος']);
+    expect(seg('o')[0].wordIndex).toBe(0);
+    const letters = new Set(verseTokens('Brenton', '1KI', 2, 35).map((t) => t.segment));
+    expect([...letters].join('')).toBe('abcdefghiklmno');
+    const addrs = verseTokens('Brenton', '1KI', 2, 35).filter((t) => t.wordIndex !== null).map((t) => `${t.segment}!${t.wordIndex}`);
+    expect(new Set(addrs).size).toBe(addrs.length);
   });
 });

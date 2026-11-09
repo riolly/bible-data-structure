@@ -64,7 +64,12 @@ export interface Token {
   readonly chapter: number;
   /** Verse number under the edition's scheme; null = non-verse content (headings/titles). */
   readonly verse: number | null;
-  /** Word ordinal within the verse, punct excluded; null on punct and heading tokens. */
+  /**
+   * The verse's lettered part, `''` when the source letters none. Brenton
+   * numbers Septuagint pluses as letters on the previous verse (`1KI 2:35a`).
+   */
+  readonly segment: string;
+  /** Word ordinal within the verse segment, punct excluded; null on punct and heading tokens. */
   readonly wordIndex: number | null;
   /** Dense render order within the chapter. */
   readonly seq: number;

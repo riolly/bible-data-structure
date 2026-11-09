@@ -91,3 +91,10 @@ WLC (Hebrew) and SBLGNT (Greek) ingest through the same `tokenize.ts`. No rule c
 
 - **Rule 6.** In verse text, a standalone unpointed `פ` or `ס`, with no letter or combining mark touching it, is a punctuation token. In headings it stays a word, because KJV's Psalm 119 stanza labels (`ס SAMECH`) use the same letters beside the other 20 letter names. `normalize.ts` passes `paragraphMarks` outside headings, and `tokenize.test.ts` pins both cases.
 - **Migration.** Word indexes after a mid-verse mark drop by one in those 88 WLC verses, and the 3,071 end-of-verse marks lose their word index. No English or Greek address moves. No outside reference existed yet.
+
+## Amendment v1.4: a lettered verse is a segment (2026-11-09)
+
+Brenton numbers Septuagint text with no Hebrew counterpart as letters on the previous verse (`\v 35a` to `\v 35o` after 1 Kings 2:35). The ingest kept only the digits and restarted the word count at each letter, so 1,748 word addresses in 91 Brenton verses each named two or more words.
+
+- **Rule 7.** A verse marker with a letter (`\v 35a`) sets the token's `segment`, and word indexes count from 0 within each segment. `1KI 2:35a!1/brenton` is the first word of 35a. Verses without letters have segment `''`, so no other edition's address changes.
+- The corpus holds a unique index on edition, book, chapter, verse, segment and word index, so a collision stops the ingest.

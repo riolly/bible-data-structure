@@ -136,6 +136,7 @@ export function normalizeUsj(usj: UsjDoc): NormalizeResult {
 
   let chapter = 0; // front matter before \c 1 = chapter 0
   let verse: number | null = null;
+  let segment = ''; // the lettered part of `verse` (\v 35a), '' when none
   let wordIndexInVerse = 0;
   let seqInChapter = 0;
   let pendingVerseStart = false;
@@ -190,6 +191,7 @@ export function normalizeUsj(usj: UsjDoc): NormalizeResult {
         blockId: blk.id,
         chapter,
         verse: inVerse ? effectiveVerse : null,
+        segment: inVerse ? segment : '',
         wordIndex: inVerse && isWord ? wordIndexInVerse++ : null,
         seq: seqInChapter++,
         kind: t.kind,
@@ -221,10 +223,12 @@ export function normalizeUsj(usj: UsjDoc): NormalizeResult {
       switch (node.type) {
         case 'verse': {
           flushText();
-          const m = (node.number ?? '').match(/^(\d+)(-\d+)?/);
+          // a lettered verse (\v 35a) is a segment, and its words count from 0
+          const m = (node.number ?? '').match(/^(\d+)([a-z]?)(-\d+[a-z]?)?$/);
           if (!m) throw new Error(`unparseable verse number "${node.number}"`);
-          if (m[2]) stats.verseBridges++;
+          if (m[3]) stats.verseBridges++;
           verse = parseInt(m[1], 10);
+          segment = m[2];
           if (inHeading) headingVerse = verse; // versified title (\d + \v)
           wordIndexInVerse = 0;
           pendingVerseStart = true;
@@ -280,6 +284,7 @@ export function normalizeUsj(usj: UsjDoc): NormalizeResult {
         if (isNaN(n)) throw new Error(`unparseable chapter number "${node.number}"`);
         chapter = n;
         verse = null;
+        segment = '';
         wordIndexInVerse = 0;
         seqInChapter = 0;
         pendingVerseStart = false;
