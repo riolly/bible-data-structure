@@ -22,7 +22,7 @@ Upstream OSHB ([morphhb at `3d15126`][oshb]) keeps both. A ketiv is `<w type="x-
 
 Counted in the pinned `wlc/*.xml` (`src/ingest/oshb-xml.ts` reads them):
 
-| Written words | Read words | Notes | Example |
+| Ketiv `<w>` | Qere `<w>` | Notes | Example |
 |---|---|---|---|
 | 1 | 1 | 1,212 | `GEN 8:17` הוצא, read הַיְצֵא |
 | 1 | 2 | 16 | `2SA 18:20` על, read עַל־כֵּן |
@@ -31,7 +31,7 @@ Counted in the pinned `wlc/*.xml` (`src/ingest/oshb-xml.ts` reads them):
 | 1 | 0 | 6 | `2KI 5:18` נא, written and not read |
 | 0 | 1 | 9 | `2SA 8:3` פְּרָת, read and not written |
 
-That makes 1,260 notes, 1,268 ketiv words and 1,278 qere words. Every ketiv word is followed by its note, with only a maqqef or another note in between (`JER 48:44` has an exegesis note there). A multi-word qere can hold a maqqef or a paseq between its words.
+That makes 1,260 notes, 1,268 ketiv `<w>` elements and 1,278 qere words. The rows above count elements. Twice two ketiv elements stand with no space between them, so they are one written word (`2KI 6:25` חרייונים, `JER 18:3`), and the corpus stores 1,266 ketiv words. Every ketiv word is followed by its note, with only a maqqef or another note in between (`JER 48:44` has an exegesis note there). A multi-word qere can hold a maqqef or a paseq between its words.
 
 ## Converting OSHB, checked against ebible's copy
 

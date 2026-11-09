@@ -6,7 +6,7 @@ schema in `src/db/corpus-schema.ts`, shared by the writer here and the reader in
 `src/db/corpus-read.ts`.
 
 ```
-bun run ingest:download   # once: fetch pinned ebible.org zips and TVTMS, verify sha256 → sources/ (gitignored)
+bun run ingest:download   # once: fetch pinned ebible.org zips, upstream SBLGNT and OSHB, and TVTMS, verify sha256 → sources/ (gitignored)
 bun run ingest            # sources → build/corpus.db, build/mapping-diff.tsv, build/pivot.json (gitignored)
 ```
 
@@ -38,6 +38,9 @@ the `.vrs` files disagree.
 - `tvtms.ts`: STEPBible TVTMS compiled per scheme by evaluating its count
   tests, merged with the `.vrs` rows and diffed against them. `sources.ts`
   says why the raw file is downloaded, not committed.
+- `sblgnt-xml.ts`, `oshb-xml.ts`: upstream SBLGNT and OSHB XML to USFM, read
+  by `source-files.ts`. `oshb-xml.ts` also returns the qere readings, which
+  `run.ts` checks against the stored tokens and writes to `reading` (ADR-0007).
 - `edition.ts` — deterministic `translation.edition` stamp (ADR-0005): sha256
   over the source text, immune to zip repackaging.
 - `sources.ts` / `download.ts`: pinned upstream zips and TVTMS, with checksums.
