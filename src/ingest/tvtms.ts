@@ -395,7 +395,8 @@ export function mergeWitnesses(
  * `REF<tab>tvtms: A, B<tab>vrs: C`. Reported, never resolved (ADR-0006).
  * A scheme has a `.vrs` witness if it is a Paratext scheme or a derived
  * scheme that takes `.vrs` rows from its base (pivot.ts). Schemes without one
- * (`kjv`, `rp`, `web`) are left out of the map.
+ * (`kjv`, `rp`) are left out of the map. `web` has one through the eng rows
+ * it takes for its deuterocanon.
  */
 export function diffWitnesses(
   compiled: ReadonlyMap<string, Compiled>,
