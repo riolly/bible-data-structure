@@ -10,7 +10,7 @@
  * build/ are generated and gitignored.
  */
 
-import { existsSync, readdirSync, readFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import type { Block, Token } from '../model/corpus';
@@ -18,12 +18,11 @@ import type { IngestStats } from './normalize';
 import { PIVOT, checkCoverage } from '../model/mapping';
 import { checkVerses, titleChapters, type Scheme } from '../model/scheme';
 import { loadSchemes } from './schemes';
-import { computeEdition, type SourceFile } from './edition';
 import { normalizeUsj } from './normalize';
 import { usjBookCode, type ParseOutcome } from './parse';
 import { createParsePool, type ParsePool } from './parse-pool';
 import { SOURCES, type SourceDef } from './sources';
-import { applyTextFixes } from './text-fixes';
+import { readSource } from './source-files';
 import { checkExtendOnly, formatPivotSnapshot, pivotSnapshot, type PivotSnapshot } from './pivot';
 import {
   TVTMS_PATH,
@@ -47,29 +46,10 @@ import {
   seedSchemes,
 } from './write-db';
 
-const SOURCES_ROOT = join(import.meta.dirname, 'sources');
 const OUT_DIR = join(import.meta.dirname, '..', '..', 'build');
 const OUT_PATH = join(OUT_DIR, 'corpus.db');
 const PIVOT_SNAPSHOT = join(import.meta.dirname, 'fixtures', 'pivot.json');
 const EDITION_TEXT_SNAPSHOT = join(import.meta.dirname, 'fixtures', 'edition-text.json');
-
-/** The source's listed books, in its order. Files for other books (FRT, GLO, …) are skipped. */
-function readSourceFiles(src: SourceDef): SourceFile[] {
-  const root = join(SOURCES_ROOT, src.dir);
-  const wanted = new Set(src.books);
-  const byCode = new Map<string, SourceFile>();
-  for (const name of readdirSync(root)) {
-    if (!name.toLowerCase().endsWith('.usfm')) continue;
-    const usfm = readFileSync(join(root, name), 'utf8');
-    const code = usfm.match(/^\\id (\w{3})/)?.[1];
-    if (!code || !wanted.has(code)) continue;
-    if (byCode.has(code)) throw new Error(`${src.dir}: two files for ${code}`);
-    byCode.set(code, { code, usfm });
-  }
-  const missing = src.books.filter((c) => !byCode.has(c));
-  if (missing.length > 0) throw new Error(`${src.dir}: no file for ${missing.join(', ')}`);
-  return src.books.map((c) => byCode.get(c)!);
-}
 
 const addStats = (into: Record<string, number>, from: IngestStats) => {
   for (const [k, v] of Object.entries(from)) {
@@ -186,9 +166,7 @@ const seconds = (since: number) => `${((performance.now() - since) / 1000).toFix
  * still stop the ingest in book order.
  */
 function prepareSource(src: SourceDef, pool: ParsePool) {
-  const raw = readSourceFiles(src);
-  const edition = computeEdition(raw);
-  const files = applyTextFixes(raw, src.textFixes);
+  const { edition, files } = readSource(src);
   const outcomes = files.map((f) => pool.parse(f.usfm, { rewriteVersifiedD: src.rewriteVersifiedD }));
   for (const o of outcomes) o.catch(() => {}); // awaited later; keep an early rejection from counting as unhandled
   return { edition, files, outcomes };

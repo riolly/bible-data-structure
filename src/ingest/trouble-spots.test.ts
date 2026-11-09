@@ -143,7 +143,11 @@ describe.skipIf(!native || !hasTvtms)('trouble spots (research/README.md)', () =
   it('Mark 16:9-20 and John 7:53-8:11: present in KJV, double-bracketed in SBLGNT', () => {
     expect(words('KJV', 'MRK', 16, 9).length).toBeGreaterThan(0);
     expect(words('SBLGNT', 'MRK', 16, 9).length).toBeGreaterThan(0);
-    expect(tokens('SBLGNT', 'MRK', 16, 8)).toContain('⟦');
+    // 16:8 holds the shorter ending in its own brackets; the longer ending, 16:9-20, has its own
+    expect(tokens('SBLGNT', 'MRK', 16, 8).slice(-2)).toEqual(['ἀμήν', '.⟧']);
+    expect(tokens('SBLGNT', 'MRK', 16, 9)[0]).toBe('⟦');
+    expect(tokens('SBLGNT', 'MRK', 16, 20).at(-1)).toBe('.⟧');
+    expect(words('SBLGNT', 'MRK', 16, 14)[0]).toBe('Ὕστερον'); // ebible's copy had "στερον"
     expect(tokens('SBLGNT', 'JHN', 7, 53)[0]).toBe('⟦');
     expect(tokens('SBLGNT', 'JHN', 8, 11).at(-1)).toBe('.⟧');
     expect(words('KJV', 'JHN', 7, 53)).toEqual(['And', 'every', 'man', 'went', 'unto', 'his', 'own', 'house']);

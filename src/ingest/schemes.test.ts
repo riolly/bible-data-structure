@@ -9,7 +9,7 @@ import { checkVerses, hasVerse, lastVerse } from '../model/scheme';
 import { nativeModuleLoads } from './native-probe';
 import { DERIVED_SCHEMES, KJV_TITLES, SCHEME_IDS, deriveScheme, loadSchemes } from './schemes';
 import { SOURCES as SOURCE_DEFS } from './sources';
-import { applyTextFixes } from './text-fixes';
+import { readSource } from './source-files';
 
 const schemes = loadSchemes();
 
@@ -184,17 +184,10 @@ describe.each(['kjv', 'bsb'])('%s source text under the kjv scheme', (dir) => {
 describe.each(SOURCE_DEFS.map((s) => [s.meta.abbrev, s] as const))('%s source text', (_, src) => {
   it.skipIf(!existsSync(join(SOURCES, src.dir)))('has its listed books, and no verse its scheme lacks', () => {
     const scheme = schemes.get(src.meta.scheme)!;
-    const wanted = new Set(src.books);
-    const files: { code: string; usfm: string }[] = [];
-    for (const name of readdirSync(join(SOURCES, src.dir))) {
-      if (!name.endsWith('.usfm')) continue;
-      const usfm = readFileSync(join(SOURCES, src.dir, name), 'utf8');
-      const code = usfm.match(/^\\id (\w{3})/)?.[1];
-      if (code && wanted.has(code)) files.push({ code, usfm });
-    }
-    expect(files.map((f) => f.code).sort()).toEqual([...src.books].sort());
-    // the ingest's text fixes, with their counts, leave no ebible XML leftover
-    for (const { code, usfm } of applyTextFixes(files, src.textFixes)) {
+    // the books as the ingest reads them: converted, with the counted text fixes applied
+    const { files } = readSource(src);
+    expect(files.map((f) => f.code)).toEqual([...src.books]);
+    for (const { code, usfm } of files) {
       expect(usfm, code).not.toMatch(/‘\/?(book|p)\b/);
       expect(checkVerses(scheme, code, versesWithText(usfm)).unknown, code).toEqual([]);
     }
