@@ -41,7 +41,7 @@ The upstream URL plus the sha256 of the downloaded file (`src/ingest/sources.ts`
 A numbering system for chapters and verses: KJV, Masoretic, Septuagint, Vulgate and others. The same `chapter:verse` can mean different text under different schemes (Psalm titles, Joel 2/3, Malachi 3/4, Revelation 12/13). (ADR-0002)
 
 **Scheme id**:
-A lowercase name from our registry: `kjv`, and the Paratext names `org`, `eng`, `lxx`, `vul`, `rso`, `rsc`. Paratext `eng` is not KJV numbering.
+A lowercase name from our registry: `kjv`, the Paratext names `org`, `eng`, `lxx`, `vul`, `rso`, `rsc`, and the derived schemes `rp`, `web`, `brenton`. Paratext `eng` is not KJV numbering.
 _Avoid_: av11n (that is SWORD's name for its mapping feature, not a scheme)
 
 **Verse address**:
@@ -50,6 +50,9 @@ _Avoid_: reference, citation (those are human-written strings that resolve to an
 
 **Segment**:
 A lettered part of a verse (`13:1a`), used where schemes split a verse differently. Addresses use one letter; pivot mapping rows may use TVTMS's longer subverse ids (ADR-0006).
+
+**Derived scheme**:
+A registered scheme plus a listed set of chapter-length changes, for an edition that fits no registered scheme. It has its own scheme id. `kjv` is `eng` with two changes. (ADR-0002 amendment)
 
 **Pivot scheme**:
 A synthetic scheme that only grows, which all scheme mappings go through. Its id is `pivot`. Stored addresses never use it. (ADR-0006)

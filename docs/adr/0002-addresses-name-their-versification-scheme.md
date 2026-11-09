@@ -78,7 +78,8 @@ Some editions fit no registered scheme. Robinson-Pierpont 2018 and the World Eng
 Such an edition gets a **derived scheme**: a registered base plus a list of changes, in `DERIVED_SCHEMES` (`src/ingest/schemes.ts`). A change sets one chapter's last verse, and a derived scheme may also copy whole books from another scheme. It has its own lowercase id, so its addresses never claim the base's numbering. `kjv` is the first derived scheme (`eng` plus two changes), and it stays hand-built.
 
 - A change that matches the base fails the load, so every listed change is a real difference.
-- TVTMS maps a derived scheme the same way as the others, by running its tests against the derived counts (ADR-0006). There is no `.vrs` witness, so the witness diff covers Paratext schemes only.
+- TVTMS maps a derived scheme the same way as the others, by running its tests against the derived counts (ADR-0006). Where TVTMS decides nothing, a chapter the scheme leaves unchanged takes its base's `.vrs` rows (`derivedVrsPivotRows` in `pivot.ts`). Those rows are a copy, not a second witness, so the witness diff covers Paratext schemes only.
+- Open: 105 verses in changed chapters map nowhere (Brenton 102, WEB 3), because the TVTMS tests that decide them need the edition's text. `tvtms.test.ts` pins the count.
 - Each edition's text is checked against its scheme (`schemes.test.ts`). A verse the edition lacks in the middle of a chapter stays in the scheme and only warns, as for BSB.
 - Seeded: `rp` (`kjv`, Romans 14 to 26 and 16 to 24), `web` (`rp` plus `eng`'s deuterocanon, 13 changes) and `brenton` (`lxx`, 30 changes).
 

@@ -25,7 +25,8 @@ the `.vrs` files disagree.
   versified-`\d` grammar-gap preprocess).
 - Books, canons and English names live in `src/model/books.ts` and `src/model/canon.ts`; `write-db.ts` seeds them.
 - `schemes.ts`: the scheme registry, `kjv` plus six Paratext schemes from
-  `vrs/libpalaso/` (MIT, pinned by commit and sha256).
+  `vrs/libpalaso/` (MIT, pinned by commit and sha256), plus the derived
+  schemes `rp`, `web` and `brenton` (a base and listed changes, ADR-0002).
 - `vrs.ts`: the Paratext `.vrs` parser (counts, excluded verses, segments,
   mappings, `#!` lines), read the way libpalaso reads them.
 - `pivot.ts`: the extend-only pivot (`fixtures/pivot.json` is the previous
@@ -36,6 +37,8 @@ the `.vrs` files disagree.
 - `edition.ts` — deterministic `translation.edition` stamp (ADR-0005): sha256
   over the source text, immune to zip repackaging.
 - `sources.ts` / `download.ts`: pinned upstream zips and TVTMS, with checksums.
+  Each source lists the books it must have and any counted `textFixes`
+  (`text-fixes.ts`).
   A checksum mismatch stops the download. Updating a text pin is a new edition;
   updating the TVTMS pin changes mapping rows (see CLAUDE.md).
 - `write-db.ts` / `run.ts` — Drizzle(better-sqlite3) writer + CLI with
