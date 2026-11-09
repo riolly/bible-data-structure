@@ -156,6 +156,17 @@ export const SOURCES: readonly SourceDef[] = [
       ...sectionBookCodes(PROTESTANT, 'nt'),
     ],
     rewriteVersifiedD: false,
+    textFixes: [
+      {
+        // tree-sitter-usfm3 rejects a \+w with attributes inside \qs, and the
+        // lenient retry then drops the word (PSA, HAB 3:3). The unwrap keeps
+        // the text; normalize.ts drops strong attributes anyway.
+        find: '\\qs \\+w Selah|strong="H5542"\\+w*.\\qs*',
+        replace: '\\qs Selah.\\qs*',
+        count: 17,
+        why: 'grammar gap: nested \\+w inside \\qs',
+      },
+    ],
   },
   {
     meta: {
@@ -179,7 +190,7 @@ export const SOURCES: readonly SourceDef[] = [
       'JON', 'MIC', 'NAM', 'HAB', 'ZEP', 'HAG', 'ZEC', 'MAL', 'TOB', 'JDT', 'ESG', 'WIS', 'SIR', 'BAR',
       'LJE', 'SUS', 'BEL', '1MA', '2MA', '1ES', 'MAN', '3MA', '4MA', 'DAG',
     ],
-    rewriteVersifiedD: false,
+    rewriteVersifiedD: true, // 150 Psalm titles are \d holding \v 1, as lxx numbers them (parse.ts)
   },
 ];
 

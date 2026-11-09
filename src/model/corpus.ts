@@ -39,6 +39,10 @@ export type BlockRole =
   | 'embedded_opening' // \pmo (BSB narrative-frame lines)
   | 'centered' // \pc (inscriptions)
   | 'refrain' // \qr (poetry; right-aligned refrain)
+  | 'speaker' // \sp (heading; Song of Songs speakers in WEB)
+  | 'margin_indented' // \mi (indented, flush left: letters in WEB Ezra)
+  | 'intro' // \ip, \ipi, \im (prose before \c 1: Sirach's prologue, ebible's book notes)
+  | 'intro_heading' // \is (heading before \c 1)
   | 'implicit'; // guard: text seen with no block marker
 
 /** One literary unit — a prose paragraph, a poetry line, or a heading. */

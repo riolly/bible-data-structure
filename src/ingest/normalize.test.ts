@@ -197,6 +197,41 @@ describe('block overlays: genre, registered role vocabulary, indent', () => {
   });
 });
 
+describe('roles added for WEB and Brenton (step 3)', () => {
+  const para = (marker: string, text: string) => ({ type: 'para', marker, content: [text] });
+  const doc: UsjDoc = {
+    type: 'USJ',
+    version: '3.1',
+    content: [
+      { type: 'book', marker: 'id', code: 'SIR' },
+      para('mt1', 'Sirach'),
+      para('is1', 'The Prologue'),
+      para('ip', 'WHEREAS many and great things'),
+      { type: 'chapter', marker: 'c', number: '1' },
+      para('cp', '151'),
+      para('sp', 'Beloved'),
+      { type: 'para', marker: 'mi', content: [{ type: 'verse', marker: 'v', number: '1' }, 'To King Artaxerxes'] },
+    ],
+  };
+  const { blocks, tokens, stats } = normalizeUsj(doc);
+
+  it('maps \\is, \\ip, \\sp and \\mi to registered roles and drops \\cp as metadata', () => {
+    expect(blocks.map((b) => [b.chapter, b.genre, b.role])).toEqual([
+      [0, 'heading', 'book_title'],
+      [0, 'heading', 'intro_heading'],
+      [0, 'prose', 'intro'],
+      [1, 'heading', 'speaker'],
+      [1, 'prose', 'margin_indented'],
+    ]);
+    expect(stats.droppedParas).toEqual({ cp: 1 });
+  });
+
+  it('gives intro and speaker text no verse', () => {
+    expect(tokens.filter((t) => t.text === 'WHEREAS' || t.text === 'Beloved').map((t) => t.verse)).toEqual([null, null]);
+    expect(tokens.find((t) => t.text === 'Artaxerxes')!.verse).toBe(1);
+  });
+});
+
 describe('stats bag — what Phase 1 deliberately does NOT model fails loudly, not silently', () => {
   it('counts dropped/unwrapped content exactly', () => {
     expect(stats).toEqual({

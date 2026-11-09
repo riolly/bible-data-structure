@@ -82,7 +82,7 @@ interface BlockShape {
 }
 
 /** Para markers whose text is metadata, not scripture — dropped wholesale. */
-const METADATA_PARAS = new Set(['h', 'toc1', 'toc2', 'toc3', 'cl', 'rem', 'sts', 'ide', 'usfm']);
+const METADATA_PARAS = new Set(['h', 'toc1', 'toc2', 'toc3', 'cl', 'cp', 'rem', 'sts', 'ide', 'usfm']);
 
 function paraShape(marker: string): BlockShape | null {
   // heading branch
@@ -105,6 +105,10 @@ function paraShape(marker: string): BlockShape | null {
   if (/^li\d?$/.test(marker)) return { genre: 'prose', role: 'list_item', indent: 0 };
   if (marker === 'pmo') return { genre: 'prose', role: 'embedded_opening', indent: 0 };
   if (marker === 'pc') return { genre: 'prose', role: 'centered', indent: 0 };
+  if (marker === 'mi') return { genre: 'prose', role: 'margin_indented', indent: 0 };
+  if (marker === 'sp') return { genre: 'heading', role: 'speaker', indent: 0 };
+  if (/^(ip|ipi|im)$/.test(marker)) return { genre: 'prose', role: 'intro', indent: 0 };
+  if (/^is\d?$/.test(marker)) return { genre: 'heading', role: 'intro_heading', indent: 0 };
   return null;
 }
 
