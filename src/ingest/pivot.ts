@@ -10,7 +10,8 @@
  *
  * `.vrs` mapping lines read `scheme = org`. A scheme's rows to the pivot are
  * composed as scheme → org (its own lines, then org.vrs's own lines) → eng (eng.vrs read backwards) →
- * pivot (ENG_TO_PIVOT). A book eng lacks goes from org straight to the pivot.
+ * pivot (ENG_TO_PIVOT, or TVTMS's eng rows when given). A book eng lacks goes
+ * from org straight to the pivot.
  * org is only a step in Paratext's own data here, never the pivot.
  */
 
@@ -106,7 +107,11 @@ function relation(id: string): Relation {
  * read: `renumber` (one to one), `split` (one to several), `merge` (several to
  * one), or `absent` (no counterpart).
  */
-export function vrsPivotRows(schemeId: string, schemes: ReadonlyMap<string, Scheme>): MappingRow[] {
+export function vrsPivotRows(
+  schemeId: string,
+  schemes: ReadonlyMap<string, Scheme>,
+  engToPivotRows: readonly { from: Ref; to: Ref | null }[] = ENG_TO_PIVOT,
+): MappingRow[] {
   const scheme = schemes.get(schemeId)!;
   const eng = schemes.get('eng')!;
   const own = vrsMappings(schemeId);
@@ -114,7 +119,7 @@ export function vrsPivotRows(schemeId: string, schemes: ReadonlyMap<string, Sche
   const engToOrg = relation('eng');
   // org.vrs maps org's own S3Y onto DAG; Paratext applies it inside the standard.
   const inOrg = relation('org');
-  const engToPivot = new Relation(ENG_TO_PIVOT);
+  const engToPivot = new Relation(engToPivotRows);
   const engHas = (r: Ref) => refExists(eng, r);
 
   const targetsOf = new Map<string, Ref[]>();
@@ -155,9 +160,17 @@ export function vrsPivotRows(schemeId: string, schemes: ReadonlyMap<string, Sche
   return rows;
 }
 
-/** Rows for every Paratext scheme. `kjv` is the pivot's own numbering and needs none. */
-export function allVrsPivotRows(schemes: ReadonlyMap<string, Scheme>): MappingRow[] {
-  return PARATEXT_SCHEMES.flatMap((s) => vrsPivotRows(s.id, schemes));
+/**
+ * Rows for every Paratext scheme. `kjv` is the pivot's own numbering and needs
+ * none. `engToPivotRows` is how eng reaches the pivot: ENG_TO_PIVOT by default,
+ * or TVTMS's eng rows once compiled (tvtms.ts `engToPivotRows`), so both
+ * witnesses give pivot ids the same meaning.
+ */
+export function allVrsPivotRows(
+  schemes: ReadonlyMap<string, Scheme>,
+  engToPivotRows: readonly { from: Ref; to: Ref | null }[] = ENG_TO_PIVOT,
+): MappingRow[] {
+  return PARATEXT_SCHEMES.flatMap((s) => vrsPivotRows(s.id, schemes, engToPivotRows));
 }
 
 /** The pivot as committed in fixtures/pivot.json: the previous build. */
@@ -200,4 +213,13 @@ export function checkExtendOnly(prev: PivotSnapshot, next: PivotSnapshot): strin
   const titles = new Set(next.titles);
   for (const t of prev.titles) if (!titles.has(t)) out.push(`title ${t} removed`);
   return out;
+}
+
+/** The snapshot as written to fixtures/pivot.json: one book or segment list per line. */
+export function formatPivotSnapshot(s: PivotSnapshot): string {
+  const lines = (o: Record<string, unknown>) =>
+    Object.entries(o)
+      .map(([k, v]) => `    ${JSON.stringify(k)}: ${JSON.stringify(v)}`)
+      .join(',\n');
+  return `{\n  "books": {\n${lines(s.books)}\n  },\n  "segments": {\n${lines(s.segments)}\n  },\n  "titles": ${JSON.stringify(s.titles)}\n}\n`;
 }

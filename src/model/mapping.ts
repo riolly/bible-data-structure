@@ -34,6 +34,8 @@ export interface MappingRow {
   readonly to: Ref | null;
   /** How the verse moves: a TVTMS action, or how a `.vrs` line read. */
   readonly kind: string;
+  /** Which witness the row came from (ADR-0006): `tvtms` or `vrs`. */
+  readonly source?: 'tvtms' | 'vrs';
 }
 
 export const refKey = (r: Ref): string => `${r.book} ${r.chapter}:${r.verse}${r.segment}`;

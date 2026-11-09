@@ -55,7 +55,7 @@ A lettered part of a verse (`13:1a`), used where schemes split a verse different
 A synthetic scheme that only grows, which all scheme mappings go through. Its id is `pivot`. Stored addresses never use it. (ADR-0006)
 
 **Scheme mapping**:
-Data that moves a verse address from one scheme to the pivot and back, including partial verses, merges, cross-book moves and verses absent in one scheme. Compiled from STEPBible TVTMS, checked against Paratext `.vrs`. (ADR-0006) *(Today compiled from the Paratext `.vrs` files only.)*
+Data that moves a verse address from one scheme to the pivot and back, including partial verses, merges, cross-book moves and verses absent in one scheme. Compiled from STEPBible TVTMS, checked against Paratext `.vrs`. Where TVTMS can't decide a verse from the scheme's verse counts, the `.vrs` row fills in, tagged with its source. (ADR-0006) *(TVTMS tests that need an edition's text are not evaluated yet.)*
 
 **Word address**:
 A verse address plus a **word index**: the 0-based ordinal of a word Token in that verse, punctuation excluded. In address strings the word number counts from 1 (`MAT 2:1!3/kjv` is index 2). A punctuation Token is addressed by the word it follows. Valid only for one edition, since editions differ in words. Its meaning depends on the tokenizer policy (ADR-0004).

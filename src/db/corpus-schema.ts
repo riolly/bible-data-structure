@@ -211,6 +211,19 @@ export const token = sqliteTable(
   ],
 );
 
+/**
+ * Where mapping rows came from, with the attribution and note of changes the
+ * source's licence asks for (TVTMS is CC BY 4.0, ADR-0006).
+ */
+export const mappingSource = sqliteTable('mapping_source', {
+  id: text('id').primaryKey(),
+  url: text('url').notNull(),
+  sha256: text('sha256'),
+  license: text('license').notNull(),
+  attribution: text('attribution').notNull(),
+  changes: text('changes').notNull(),
+});
+
 /** The segments a verse is divided into, in order (`''` = the unmarked first part). */
 export const schemeSegment = sqliteTable(
   'scheme_segment',
@@ -267,8 +280,10 @@ export const schemeMapping = sqliteTable(
     pivotSegment: text('pivot_segment'),
     /** TVTMS action, or how a `.vrs` line read. */
     kind: text('kind').notNull(),
-    /** Where the row came from: `tvtms` or `vrs`. */
-    source: text('source').notNull(),
+    /** Where the row came from: `tvtms` or `vrs` (see mapping_source). */
+    source: text('source')
+      .notNull()
+      .references(() => mappingSource.id),
   },
   (t) => [
     index('mapping_from').on(t.scheme, t.book, t.chapter, t.verse),

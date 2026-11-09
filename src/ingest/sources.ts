@@ -58,3 +58,20 @@ export const SOURCES: readonly SourceDef[] = [
     rewriteVersifiedD: true, // BSB Zech 12 versified \d (grammar gap, parse.ts)
   },
 ];
+
+/**
+ * STEPBible TVTMS, the primary scheme-mapping data (ADR-0006). CC BY 4.0 by
+ * Tyndale House and STEPBible.org. STEPBible asks that the raw file not be
+ * re-posted, so it is pinned here and downloaded to sources/tvtms/, never
+ * committed. Updating the pin can change mapping rows; diff before and after.
+ */
+export const TVTMS = {
+  url:
+    'https://raw.githubusercontent.com/STEPBible/STEPBible-Data/5de0a47f35f0fc13dfe1430d104e5db8a4285f9c/Versification/' +
+    'TVTMS%20-%20Translators%20Versification%20Traditions%20with%20Methodology%20for%20Standardisation%20for%20Eng%2BHeb%2BLat%2BGrk%2BOthers%20-%20STEPBible.org%20CC%20BY.txt',
+  sha256: 'c42cdfec1ae82d3e0c7e2f6a89d73bbed28ede4cf3fe18d5582626881e8d5c78',
+  /** Under src/ingest/sources/. */
+  file: 'tvtms/tvtms.txt',
+  attribution:
+    'Versification mappings from TVTMS by Tyndale House and STEPBible.org (CC BY 4.0), https://STEPBible.github.io/STEPBible-Data',
+} as const;

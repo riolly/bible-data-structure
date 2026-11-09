@@ -207,6 +207,7 @@ export function readMappings(db: SyncSqliteDb): MappingRow[] {
           ? null
           : { book: r.pivotBook, chapter: r.pivotChapter!, verse: r.pivotVerse!, segment: r.pivotSegment ?? '' },
       kind: r.kind,
+      source: r.source === 'tvtms' ? 'tvtms' : 'vrs',
     }));
 }
 

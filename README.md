@@ -7,12 +7,14 @@ Started 2026-11-09 from the research in [bible-codex](https://github.com/riolly/
 ## Plan
 
 1. **Extract** the research from bible-codex. Done.
-2. **Model the Bible itself.** Research each topic in [research/](research/README.md) from primary sources and fold the findings into CONTEXT.md, ADRs and the code. Versification and canons are researched and decided (ADR-0002, ADR-0006). Next is the code that implements them, in this order, test first:
-   1. An address module: parse and format `PSA 51:3/org`, `REV 13:1a/kjv`, `GEN 1:1-31/kjv` and `MAT 2:1!3/kjv` (1-based word numbers in strings, 0-based in storage). Round-trip tests.
-   2. Book and canon tables keyed by USFM code (`book`, `canon`, `canon_section`, `canon_entry`, `canon_entry_book`, `book_name`), with the Protestant canon and English names seeded from the USFM spec. Remove `book.slug`, `testament` and `position`, and `src/ingest/books.ts` slugs.
-   3. A scheme registry seeded with `kjv` and the six Paratext schemes, with verse-count tables from the libpalaso `.vrs` files (MIT, pinned by commit). A test that KJV and BSB ingest under `kjv`.
-   4. A full `.vrs` parser (segments, cross-book lines, `#!` lines) and mapping rows to a pivot, replacing `versification_map` and the bijection check. Replace `divergent.vrs` with the real cases listed in ADR-0006.
-   5. TVTMS compiled to per-scheme mapping tables, pinned by URL and checksum, diffed against the `.vrs` mappings.
+2. **Model the Bible itself.** Research each topic in [research/](research/README.md) from primary sources and fold the findings into CONTEXT.md, ADRs and the code. Versification and canons are researched and decided (ADR-0002, ADR-0006), and their code is built:
+   1. Address module, `src/model/address.ts`: parses and formats `PSA 51:3/org`, `REV 13:1a/kjv`, `GEN 1:1-31/kjv` and `MAT 2:1!3/kjv`, with 1-based word numbers in strings and 0-based in storage. Done.
+   2. Books keyed by USFM code and canons as rows (`book`, `canon`, `canon_section`, `canon_entry`, `canon_entry_book`, `book_name`), seeded with the USFM spec's 101 books, their English names and the protestant canon. `book.slug`, `testament`, `position` and `src/ingest/books.ts` are gone. Done.
+   3. Scheme registry, `src/ingest/schemes.ts`: `kjv` plus the six Paratext schemes, with verse counts from libpalaso's `.vrs` files (MIT, committed at commit `f1f70e9` and checked by sha256). KJV and BSB ingest under `kjv`, and ingest rejects verses a scheme lacks. Done.
+   4. Full `.vrs` parser and `scheme_mapping` rows to an extend-only `pivot` scheme, with a coverage check in place of the bijection check. `versification_map` and `divergent.vrs` are gone; `fixtures/real-cases.vrs` holds real lines for the ADR-0006 cases. Done.
+   5. TVTMS compiled per scheme, pinned by URL and sha256 and downloaded, never committed. TVTMS rows are stored where TVTMS decides from verse counts, `.vrs` rows elsewhere, and `build/mapping-diff.tsv` lists where they disagree. Done.
+
+   Left open by this step: TVTMS tests that need an edition's text (word counts, `TextBeforeV1`) are not evaluated, so those verses use the `.vrs` rows; the libpalaso `ESG` lines that name verses their own counts lack are reported, not fixed (`src/ingest/pivot.test.ts`).
 3. **Test against texts that disagree.** Import KJV, BSB, a Bible with deuterocanonical books, OSHB Hebrew, a Greek New Testament and, if licensable, the Septuagint. Make the trouble-spot fixtures in research/README.md pass.
 4. **Design app projections.** Write the contract any Bible app needs (render a chapter, resolve "Ps 23", map a verse to another edition, anchor a user's mark, search), then compile the model into per-app packs and measure size and speed. Content changes become rebuilds. Only app user data needs migrations.
 
@@ -28,7 +30,7 @@ Started 2026-11-09 from the research in [bible-codex](https://github.com/riolly/
 | Edition stamp and quote witness (old ADR-0013) | ADR-0005 | Keep |
 | Headings not addressable | ADR-0001 | Revisit in structure research |
 | Textual variants (not modeled) | research/README.md | New topic |
-| Ingest pipeline, tokenizer, `.vrs` parser, fixtures | `src/ingest/` | Keep, 54 tests pass |
+| Ingest pipeline, tokenizer, `.vrs` parser, fixtures | `src/ingest/` | Keep. The `.vrs` parser was rewritten for the full format (step 2.4), `divergent.vrs` replaced |
 | Corpus schema and reader | `src/db/` | Keep. `listBooks` became `canonBooks`, which reads order and names from the canon tables |
 | Interlinear sourcing (old issue #2) | research/interlinear-corpus-sourcing.md | Keep, open |
 | Licensing notes (an old agent memory) | research/README.md | Lost, needs redoing |

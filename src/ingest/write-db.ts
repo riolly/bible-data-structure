@@ -15,6 +15,7 @@ import { BOOKS, ENGLISH_NAMES } from '../model/books';
 import { CANONS } from '../model/canon';
 import type { Block, Token } from '../model/corpus';
 import { PIVOT, type MappingRow } from '../model/mapping';
+import { TVTMS } from './sources';
 import type { Scheme } from '../model/scheme';
 import * as schema from '../db/corpus-schema';
 
@@ -124,6 +125,14 @@ CREATE TABLE token (
 );
 CREATE INDEX token_render ON token (translation_id, book, chapter, verse, seq);
 CREATE INDEX token_anchor ON token (translation_id, book, chapter, verse, word_index);
+CREATE TABLE mapping_source (
+  id TEXT PRIMARY KEY,
+  url TEXT NOT NULL,
+  sha256 TEXT,
+  license TEXT NOT NULL,
+  attribution TEXT NOT NULL,
+  changes TEXT NOT NULL
+);
 CREATE TABLE scheme_segment (
   scheme TEXT NOT NULL REFERENCES scheme(id),
   book TEXT NOT NULL REFERENCES book(code),
@@ -150,7 +159,7 @@ CREATE TABLE scheme_mapping (
   pivot_verse INTEGER,
   pivot_segment TEXT,
   kind TEXT NOT NULL,
-  source TEXT NOT NULL
+  source TEXT NOT NULL REFERENCES mapping_source(id)
 );
 CREATE INDEX mapping_from ON scheme_mapping (scheme, book, chapter, verse);
 CREATE INDEX mapping_to ON scheme_mapping (scheme, pivot_book, pivot_chapter, pivot_verse);
@@ -311,8 +320,38 @@ export function insertBookRows(
   }
 }
 
+/** The two mapping witnesses (ADR-0006), with attribution and a note of changes. */
+export const MAPPING_SOURCES = [
+  {
+    id: 'tvtms',
+    url: TVTMS.url,
+    sha256: TVTMS.sha256,
+    license: 'CC BY 4.0',
+    attribution: TVTMS.attribution,
+    changes:
+      'Compiled per scheme: each row kept when its =Exist, =NotExist and =Last tests hold for the scheme\'s ' +
+      'verse counts; rows that also need word-count or TextBeforeV1 tests, or that disagree for one verse, ' +
+      'are left out; Ade rows (no USFM code) are skipped; 4Es is read as 2ES; a test without a book uses ' +
+      'the row\'s source book; identity rows are dropped.',
+  },
+  {
+    id: 'vrs',
+    url: 'https://github.com/sillsdev/libpalaso/tree/f1f70e93a79d55b1769a4e20fb36047f2fa08d99/SIL.Scripture/Resources',
+    sha256: null,
+    license: 'MIT',
+    attribution: 'Versification files from libpalaso, Copyright (c) 2007-2014 SIL International (MIT)',
+    changes:
+      'Mapping lines (scheme = org) composed to the pivot through org.vrs, eng.vrs read backwards and ' +
+      'TVTMS\'s eng rows; used only for verses TVTMS cannot decide from verse counts.',
+  },
+] as const;
+
+export function insertMappingSources(db: CorpusDb): void {
+  db.insert(schema.mappingSource).values([...MAPPING_SOURCES]).run();
+}
+
 /** Write mapping rows to the pivot (ADR-0006), tagged with where they came from. */
-export function insertMappings(db: CorpusDb, rows: readonly MappingRow[], source: 'tvtms' | 'vrs'): void {
+export function insertMappings(db: CorpusDb, rows: readonly MappingRow[], source: 'tvtms' | 'vrs' = 'vrs'): void {
   const values = rows.map((r) => ({
     scheme: r.scheme,
     book: r.from.book,
@@ -324,7 +363,7 @@ export function insertMappings(db: CorpusDb, rows: readonly MappingRow[], source
     pivotVerse: r.to?.verse ?? null,
     pivotSegment: r.to?.segment ?? null,
     kind: r.kind,
-    source,
+    source: r.source ?? source,
   }));
   // A prepared statement: drizzle's builder takes seconds for tens of thousands of rows.
   const sqlite = (db as unknown as { $client: Database.Database }).$client;

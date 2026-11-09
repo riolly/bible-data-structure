@@ -1,8 +1,9 @@
 /**
- * Build-time corpus ingest (issue #6, ADR-0001): USFM → bundled SQLite.
+ * Build-time corpus ingest (ADR-0001, ADR-0002, ADR-0006): USFM, the scheme
+ * registry and TVTMS → SQLite.
  *
- *   pnpm ingest:download   # once: fetch + verify pinned sources
- *   pnpm ingest            # sources → build/corpus.db
+ *   bun run ingest:download   # once: fetch + verify pinned sources and TVTMS
+ *   bun run ingest            # → build/corpus.db, build/mapping-diff.tsv, build/pivot.json
  *
  * Translation-agnostic: every SOURCES entry runs through the same
  * parse (usfm-grammar → USJ) → normalize → write pipeline. The output
@@ -10,7 +11,7 @@
  * an asset; run this before a native/dev build that renders scripture.
  */
 
-import { readdirSync, readFileSync, mkdirSync, rmSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import type { IngestStats } from './normalize';
@@ -22,11 +23,13 @@ import { computeEdition, type SourceFile } from './edition';
 import { normalizeUsj } from './normalize';
 import { usfmToUsj, usjBookCode } from './parse';
 import { SOURCES } from './sources';
-import { allVrsPivotRows, buildPivot } from './pivot';
+import { checkExtendOnly, formatPivotSnapshot, pivotSnapshot, type PivotSnapshot } from './pivot';
+import { TVTMS_PATH, compileMappings, readTvtms, type TvtmsRow } from './tvtms';
 import {
   createCorpusDb,
   insertBookRows,
   insertTranslation,
+  insertMappingSources,
   insertMappings,
   seedBooksAndCanons,
   seedSchemes,
@@ -35,6 +38,7 @@ import {
 const SOURCES_ROOT = join(import.meta.dirname, 'sources');
 const OUT_DIR = join(import.meta.dirname, '..', '..', 'build');
 const OUT_PATH = join(OUT_DIR, 'corpus.db');
+const PIVOT_SNAPSHOT = join(import.meta.dirname, 'fixtures', 'pivot.json');
 
 /** The books every bundled edition must have, in canon order. */
 const EXPECTED_BOOKS = canonBookCodes(PROTESTANT);
@@ -70,15 +74,26 @@ function main() {
   const { db, sqlite } = createCorpusDb(OUT_PATH);
   seedBooksAndCanons(db);
   const schemes = loadSchemes();
-  const pivot = buildPivot(schemes);
+  const { pivot, rows: mappingRows, perScheme, diff } = compileMappings(schemes, readTvtmsOrExplain());
+  checkPivotGrowth(pivot);
   seedSchemes(db, new Map(schemes).set(PIVOT, pivot));
-  const mappingRows = allVrsPivotRows(schemes);
-  insertMappings(db, mappingRows, 'vrs');
-  console.log(`schemes: ${[...schemes.keys()].join(', ')} + ${PIVOT}; ${mappingRows.length} mapping rows`);
+  insertMappingSources(db);
+  insertMappings(db, mappingRows);
+  console.log(`schemes: ${[...schemes.keys()].join(', ')} + ${PIVOT}`);
   for (const s of schemes.values()) {
+    const c = perScheme.get(s.id)!;
+    const own = mappingRows.filter((r) => r.scheme === s.id);
+    const fromVrs = own.filter((r) => r.source === 'vrs').length;
+    console.log(
+      `  ${s.id}: ${own.length - fromVrs} TVTMS rows, ${fromVrs} .vrs rows; ${c.needsText.length} TVTMS rows need text; ` +
+        `${diff.get(s.id)!.length} verses where the witnesses disagree`,
+    );
     const problems = checkCoverage(s, pivot, mappingRows);
     if (problems.length > 0) console.warn(`  ⚠ ${s.id}: ${problems.length} verse(s) map outside the pivot: ${problems.slice(0, 3).join('; ')}`);
   }
+  const diffPath = join(OUT_DIR, 'mapping-diff.tsv');
+  writeFileSync(diffPath, [...diff].flatMap(([id, lines]) => lines.map((l) => `${id}\t${l}`)).join('\n') + '\n');
+  console.log(`  witness diff → ${diffPath}`);
 
   for (const src of SOURCES) {
     const scheme = schemes.get(src.meta.scheme);
@@ -131,6 +146,24 @@ function main() {
   sqlite.exec('VACUUM; ANALYZE;');
   sqlite.close();
   console.log(`\n✓ wrote ${OUT_PATH}`);
+}
+
+function readTvtmsOrExplain(): TvtmsRow[] {
+  if (!existsSync(TVTMS_PATH)) throw new Error(`${TVTMS_PATH} is missing: run \`bun run ingest:download\` first`);
+  return readTvtms();
+}
+
+/**
+ * ADR-0006: the pivot only grows. Compare with the committed previous build
+ * (fixtures/pivot.json) and stop on any removal. The new pivot is written to
+ * build/pivot.json; copy it over the fixture to accept growth.
+ */
+function checkPivotGrowth(pivot: Scheme) {
+  const next = pivotSnapshot(pivot);
+  writeFileSync(join(OUT_DIR, 'pivot.json'), formatPivotSnapshot(next));
+  const prev = JSON.parse(readFileSync(PIVOT_SNAPSHOT, 'utf8')) as PivotSnapshot;
+  const violations = checkExtendOnly(prev, next);
+  if (violations.length > 0) throw new Error(`the pivot shrank:\n  ${violations.slice(0, 10).join('\n  ')}`);
 }
 
 /**

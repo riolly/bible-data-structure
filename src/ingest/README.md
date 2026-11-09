@@ -6,9 +6,14 @@ schema in `src/db/corpus-schema.ts`, shared by the writer here and the reader in
 `src/db/corpus-read.ts`.
 
 ```
-bun run ingest:download   # once: fetch pinned ebible.org zips, verify sha256 → sources/ (gitignored)
-bun run ingest            # sources → build/corpus.db (gitignored)
+bun run ingest:download   # once: fetch pinned ebible.org zips and TVTMS, verify sha256 → sources/ (gitignored)
+bun run ingest            # sources → build/corpus.db, build/mapping-diff.tsv, build/pivot.json (gitignored)
 ```
+
+The ingest stops if the pivot lost anything compared with `fixtures/pivot.json`
+(ADR-0006). When it only grew, copy `build/pivot.json` over the fixture to
+accept the growth. `build/mapping-diff.tsv` lists the verses where TVTMS and
+the `.vrs` files disagree.
 
 ## Layout
 
@@ -25,6 +30,9 @@ bun run ingest            # sources → build/corpus.db (gitignored)
   mappings, `#!` lines), read the way libpalaso reads them.
 - `pivot.ts` — the extend-only pivot (`fixtures/pivot.json` is the previous
   build) and the `.vrs` mappings compiled to pivot rows (ADR-0006).
+- `tvtms.ts` — STEPBible TVTMS compiled per scheme by evaluating its count
+  tests, merged with the `.vrs` rows and diffed against them. The raw file is
+  downloaded, never committed.
 - `edition.ts` — deterministic `translation.edition` stamp (ADR-0005): sha256
   over the source text, immune to zip repackaging.
 - `sources.ts` / `download.ts` — pinned upstream zips + checksums. A checksum
