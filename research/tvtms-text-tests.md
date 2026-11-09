@@ -75,4 +75,21 @@ Requiring a 20% margin between a word test's two sides leaves close tests undeci
 
 Text tests map Brenton's 5 unmapped verses in Sirach 36. Its other 97 stay unmapped (2 Esdras 14 and 19, Proverbs 24, Sirach 30), and so do WEB's 3 (Baruch 1:22, 4 Maccabees 7:24-25).
 
+## As built
+
+With the 20% margin, BSB under `bsb`, and a row decided for a scheme only when all its editions agree, from `src/ingest/fixtures/edition-text.json`. A `-` means the scheme has no `.vrs` witness.
+
+| Scheme | needsText | Stored TVTMS rows | Stored `.vrs` rows | Witness diff lines | Unmapped verses |
+|---|---|---|---|---|---|
+| `kjv` | 1,202 → 37 | 0 → 0 | 0 → 0 | - | 0 → 0 |
+| `bsb` | 1,202 → 38 | 0 → 2 | 0 → 0 | - | 0 → 0 |
+| `org` | 2,039 → 170 | 1,426 → 2,531 | 1,422 → 319 | 434 → 437 | 2 → 2 |
+| `rp` | 1,202 → 1,198 | 3 → 3 | 0 → 0 | - | 0 → 0 |
+| `web` | 1,418 → 69 | 133 → 164 | 0 → 0 | 17 → 48 | 3 → 3 |
+| `brenton` | 2,195 → 281 | 3,075 → 4,629 | 3,293 → 1,977 | 581 → 818 | 102 → 97 |
+
+`bsb`'s two TVTMS rows are the Philippians 1:16-17 swap. No edition's own results differ from its scheme's rows.
+
+A verse bridge puts all its words in its first verse (ADR-0004 rule 6), so a word test on the bridge's second verse would read 0. The pinned editions' only bridges are six in WEB's Sirach and 4 Maccabees, and no tested verse falls in one.
+
 [tvtms]: https://github.com/STEPBible/STEPBible-Data/tree/5de0a47f35f0fc13dfe1430d104e5db8a4285f9c/Versification

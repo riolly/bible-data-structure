@@ -141,8 +141,9 @@ function main() {
     console.log(`  not modelled in Phase 1 (dropped/unwrapped, counted): ${JSON.stringify(totals)}`);
   }
 
-  writeMappings(db, schemes, tvtms, texts);
+  // The snapshot first: when writeMappings stops on a conflict, it is what to look at.
   writeEditionTextSnapshot(editions, tvtms);
+  writeMappings(db, schemes, tvtms, texts);
 
   sqlite.exec('VACUUM; ANALYZE;');
   sqlite.close();
@@ -194,7 +195,7 @@ function writeEditionTextSnapshot(editions: readonly { scheme: string; text: Edi
   const json = JSON.stringify(editionTextSnapshot(editions, tvtms), null, 1) + '\n';
   const path = join(OUT_DIR, 'edition-text.json');
   writeFileSync(path, json);
-  if (json !== readFileSync(EDITION_TEXT_SNAPSHOT, 'utf8')) {
+  if (!existsSync(EDITION_TEXT_SNAPSHOT) || json !== readFileSync(EDITION_TEXT_SNAPSHOT, 'utf8')) {
     console.warn(`  ⚠ ${path} differs from ${EDITION_TEXT_SNAPSHOT}: copy it over to update the tests`);
   }
 }

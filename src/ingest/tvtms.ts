@@ -187,7 +187,11 @@ export interface EditionText {
   /** The edition's abbreviation, for messages. */
   readonly edition: string;
   readonly books: ReadonlySet<string>;
-  /** Word tokens per verse, keyed `BOOK c:v`. A verse that isn't here has 0. */
+  /**
+   * Word tokens per verse, keyed `BOOK c:v`. A verse that isn't here has 0,
+   * and so does the second verse of a bridge (ADR-0004 rule 6). No tested
+   * verse is in a bridge in the pinned editions (research/tvtms-text-tests.md).
+   */
   readonly words: ReadonlyMap<string, number>;
   /** Chapters with a psalm title before verse 1, keyed `BOOK c`. */
   readonly titled: ReadonlySet<string>;
@@ -591,6 +595,8 @@ export function compileMappings(
   tvtms: readonly TvtmsRow[],
   texts: ReadonlyMap<string, readonly EditionText[]> = new Map(),
 ): CompiledMappings {
+  // The pivot comes from eng's rows without text, so eng's stored rows must not use any.
+  if (texts.has('eng')) throw new Error('an edition under eng would make its rows differ from the pivot build (compilePivot)');
   const { seed, engRows, pivot } = compilePivot(schemes, tvtms);
   const perScheme = new Map(
     [...schemes.keys()].map((id) => [id, compileTvtms(tvtms, schemes.get(id)!, seed, texts.get(id) ?? [])]),
