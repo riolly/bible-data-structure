@@ -58,7 +58,7 @@ export interface Token {
   readonly id: number;
   readonly blockId: number;
   readonly chapter: number;
-  /** Canonical verse (av11n); null = non-verse content (headings/titles). */
+  /** Verse number under the edition's scheme; null = non-verse content (headings/titles). */
   readonly verse: number | null;
   /** Word ordinal within the verse, punct excluded; null on punct and heading tokens. */
   readonly wordIndex: number | null;

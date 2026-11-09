@@ -75,19 +75,20 @@ const native = nativeModuleLoads(
 
 describe.skipIf(!native)('divergent versification fixture — DB round-trip through versification_map', () => {
   it('writes the sparse rows and reads them back into an identical map', async () => {
-    const { createCorpusDb, insertTranslation, insertVersification, seedBooksAndCanons } = await import(
+    const { createCorpusDb, insertTranslation, insertVersification, seedBooksAndCanons, seedSchemes } = await import(
       './write-db'
     );
 
     const { db, sqlite } = createCorpusDb(':memory:');
     seedBooksAndCanons(db);
+    seedSchemes(db, (await import('./schemes')).loadSchemes());
     const translationId = insertTranslation(db, {
       name: 'Divergent Fixture',
       abbrev: 'DIV',
       language: 'hebrew',
       year: 2026,
       license: 'Public Domain',
-      versification: 'org',
+      scheme: 'org',
       edition: 'sha256:0000000000000000',
     });
 

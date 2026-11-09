@@ -13,6 +13,46 @@ import type { BlockRole } from '../model/corpus';
  * USFM book code + chapter + verse + word index, never these ids (ADR-0002).
  */
 
+/** A versification scheme from the registry (src/ingest/schemes.ts). */
+export const scheme = sqliteTable('scheme', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  sourceUrl: text('source_url').notNull(),
+  note: text('note').notNull(),
+});
+
+/** A scheme's definition: the last verse of each chapter of each book. */
+export const schemeVerseCount = sqliteTable(
+  'scheme_verse_count',
+  {
+    scheme: text('scheme')
+      .notNull()
+      .references(() => scheme.id),
+    book: text('book')
+      .notNull()
+      .references(() => book.code),
+    chapter: integer('chapter').notNull(),
+    verseCount: integer('verse_count').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.scheme, t.book, t.chapter] })],
+);
+
+/** A verse inside a chapter's count that the scheme leaves out (`.vrs` `-` lines). */
+export const schemeExcludedVerse = sqliteTable(
+  'scheme_excluded_verse',
+  {
+    scheme: text('scheme')
+      .notNull()
+      .references(() => scheme.id),
+    book: text('book')
+      .notNull()
+      .references(() => book.code),
+    chapter: integer('chapter').notNull(),
+    verse: integer('verse').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.scheme, t.book, t.chapter, t.verse] })],
+);
+
 export const translation = sqliteTable('translation', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   name: text('name').notNull(),
@@ -20,8 +60,10 @@ export const translation = sqliteTable('translation', {
   language: text('language').notNull(),
   year: integer('year'),
   license: text('license'),
-  /** e.g. "av11n"; ties to versification_map. */
-  versification: text('versification').notNull(),
+  /** The edition's native versification scheme (ADR-0002). Its verse addresses use it. */
+  scheme: text('scheme')
+    .notNull()
+    .references(() => scheme.id),
   /**
    * TEXT EDITION stamp (ADR-0005): deterministic identifier of the source text
    * this ingest was built from (sha256 over the source USFM). Markup rows
@@ -142,7 +184,7 @@ export const token = sqliteTable(
       .references(() => book.code),
     chapter: integer('chapter').notNull(),
     /**
-     * Canonical verse (av11n); NULL = non-verse content. EVERY heading token
+     * Verse number under the translation's scheme; NULL = non-verse content. EVERY heading token
      * (incl. mid-chapter \s) carries NULL — never 0, never the preceding verse.
      */
     verse: integer('verse'),

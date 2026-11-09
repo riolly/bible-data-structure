@@ -45,7 +45,7 @@ A lowercase name from our registry: `kjv`, and the Paratext names `org`, `eng`, 
 _Avoid_: av11n (that is SWORD's name for its mapping feature, not a scheme)
 
 **Verse address**:
-A book, chapter, verse and optional segment **under a named versification scheme**. Verse 0 is a Psalm title. Written as a USFM reference plus `/scheme`: `PSA 51:3/org`, `REV 13:1a/kjv`. Stored as separate columns. (ADR-0002) *(Today's code still uses one fixed scheme it calls av11n.)*
+A book, chapter, verse and optional segment **under a named versification scheme**. Verse 0 is a Psalm title. Written as a USFM reference plus `/scheme`: `PSA 51:3/org`, `REV 13:1a/kjv`. Stored as separate columns. (ADR-0002)
 _Avoid_: reference, citation (those are human-written strings that resolve to an address)
 
 **Segment**:

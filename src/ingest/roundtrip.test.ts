@@ -23,7 +23,7 @@ const native = nativeModuleLoads(
 
 describe.skipIf(!native)('corpus DB round-trip (write seam ↔ read seam)', () => {
   it('a chapter read returns the exact Token+Block rows the normalizer produced', async () => {
-    const { createCorpusDb, insertBookRows, insertTranslation, seedBooksAndCanons } = await import(
+    const { createCorpusDb, insertBookRows, insertTranslation, seedBooksAndCanons, seedSchemes } = await import(
       './write-db'
     );
     const usj = JSON.parse(
@@ -33,13 +33,14 @@ describe.skipIf(!native)('corpus DB round-trip (write seam ↔ read seam)', () =
 
     const { db, sqlite } = createCorpusDb(':memory:');
     seedBooksAndCanons(db);
+    seedSchemes(db, (await import('./schemes')).loadSchemes());
     const translationId = insertTranslation(db, {
       name: 'Fixture',
       abbrev: 'FIX',
       language: 'english',
       year: 2026,
       license: 'Public Domain',
-      versification: 'av11n',
+      scheme: 'kjv',
       edition: 'sha256:0000000000000000',
     });
     insertBookRows(db, { translationId, book: 'JHN' }, { blocks, tokens });

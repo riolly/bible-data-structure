@@ -76,3 +76,66 @@ export function parseVrs(text: string): VersificationRow[] {
   }
   return rows;
 }
+
+/** The verse-count part of a `.vrs` file: count lines and `-` excluded-verse lines. */
+export interface VrsCounts {
+  /** Book code → last verse of chapter 1, 2, ... */
+  readonly verseCounts: Map<string, number[]>;
+  /** Excluded verses as `BOOK C:V`. */
+  readonly excluded: Set<string>;
+}
+
+/**
+ * Strip a comment, keeping a Paratext 7.3+ `#!` line as a real line, the way
+ * libpalaso's Versification.ParseLine does.
+ */
+export function vrsLine(raw: string): string {
+  const line = raw.trim();
+  if (line.startsWith('#!')) return line.slice(2).trim();
+  return line.replace(/#.*$/, '').trim();
+}
+
+/**
+ * Read the lines that define a scheme, following libpalaso's
+ * ParseChapterVerseLine and ParseExcludedVerseLine:
+ *
+ *     GEN 1:31 2:25 ...   last verse per chapter; chapter numbers are explicit,
+ *                         skipped chapters get 1 verse, `END` truncates, and a
+ *                         repeated book line updates the earlier one
+ *     -GEN 31:51          a verse inside the range the scheme leaves out
+ *
+ * Mapping (`=`) and segment (`*`) lines are skipped here.
+ */
+export function parseVrsCounts(text: string): VrsCounts {
+  const verseCounts = new Map<string, number[]>();
+  const excluded = new Set<string>();
+  const lines = text.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const line = vrsLine(lines[i]);
+    if (line === '' || line.includes('=') || line.startsWith('*')) continue;
+    const ex = /^-([0-9A-Z]{3}) (\d+):(\d+)$/.exec(line);
+    if (ex) {
+      const key = `${ex[1]} ${Number(ex[2])}:${Number(ex[3])}`;
+      if (excluded.has(key)) throw new Error(`vrs: ${key} excluded twice (line ${i + 1})`);
+      excluded.add(key);
+      continue;
+    }
+    const [code, ...parts] = line.split(/\s+/);
+    if (!/^[0-9A-Z]{3}$/.test(code)) throw new Error(`vrs: unreadable line ${i + 1}: "${line}"`);
+    const counts = [...(verseCounts.get(code) ?? [])];
+    let chapter = 0;
+    for (const part of parts) {
+      if (part === 'END') {
+        counts.length = Math.min(counts.length, chapter);
+        break;
+      }
+      const m = /^(\d+):(\d+)$/.exec(part);
+      if (!m || Number(m[1]) < 1) throw new Error(`vrs: bad count "${part}" for ${code} (line ${i + 1})`);
+      chapter = Number(m[1]);
+      while (counts.length < chapter) counts.push(1);
+      counts[chapter - 1] = Number(m[2]);
+    }
+    verseCounts.set(code, counts);
+  }
+  return { verseCounts, excluded };
+}

@@ -14,12 +14,33 @@ import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
 import { BOOKS, ENGLISH_NAMES } from '../model/books';
 import { CANONS } from '../model/canon';
 import type { Block, Token } from '../model/corpus';
+import type { Scheme } from '../model/scheme';
 import * as schema from '../db/corpus-schema';
 
 export type CorpusDb = BetterSQLite3Database<typeof schema>;
 
 /** DDL mirroring src/db/corpus-schema.ts (and schema.dbml). */
 const DDL = `
+CREATE TABLE scheme (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  source_url TEXT NOT NULL,
+  note TEXT NOT NULL
+);
+CREATE TABLE scheme_verse_count (
+  scheme TEXT NOT NULL REFERENCES scheme(id),
+  book TEXT NOT NULL REFERENCES book(code),
+  chapter INTEGER NOT NULL,
+  verse_count INTEGER NOT NULL,
+  PRIMARY KEY (scheme, book, chapter)
+);
+CREATE TABLE scheme_excluded_verse (
+  scheme TEXT NOT NULL REFERENCES scheme(id),
+  book TEXT NOT NULL REFERENCES book(code),
+  chapter INTEGER NOT NULL,
+  verse INTEGER NOT NULL,
+  PRIMARY KEY (scheme, book, chapter, verse)
+);
 CREATE TABLE translation (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL,
@@ -27,7 +48,7 @@ CREATE TABLE translation (
   language TEXT NOT NULL,
   year INTEGER,
   license TEXT,
-  versification TEXT NOT NULL,
+  scheme TEXT NOT NULL REFERENCES scheme(id),
   edition TEXT NOT NULL
 );
 CREATE TABLE book (
@@ -131,7 +152,8 @@ export interface TranslationMeta {
   language: string;
   year: number | null;
   license: string | null;
-  versification: string;
+  /** Registry scheme id (ADR-0002), e.g. `kjv`. */
+  scheme: string;
   edition: string;
 }
 
@@ -183,6 +205,22 @@ export function seedBooksAndCanons(db: CorpusDb): void {
       .run();
   }
   db.insert(schema.bookName).values([...ENGLISH_NAMES]).run();
+}
+
+/** Write the scheme registry: one row per scheme plus its verse-count table. */
+export function seedSchemes(db: CorpusDb, schemes: ReadonlyMap<string, Scheme>): void {
+  for (const s of schemes.values()) {
+    db.insert(schema.scheme).values({ id: s.id, name: s.name, sourceUrl: s.sourceUrl, note: s.note }).run();
+    const counts = [...s.verseCounts].flatMap(([book, chapters]) =>
+      chapters.map((verseCount, i) => ({ scheme: s.id, book, chapter: i + 1, verseCount })),
+    );
+    for (const chunk of chunks(counts, 2000)) db.insert(schema.schemeVerseCount).values(chunk).run();
+    const excluded = [...s.excluded].map((k) => {
+      const m = /^(\S+) (\d+):(\d+)$/.exec(k)!;
+      return { scheme: s.id, book: m[1], chapter: Number(m[2]), verse: Number(m[3]) };
+    });
+    for (const chunk of chunks(excluded, 2000)) db.insert(schema.schemeExcludedVerse).values(chunk).run();
+  }
 }
 
 /** Insert one book's normalized rows; maps local block ordinals → rowids. */
