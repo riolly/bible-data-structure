@@ -187,8 +187,9 @@ export const token = sqliteTable(
       .references(() => book.code),
     chapter: integer('chapter').notNull(),
     /**
-     * Verse number under the translation's scheme; NULL = non-verse content. EVERY heading token
-     * (incl. mid-chapter \s) carries NULL — never 0, never the preceding verse.
+     * Verse number under the translation's scheme; NULL = non-verse content. A heading token
+     * (incl. mid-chapter \s) carries NULL, never the preceding verse. 0 is a Psalm title the
+     * scheme numbers as verse 0 (ADR-0001 amendment).
      */
     verse: integer('verse'),
     /** The verse's lettered part (`1KI 2:35a` in Brenton), `''` when the source letters none. */

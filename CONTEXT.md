@@ -76,7 +76,7 @@ One word or punctuation occurrence in one edition's text: the unit of storage an
 _Avoid_: word (ambiguous with Original Word)
 
 **Block**:
-A contiguous run of Tokens forming one literary unit (prose paragraph, poetry line, heading) with a genre and indent level, derived from USFM markers (`\p`, `\q#`, `\s`, `\d`). Blocks partition the token stream. Heading Tokens carry no verse and no word index. (ADR-0001)
+A contiguous run of Tokens forming one literary unit (prose paragraph, poetry line, heading) with a genre and indent level, derived from USFM markers (`\p`, `\q#`, `\s`, `\d`). Blocks partition the token stream. Heading Tokens carry no verse and no word index, except a Psalm title that the edition's scheme numbers as verse 0. (ADR-0001)
 _Avoid_: paragraph (poetry lines and headings are Blocks too)
 
 **Structure overlay** *(planned)*:

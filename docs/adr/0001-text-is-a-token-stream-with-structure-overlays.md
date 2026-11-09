@@ -17,7 +17,15 @@ The stream is produced by a build-time pipeline. usfm-grammar parses USFM/USX in
 
 - Blocks partition the stream: every Token belongs to exactly one Block, and Blocks never overlap. Overlapping literary structure (chiasm, inclusio, parallelism) needs a separate layer.
 - Whitespace is never a Token. Spacing belongs to whoever renders the text.
-- Heading Tokens carry no verse (`verse = NULL`, not 0) and no word index. A heading never inherits the preceding verse. An explicit `\v` inside a heading paragraph (a versified `\d` Psalm title) keeps its verse.
+- Heading Tokens carry no verse (`verse = NULL`, not 0) and no word index. A heading never inherits the preceding verse. An explicit `\v` inside a heading paragraph (a versified `\d` Psalm title) keeps its verse. A Psalm title the scheme numbers as verse 0 is the exception below.
 - The pipeline is plain TypeScript and is tested with golden fixtures (`src/ingest/fixtures/`). The fixtures assert the invariants above and the tokenizer rules in ADR-0004.
 - Adding an edition means running the pipeline on its USFM. The parser and normalizer don't depend on the translation.
 - Anything the normalizer doesn't model yet (footnotes, cross-references, `\w` attributes, words of Jesus) lands in an ingest stats bag instead of being silently dropped. Unknown structure throws.
+
+## Amendment: a Psalm title is verse 0 where the scheme says so (2026-11-09)
+
+ADR-0002 and the `kjv`, `bsb` and `web` schemes make `PSA 51:0/kjv` a valid address for the title, and mapping `PSA 51:1/org` lands there. Under the rule above the title's words had no verse, so the address found no text and no title word could be addressed.
+
+- An unnumbered `\d` title before a chapter's first verse gets verse 0 and word indexes when the edition's scheme lists that chapter in `scheme_title`. `normalize.ts` takes the chapters as `titleChapters`, and `run.ts` reads them from the scheme.
+- Other headings keep `verse = NULL`. So does a `\d` the scheme doesn't number, such as WEB's title of Psalm 151 (`PS2`), which no scheme gives a verse 0.
+- Verse 0 prints no verse number, so its first word has no `verseStart`.

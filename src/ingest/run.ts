@@ -13,9 +13,10 @@
 import { existsSync, readdirSync, readFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import type { Block, Token } from '../model/corpus';
 import type { IngestStats } from './normalize';
 import { PIVOT, checkCoverage } from '../model/mapping';
-import { checkVerses, type Scheme } from '../model/scheme';
+import { checkVerses, titleChapters, type Scheme } from '../model/scheme';
 import { loadSchemes } from './schemes';
 import { computeEdition, type SourceFile } from './edition';
 import { normalizeUsj } from './normalize';
@@ -139,8 +140,8 @@ async function main() {
           if (usjCode !== file.code) {
             throw new Error(`${file.code}: USJ book code mismatch ("${usjCode}")`);
           }
-          const { blocks, tokens, stats } = normalizeUsj(usj);
-          validate(file.code, blocks.length, tokens);
+          const { blocks, tokens, stats } = normalizeUsj(usj, { titleChapters: titleChapters(scheme, file.code) });
+          validate(file.code, blocks, tokens);
           warnVerseGaps(file.code, tokens);
           checkScheme(scheme, file.code, tokens);
           insertBookRows(db, { translationId, book: file.code }, { blocks, tokens });
@@ -280,7 +281,8 @@ function checkScheme(scheme: Scheme, code: string, tokens: { chapter: number; ve
 }
 
 /** Corpus invariants (CONTEXT.md) — fail the build, not the reader. */
-function validate(code: string, blockCount: number, tokens: { blockId: number; verse: number | null; wordIndex: number | null; text: string; kind: string }[]) {
+function validate(code: string, blocks: readonly Block[], tokens: readonly Token[]) {
+  const blockCount = blocks.length;
   const usedBlocks = new Set<number>();
   for (const t of tokens) {
     if (t.blockId < 0 || t.blockId >= blockCount) {
@@ -290,7 +292,9 @@ function validate(code: string, blockCount: number, tokens: { blockId: number; v
     if (/\s/.test(t.text) || t.text.length === 0) {
       throw new Error(`${code}: whitespace leaked into token text ${JSON.stringify(t.text)}`);
     }
-    if (t.verse === 0) throw new Error(`${code}: verse 0 sentinel — heading tokens must carry NULL`);
+    if (t.verse === 0 && blocks[t.blockId]?.role !== 'psalm_title') {
+      throw new Error(`${code}: verse 0 outside a psalm title — other heading tokens must carry NULL`);
+    }
     if (t.verse == null && t.wordIndex != null) {
       throw new Error(`${code}: non-verse token carries a word_index`);
     }

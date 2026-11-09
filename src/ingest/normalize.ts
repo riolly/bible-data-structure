@@ -8,7 +8,10 @@
  *
  *  - Blocks PARTITION the token stream; whitespace is never a Token.
  *  - EVERY heading token (incl. mid-chapter \s) carries verse=NULL and
- *    wordIndex=NULL — a heading never INHERITS the preceding verse. An
+ *    wordIndex=NULL — a heading never INHERITS the preceding verse. One
+ *    exception: an unnumbered \d title before a chapter's first verse is
+ *    verse 0, with word indexes, where the edition's scheme numbers that
+ *    chapter's title as verse 0 (`titleChapters`, ADR-0001 amendment). An
  *    EXPLICIT \v inside a heading para is different: some translations set
  *    real verse text as a descriptive title (BSB Zech 12: \d containing
  *    \v 1), and those tokens carry their verse — the invariant bans
@@ -128,8 +131,17 @@ const newStats = (): IngestStats => ({
   droppedInline: {},
 });
 
+export interface NormalizeOptions {
+  /**
+   * Chapters whose title the edition's scheme numbers as verse 0 (the
+   * scheme's `titles` for this book). An unnumbered \d title before the
+   * chapter's first verse becomes verse 0 there.
+   */
+  readonly titleChapters?: ReadonlySet<number>;
+}
+
 /** Normalize one book's USJ into blocks + tokens + stats. */
-export function normalizeUsj(usj: UsjDoc): NormalizeResult {
+export function normalizeUsj(usj: UsjDoc, opts: NormalizeOptions = {}): NormalizeResult {
   const blocks: Block[] = [];
   const tokens: Token[] = [];
   const stats = newStats();
@@ -316,6 +328,10 @@ export function normalizeUsj(usj: UsjDoc): NormalizeResult {
         pendingShape = shape;
         inHeading = shape.genre === 'heading';
         headingVerse = null; // a heading starts unversed — no inheritance
+        if (marker === 'd' && verse === null && opts.titleChapters?.has(chapter)) {
+          headingVerse = 0; // the scheme numbers this title as verse 0
+          wordIndexInVerse = 0;
+        }
         walkInline(node.content ?? []);
         flushText();
         cur = null;

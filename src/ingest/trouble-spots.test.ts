@@ -6,7 +6,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import type { Token } from '../model/corpus';
 import type { Mappings, Ref } from '../model/mapping';
 import { PIVOT } from '../model/mapping';
-import { checkVerses } from '../model/scheme';
+import { checkVerses, titleChapters } from '../model/scheme';
 import { nativeModuleLoads } from './native-probe';
 import { loadSchemes } from './schemes';
 import { TVTMS_PATH, compileMappings, editionTextsFromSnapshot, readTvtms, type EditionTextSnapshot } from './tvtms';
@@ -76,8 +76,8 @@ describe.skipIf(!native || !hasTvtms)('trouble spots (research/README.md)', () =
         const usfm = readFileSync(join(FIXTURES, e.dir, name), 'utf8');
         const { usj, parseErrors } = usfmToUsj(usfm);
         expect(parseErrors, `${e.dir}/${name}`).toEqual([]);
-        const { blocks, tokens } = normalizeUsj(usj);
         const book = name.slice(0, 3);
+        const { blocks, tokens } = normalizeUsj(usj, { titleChapters: titleChapters(schemes.get(e.scheme)!, book) });
         const verses = tokens.flatMap((t) => (t.verse == null ? [] : [{ chapter: t.chapter, verse: t.verse }]));
         expect(checkVerses(schemes.get(e.scheme)!, book, verses).unknown, `${e.dir}/${name}`).toEqual([]);
         w.insertBookRows(db, { translationId, book }, { blocks, tokens });
@@ -93,8 +93,11 @@ describe.skipIf(!native || !hasTvtms)('trouble spots (research/README.md)', () =
 
   const map = (from: string, to: string, r: Ref) => mappings.map(from, to, r).map(fmt);
 
-  it('Psalm titles: KJV prints the title unnumbered, WLC numbers it as verses 1-2', () => {
+  it('Psalm titles: KJV prints the title unnumbered, so it is verse 0; WLC numbers it as verses 1-2', () => {
     expect(words('KJV', 'PSA', 51, 1).slice(0, 3)).toEqual(['Have', 'mercy', 'upon']);
+    // the address a mapping lands on holds the title's words
+    expect(words('KJV', 'PSA', 51, 0).slice(0, 4)).toEqual(['To', 'the', 'chief', 'Musician']);
+    expect(verseTokens('KJV', 'PSA', 51, 0)[0].wordIndex).toBe(0);
     expect(words('WLC', 'PSA', 51, 1)).toEqual(['לַמְנַצֵּ֗חַ', 'מִזְמ֥וֹר', 'לְדָוִֽד']);
     expect(map('kjv', 'org', ref('PSA', 51, 1))).toEqual(['PSA 51:3']);
     expect(map('org', 'kjv', ref('PSA', 51, 3))).toEqual(['PSA 51:1']);

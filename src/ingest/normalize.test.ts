@@ -49,7 +49,16 @@ describe('corpus invariants (CONTEXT.md)', () => {
     }
   });
 
-  it('EVERY heading token carries verse=NULL (never 0) and wordIndex=NULL', () => {
+  it('a \\d title is verse 0 with word indexes only where the scheme numbers that chapter title (ADR-0001 amendment)', () => {
+    const titled = normalizeUsj(usj, { titleChapters: new Set([2]) }).tokens;
+    const title = titled.filter((t) => t.chapter === 2 && t.verse === 0);
+    expect(title.map(brief)).toEqual(['0:A', '1:Psalm', '2:of', '3:the', '4:fixture', 'p:.']);
+    expect(title.every((t) => !t.verseStart)).toBe(true); // a title prints no verse number
+    // chapter 1's \s1 heading stays unversed: only a \d title before verse 1 is numbered
+    expect(normalizeUsj(usj, { titleChapters: new Set([1, 2]) }).tokens.filter((t) => t.verse === 0)).toEqual(title);
+  });
+
+  it('EVERY heading token carries verse=NULL (never 0) and wordIndex=NULL without titleChapters', () => {
     const headingBlocks = blocks.filter((b) => b.genre === 'heading');
     expect(headingBlocks.length).toBe(5); // mt1, s1 ×2, d, qa
     for (const b of headingBlocks) {
