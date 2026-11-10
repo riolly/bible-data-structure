@@ -6,7 +6,7 @@
  * and updating `edition` here is a new edition (README.md Editions).
  *
  * When upstream no longer gives the pinned stamp, the download falls back to
- * our own copy, `mirrorUrl(src)`. Licensing verdicts: research/licensing.md.
+ * our own copy, `mirrorLabel(src)`. Licensing verdicts: research/licensing.md.
  */
 
 import { PROTESTANT, canonBookCodes, sectionBookCodes } from '../model/canon';
@@ -231,8 +231,12 @@ export const MIRROR = { repo: 'riolly/bible-data-structure', tag: 'sources' } as
 /** The file name of a source's copy in the mirror release. */
 export const mirrorAsset = (src: SourceDef) => `${src.dir}-${src.edition.replace('sha256:', '')}.zip`;
 
-export const mirrorUrl = (src: SourceDef) =>
-  `https://github.com/${MIRROR.repo}/releases/download/${MIRROR.tag}/${mirrorAsset(src)}`;
+/**
+ * Where the download finds a source's copy, for logs. The repo is private, so
+ * the asset's https URL fails without a login; this names the `gh` route.
+ */
+export const mirrorLabel = (src: SourceDef) =>
+  `gh release download ${MIRROR.tag} --repo ${MIRROR.repo} --pattern ${mirrorAsset(src)}`;
 
 /**
  * The OSHB pin, for the data_source row of the qere word ids it supplies

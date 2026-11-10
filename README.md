@@ -37,7 +37,7 @@ Started 2026-11-09 from the research in [bible-codex](https://github.com/riolly/
 
 Steps only a person can do:
 
-- Upload our copy of the pinned sources (step 6). After `bun run ingest:download`, run `gh release create sources --repo riolly/bible-data-structure --title "Pinned sources" --notes-file <notes> src/ingest/sources/mirror/*.zip`. The notes must carry the SBLGNT and OSHB attributions from research/licensing.md. Upload the zip of every later new edition with `gh release upload sources`.
+- Upload our copy of the pinned sources (step 6). Delete `src/ingest/sources/` and run `bun run ingest:download`, so `sources/mirror/` gets every zip (the download keeps a zip only when it unpacks a source). Then run `gh release create sources --repo riolly/bible-data-structure --title "Pinned sources" --notes-file <notes> src/ingest/sources/mirror/*.zip`. The notes must carry the SBLGNT and OSHB attributions from research/licensing.md. Upload the zip of every later new edition with `gh release upload sources`.
 - Sign up for API.Bible's Starter plan and put the key in the environment (blocks step 10).
 - Ask API.Bible in writing whether converting its JSON content to our own chapter document for display counts as a change under section 4.1 of its terms (blocks step 10).
 - Ask API.Bible in writing whether NASB and NLT may be stored whole on a device, and whether our server may cache chapters for our app.
