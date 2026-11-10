@@ -10,7 +10,7 @@ Phase: v0.0.x since 2026-11-09. Research and prototyping: no CI gates, no review
 CXXFLAGS='-std=gnu++20' bun install   # the flag is needed for tree-sitter's native build on Node 24
 bun run test                          # vitest, runs under Node
 bun run typecheck
-bun run ingest:download               # fetch pinned ebible.org zips, upstream SBLGNT, OSHB and TVTMS, verify sha256 → src/ingest/sources/
+bun run ingest:download               # fetch pinned ebible.org zips, upstream SBLGNT, OSHB and TVTMS, check edition stamps (mirror if upstream changed) → src/ingest/sources/
 bun run ingest                        # sources → build/corpus.db, mapping-diff.tsv, pivot.json (4 min; 2 min when build/usj-cache has the parses)
 ```
 
@@ -24,7 +24,7 @@ Model the Bible as it is, independent of any app. A model feature lands when a c
 - **A book's id is its USFM code** (ADR-0002). Names and slugs are display data.
 - **Outside references point at addresses or external `ow_id`s, never at row ids.** Row ids are rebuilt on every ingest.
 - **A failing tokenizer test is an address migration, not a test to update** (ADR-0004). Don't change `src/ingest/tokenize.ts` rules without an ADR amendment.
-- **Updating a text pin in `SOURCES` (`src/ingest/sources.ts`) is a new edition** (ADR-0005). Record the new edition stamp in README.md. Updating the `TVTMS` pin can change mapping rows: compare `build/mapping-diff.tsv` before and after, and the pivot check must pass.
+- **A text source is pinned by its edition stamp, and changing the pin is a new edition** (ADR-0005 amendment, step 6). A rebuilt zip that gives the pinned stamp passes. A changed stamp stops `ingest:download`. Never update `edition` in `SOURCES` (`src/ingest/sources.ts`) to make the download pass without recording the new edition in README.md and uploading its zip to the mirror release. Updating the `TVTMS` pin can change mapping rows: compare `build/mapping-diff.tsv` before and after, and the pivot check must pass.
 - **Licensing before bundling.** Check that a source can be redistributed before any output that leaves this machine includes it.
 
 ## Where things go
