@@ -16,7 +16,7 @@ bun run ingest                        # sources → build/corpus.db, mapping-dif
 
 ## Product principle
 
-Model the Bible as it is, independent of any app. If a concept only exists because one app needs it, it belongs in that app's projection, not here.
+Model the Bible as it is, independent of any app. A model feature lands when a contract call or a fixture from a target edition needs it (ADR-0008). If a concept only exists because one app needs it, it belongs in that app's projection, not here.
 
 ## Rules that are expensive to break
 
