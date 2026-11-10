@@ -87,12 +87,18 @@ The surface text of the words an outside reference points at, plus the edition s
 
 ## Text units
 
+**Chapter document**:
+The stored truth of one chapter of an edition: its USJ as usfm-grammar gives it, with the whitespace, character styles, footnotes, cross-references, stanza breaks and published verse numbers. Tokens, Blocks and verse text are derived from it. Chapter 0 is the book's front matter. Only the markers listed in ADR-0001's step 7 amendment are supported, and the ingest stops on any other. (ADR-0001 amendment)
+
+**Verse text**:
+One verse marker's surface text, derived from the chapter document, without notes. Empty when the edition prints the number with no words. A verse the edition skips has none. (ADR-0001 amendment)
+
 **Token**:
-One word or punctuation occurrence in one edition's text: the unit of storage and of word addressing. Whitespace is never a Token. A KJV Token and a BSB Token are never the same object. (ADR-0001)
+One word or punctuation occurrence in one edition's text, derived from the chapter document: the unit of word addressing. Whitespace is never a Token. A KJV Token and a BSB Token are never the same object. (ADR-0001)
 _Avoid_: word (ambiguous with Original Word)
 
 **Block**:
-A contiguous run of Tokens forming one literary unit (prose paragraph, poetry line, heading) with a genre and indent level, derived from USFM markers (`\p`, `\q#`, `\s`, `\d`). Blocks partition the token stream. Heading Tokens carry no verse and no word index, except a Psalm title that the edition's scheme numbers as verse 0. (ADR-0001)
+A contiguous run of Tokens forming one literary unit (prose paragraph, poetry line, heading). It keeps its USFM marker with the level (`p`, `q2`, `pi2`, `li2`, `s2`, `d`), and its genre (prose, poetry or heading) is derived from the marker. Blocks partition the token stream. Heading Tokens carry no verse and no word index, except a Psalm title that the edition's scheme numbers as verse 0. (ADR-0001)
 _Avoid_: paragraph (poetry lines and headings are Blocks too)
 
 **Ketiv**:
