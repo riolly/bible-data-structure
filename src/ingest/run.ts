@@ -13,12 +13,12 @@
 import { existsSync, readFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import type { Block, Token } from '../model/corpus';
+import type { Block, Token, VerseText } from '../model/corpus';
 import type { IngestStats } from './normalize';
 import { PIVOT, checkCoverage } from '../model/mapping';
-import { checkVerses, titleChapters, type Scheme } from '../model/scheme';
+import { checkVerses, hasVerse, titleChapters, type Scheme } from '../model/scheme';
 import { loadSchemes } from './schemes';
-import { normalizeUsj } from './normalize';
+import { normalizeChapters, splitChapters } from './normalize';
 import { usjBookCode, type ParseOutcome } from './parse';
 import { createParsePool, type ParsePool } from './parse-pool';
 import { SOURCES, type SourceDef } from './sources';
@@ -104,6 +104,7 @@ async function main() {
       const totals: Record<string, number> = {};
       let blockCount = 0;
       let tokenCount = 0;
+      let chapterCount = 0;
       // One transaction per edition, held open across awaits: each book is
       // written as soon as it is parsed, in book order.
       sqlite.exec('BEGIN');
@@ -125,11 +126,26 @@ async function main() {
           if (usjCode !== file.code) {
             throw new Error(`${file.code}: USJ book code mismatch ("${usjCode}")`);
           }
-          const { blocks, tokens, stats } = normalizeUsj(usj, { titleChapters: titleChapters(scheme, file.code) });
+          // The chapter documents are the stored truth; every other row is derived from them (ADR-0001 amendment).
+          const docs = splitChapters(usj);
+          let normalized;
+          try {
+            normalized = normalizeChapters(docs, {
+              titleChapters: titleChapters(scheme, file.code),
+              hasVerse: (c, v) => hasVerse(scheme, file.code, c, v),
+            });
+          } catch (e) {
+            throw new Error(`${file.code}: ${(e as Error).message}`, { cause: e });
+          }
+          const { blocks, tokens, verses, droppedVerses, stats } = normalized;
+          for (const v of droppedVerses) {
+            console.warn(`  ⚠ ${file.code} ${v.chapter}:${v.verse}: printed with no words and not in scheme ${scheme.id}, no verse text`);
+          }
           validate(file.code, blocks, tokens);
           warnVerseGaps(file.code, tokens);
-          checkScheme(scheme, file.code, tokens);
-          insertBookRows(db, { translationId, book: file.code }, { blocks, tokens });
+          // Every token's verse has a verse-text row, so the rows alone cover the check.
+          checkScheme(scheme, file.code, verses);
+          insertBookRows(db, { translationId, book: file.code }, { docs, verses, blocks, tokens });
           const bookReadings = readings.filter((r) => r.book === file.code);
           checkReadings(file.code, bookReadings, tokens);
           insertReadings(db, translationId, 'oshb', bookReadings);
@@ -138,6 +154,7 @@ async function main() {
           addStats(totals, stats);
           blockCount += blocks.length;
           tokenCount += tokens.length;
+          chapterCount += docs.length;
         }
         setWordsStamp(db, translationId, words.digest());
         sqlite.exec('COMMIT');
@@ -148,7 +165,7 @@ async function main() {
       }
       console.log(`  ${blockCount} blocks, ${tokenCount} tokens, words stamp ${words.digest()}`);
       if (readings.length > 0) console.log(`  ${readings.length} qere readings (ADR-0007)`);
-      console.log(`  not modelled in Phase 1 (dropped/unwrapped, counted): ${JSON.stringify(totals)}`);
+      console.log(`  ${chapterCount} chapter documents; counted in them: ${JSON.stringify(totals)}`);
       console.log(`  ${seconds(started)}`);
     }
   } finally {
@@ -260,9 +277,8 @@ function checkPivotGrowth(pivot: Scheme) {
  * only warns: an edition may omit verses, and a verse bridge stores only its
  * first number (ADR-0004 rule 6).
  */
-function checkScheme(scheme: Scheme, code: string, tokens: { chapter: number; verse: number | null }[]) {
-  const verses = tokens.flatMap((t) => (t.verse == null ? [] : [{ chapter: t.chapter, verse: t.verse }]));
-  const { unknown, short } = checkVerses(scheme, code, verses);
+function checkScheme(scheme: Scheme, code: string, rows: readonly { chapter: number; verse: number }[]) {
+  const { unknown, short } = checkVerses(scheme, code, rows);
   if (unknown.length > 0) {
     const list = unknown.map((v) => `${v.chapter}:${v.verse}`).join(', ');
     throw new Error(`${code}: verses not in scheme ${scheme.id}: ${list}`);
@@ -284,7 +300,7 @@ function validate(code: string, blocks: readonly Block[], tokens: readonly Token
     if (/\s/.test(t.text) || t.text.length === 0) {
       throw new Error(`${code}: whitespace leaked into token text ${JSON.stringify(t.text)}`);
     }
-    if (t.verse === 0 && blocks[t.blockId]?.role !== 'psalm_title') {
+    if (t.verse === 0 && blocks[t.blockId]?.marker !== 'd') {
       throw new Error(`${code}: verse 0 outside a psalm title — other heading tokens must carry NULL`);
     }
     if (t.verse == null && t.wordIndex != null) {

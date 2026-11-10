@@ -15,10 +15,13 @@
  * but tree-sitter-usfm3 rejects \v inside \d — even ignoreErrors crashes its
  * USJ generator. Where a source OPTS IN (sources.ts rewriteVersifiedD), the
  * construct is rewritten to `\qd \v …` (a para marker the grammar accepts),
- * and the normalizer maps \qd → heading/psalm_title, so the domain output is
- * exactly what \d meant. The rewrite count is reported to the caller. A
- * source that has NOT opted in fails loudly when the construct appears, so a
- * new translation never gets its markers silently rewritten (issue #20).
+ * and each such `qd` paragraph is renamed back to `d` in the USJ, so the
+ * stored chapter document has the source's marker (ADR-0001 amendment, plan
+ * step 7). A source with the rewrite on that also has a real `\qd` stops,
+ * since the two could not be told apart. The rewrite count is reported to the
+ * caller. A source that has NOT opted in fails loudly when the construct
+ * appears, so a new translation never gets its markers silently rewritten
+ * (issue #20).
  */
 
 import { createRequire } from 'node:module';
@@ -78,6 +81,9 @@ export function usfmToUsj(rawUsfm: string, opts: ParseOptions = {}): ParseOutcom
         `rewriteVersifiedD in sources.ts (see the grammar-gap note in parse.ts)`,
     );
   }
+  if (versifiedTitleRewrites > 0 && /\\qd\b/.test(rawUsfm)) {
+    throw new Error('the source has a real \\qd beside versified \\d titles, so the \\qd rewrite cannot be undone');
+  }
   const usfm = rawUsfm.replace(VERSIFIED_D, '\\qd $1');
   const parser = new USFMParser(usfm);
   let usj: UsjDoc;
@@ -97,7 +103,25 @@ export function usfmToUsj(rawUsfm: string, opts: ParseOptions = {}): ParseOutcom
     const detail = (usj as unknown as { error?: string }).error ?? JSON.stringify(usj).slice(0, 200);
     throw new Error(`usfm-grammar did not return a USJ document: ${detail}`);
   }
+  if (versifiedTitleRewrites > 0) {
+    const restored = restoreVersifiedD(usj);
+    if (restored !== versifiedTitleRewrites) {
+      throw new Error(`rewrote ${versifiedTitleRewrites} versified \\d title(s) but found ${restored} \\qd paragraphs to rename back`);
+    }
+  }
   return { usj, parseErrors, versifiedTitleRewrites };
+}
+
+/** Rename each top-level `qd` paragraph back to `d`; returns how many. */
+function restoreVersifiedD(usj: UsjDoc): number {
+  let n = 0;
+  usj.content.forEach((node, i) => {
+    if (typeof node !== 'string' && node.type === 'para' && node.marker === 'qd') {
+      usj.content[i] = { ...node, marker: 'd' };
+      n++;
+    }
+  });
+  return n;
 }
 
 /** The USFM book code from the \id line (USJ `book` element). */

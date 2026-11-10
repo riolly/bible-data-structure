@@ -14,7 +14,7 @@ import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
 
 import { BOOKS, ENGLISH_NAMES, USFM_SPEC_URL } from '../model/books';
 import { CANONS } from '../model/canon';
-import type { Block, Reading, Token } from '../model/corpus';
+import type { Block, ChapterDoc, Reading, Token, VerseText } from '../model/corpus';
 import { PIVOT, type MappingRow } from '../model/mapping';
 import { LIBPALASO_URL } from './schemes';
 import { OSHB, TVTMS } from './sources';
@@ -110,14 +110,29 @@ CREATE TABLE book_name (
   abbr TEXT,
   source TEXT NOT NULL REFERENCES data_source(id)
 );
+CREATE TABLE chapter_doc (
+  translation_id INTEGER NOT NULL REFERENCES translation(id),
+  book TEXT NOT NULL REFERENCES book(code),
+  chapter INTEGER NOT NULL,
+  usj TEXT NOT NULL,
+  PRIMARY KEY (translation_id, book, chapter)
+);
+CREATE TABLE verse_text (
+  translation_id INTEGER NOT NULL REFERENCES translation(id),
+  book TEXT NOT NULL REFERENCES book(code),
+  chapter INTEGER NOT NULL,
+  verse INTEGER NOT NULL,
+  segment TEXT NOT NULL DEFAULT '',
+  text TEXT NOT NULL,
+  PRIMARY KEY (translation_id, book, chapter, verse, segment)
+);
 CREATE TABLE block (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   translation_id INTEGER NOT NULL REFERENCES translation(id),
   book TEXT NOT NULL REFERENCES book(code),
   chapter INTEGER NOT NULL,
   genre TEXT NOT NULL,
-  role TEXT,
-  indent INTEGER NOT NULL DEFAULT 0,
+  marker TEXT NOT NULL,
   seq INTEGER NOT NULL
 );
 CREATE INDEX block_order ON block (translation_id, book, seq);
@@ -321,35 +336,48 @@ const TOKEN_VALUES = '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
 /** Prepared once per connection: drizzle's insert builder took about 6 s for a 51k-token book. */
 const bookStatements = new WeakMap<
   Database.Database,
-  { block: Database.Statement; token: Database.Statement; tokens: Database.Statement }
+  {
+    doc: Database.Statement;
+    verse: Database.Statement;
+    block: Database.Statement;
+    token: Database.Statement;
+    tokens: Database.Statement;
+  }
 >();
 
 /**
- * Insert one book's normalized rows; maps local block ordinals → rowids. The
- * statements follow the column order of src/db/corpus-schema.ts, and
- * roundtrip.test.ts reads the rows back through that schema.
+ * Insert one book's chapter documents and the rows derived from them; maps
+ * local block ordinals → rowids. The statements follow the column order of
+ * src/db/corpus-schema.ts, and roundtrip.test.ts reads the rows back through
+ * that schema.
  */
 export function insertBookRows(
   db: CorpusDb,
   ids: { translationId: number; book: string },
-  rows: { blocks: Block[]; tokens: Token[] },
+  rows: { docs: readonly ChapterDoc[]; verses: readonly VerseText[]; blocks: Block[]; tokens: Token[] },
 ): void {
   const sqlite = (db as unknown as { $client: Database.Database }).$client;
   let stmts = bookStatements.get(sqlite);
   if (!stmts) {
     stmts = {
+      doc: sqlite.prepare('INSERT INTO chapter_doc (translation_id, book, chapter, usj) VALUES (?, ?, ?, ?)'),
+      verse: sqlite.prepare(
+        'INSERT INTO verse_text (translation_id, book, chapter, verse, segment, text) VALUES (?, ?, ?, ?, ?, ?)',
+      ),
       block: sqlite.prepare(
-        'INSERT INTO block (translation_id, book, chapter, genre, role, indent, seq) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO block (translation_id, book, chapter, genre, marker, seq) VALUES (?, ?, ?, ?, ?, ?)',
       ),
       token: sqlite.prepare(TOKEN_INSERT + TOKEN_VALUES),
       tokens: sqlite.prepare(TOKEN_INSERT + Array(TOKENS_PER_INSERT).fill(TOKEN_VALUES).join(', ')),
     };
     bookStatements.set(sqlite, stmts);
   }
-  const { block, token, tokens } = stmts;
+  const { doc, verse, block, token, tokens } = stmts;
+  for (const d of rows.docs) doc.run(ids.translationId, ids.book, d.chapter, JSON.stringify(d.content));
+  for (const v of rows.verses) verse.run(ids.translationId, ids.book, v.chapter, v.verse, v.segment, v.text);
   const blockRowId = new Map<number, number>();
   for (const b of rows.blocks) {
-    const { lastInsertRowid } = block.run(ids.translationId, ids.book, b.chapter, b.genre, b.role, b.indent, b.seq);
+    const { lastInsertRowid } = block.run(ids.translationId, ids.book, b.chapter, b.genre, b.marker, b.seq);
     blockRowId.set(b.id, Number(lastInsertRowid));
   }
   const values = (t: Token) => {

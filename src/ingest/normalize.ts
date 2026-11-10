@@ -1,10 +1,11 @@
 /**
- * USJ → domain rows (the normalize step of ADR-0001).
+ * Chapter documents → derived rows (the normalize step of ADR-0001).
  *
- * Flattens usfm-grammar's USJ into the corpus domain shape — a Token stream
- * with Block overlays — as `Token[]` / `Block[]` of the canonical model types
- * (src/model/corpus.ts), so the golden fixtures assert against exactly what
- * the app reads. Invariants enforced here (CONTEXT.md):
+ * The stored truth of an edition is one USJ document per chapter
+ * (`splitChapters`, ADR-0001 amendment, plan step 7). `normalizeChapters`
+ * derives from those documents, and from nothing else, a Token stream with
+ * Block overlays and one verse-text row per verse marker, as the canonical
+ * model types (src/model/corpus.ts). Invariants enforced here (CONTEXT.md):
  *
  *  - Blocks PARTITION the token stream; whitespace is never a Token.
  *  - EVERY heading token (incl. mid-chapter \s) carries verse=NULL and
@@ -20,31 +21,19 @@
  *  - `word_index` counts word tokens only (punct excluded) and CONTINUES
  *    across block boundaries within a verse (poetry lines, mid-verse \p).
  *
- * Unmapped structure FAILS LOUDLY: the block-role vocabulary is a registered
- * contract (schema.dbml), so an unknown para marker throws instead of
- * guessing. Content the Phase-1 schema deliberately does NOT model
- * (footnotes, xrefs, words-of-Jesus, Selah, Strong's) is dropped but COUNTED
- * in the stats bag — fixtures assert the counts so silent drops fail tests.
+ * Only the markers listed in ADR-0001's step 7 amendment are supported, at
+ * any depth. Any other marker or node type throws, so the ingest stops
+ * instead of guessing. Note text (footnotes, cross-references) stays in the
+ * document and never becomes tokens; the stats bag counts it.
  *
  * Front matter before \c 1 (\mt book title, intro headings) lands in
  * chapter 0 — the reader fetches chapter 0 alongside chapter 1.
  */
 
-import type { Block, BlockRole, Genre, Token } from '../model/corpus';
+import type { Block, ChapterDoc, Genre, Token, UsjElement, UsjNode, VerseText } from '../model/corpus';
 import { tokenize } from './tokenize';
 
-//---- minimal USJ structural types (usfm-grammar 3.x output) ----
-
-export type UsjNode = string | UsjElement;
-
-export interface UsjElement {
-  readonly type: string;
-  readonly marker?: string;
-  readonly number?: string;
-  readonly code?: string;
-  readonly content?: UsjNode[];
-  readonly strong?: string;
-}
+export type { UsjElement, UsjNode } from '../model/corpus';
 
 export interface UsjDoc {
   readonly type: 'USJ';
@@ -52,67 +41,71 @@ export interface UsjDoc {
   readonly content: UsjNode[];
 }
 
-//---- stats: everything Phase 1 does NOT model, counted so drops are loud ----
+//---- stats: what the documents hold beyond the tokens, counted ----
 
 export interface IngestStats {
-  footnotes: number; // \f..\f* (dropped)
-  xrefs: number; // \x..\x* (dropped; feeds Phase-4 Cross-reference)
-  wordsOfJesus: number; // \wj spans (text kept, styling not modelled)
-  selah: number; // \qs spans (text kept, styling not modelled)
-  strongAttrs: number; // strong="..." attrs seen (Phase-3 ow_id seam data)
-  wWrapped: number; // \w-wrapped word occurrences (unwrapped)
+  footnotes: number; // \f notes (in the document, never tokens)
+  xrefs: number; // \x notes (in the document, never tokens)
+  wordsOfJesus: number; // \wj spans (text is tokens)
+  selah: number; // \qs spans (text is tokens)
+  strongAttrs: number; // strong="..." attributes
+  wWrapped: number; // \w-wrapped words
   preVerseWordTokens: number; // word tokens with verse=NULL (headings/titles)
-  sectionRefs: number; // \r parallel-reference lines (dropped)
-  figures: number; // \fig (dropped)
-  altVerseNumbers: number; // \va / \vp (dropped)
+  sectionRefs: number; // \r and \mr reference lines (no block)
+  altVerseNumbers: number; // \va and \vp numbers on a verse
+  altChapterNumbers: number; // \ca and \cp numbers on a chapter
   verseBridges: number; // \v 17-18 bridged verses (first number used)
-  droppedParas: Record<string, number>; // metadata para markers, text dropped
-  droppedInline: Record<string, number>; // other inline elements dropped
+  metadataParas: Record<string, number>; // \h, \toc1 … paragraphs (no block)
 }
 
 export interface NormalizeResult {
   blocks: Block[];
   tokens: Token[];
+  verses: VerseText[];
+  /** Empty verse markers outside the scheme, which got no row (`NormalizeOptions.hasVerse`). */
+  droppedVerses: { chapter: number; verse: number }[];
   stats: IngestStats;
 }
 
-//---- registered para-marker → block-shape map (schema.dbml role vocabulary) ----
+//---- the supported markers (ADR-0001 amendment, plan step 7) ----
 
-interface BlockShape {
-  genre: Genre;
-  role: BlockRole | null;
-  indent: number;
+/** Paragraphs whose text is metadata, not scripture: kept in the document, no block. */
+const METADATA_PARAS = new Set(['h', 'toc1', 'toc2', 'toc3', 'ide', 'cl']);
+/** Reference lines under a heading (`\r`, `\mr`): kept in the document, no block. */
+const REFERENCE_PARAS = new Set(['r', 'mr']);
+/** Character styles whose text is scripture surface text. usfm-grammar writes `\+w` as `w`. */
+const CHAR_STYLES = new Set(['w', 'add', 'nd', 'sc', 'wj', 'qs', 'tl', 'it', 'bk']);
+const NOTES = new Set(['f', 'x']);
+/** Markers inside a note, besides the character styles. */
+const NOTE_PARTS = new Set(['fr', 'ft', 'fq', 'fqa', 'fl', 'xo', 'xt', 'wh']);
+
+/** The genre of a block marker, or null when the marker is not supported. */
+export function blockGenre(marker: string): Genre | null {
+  if (/^(mt|ms|s|is)[1-4]?$/.test(marker) || ['d', 'qa', 'sp'].includes(marker)) return 'heading';
+  if (/^q[1-4]?$/.test(marker) || marker === 'qr') return 'poetry';
+  if (/^(pi|li)[1-4]?$/.test(marker) || ['p', 'm', 'nb', 'mi', 'pc', 'pmo', 'ip'].includes(marker)) return 'prose';
+  return null;
 }
 
-/** Para markers whose text is metadata, not scripture — dropped wholesale. */
-const METADATA_PARAS = new Set(['h', 'toc1', 'toc2', 'toc3', 'cl', 'cp', 'rem', 'sts', 'ide', 'usfm']);
+const unsupported = (what: string, marker: string | undefined) =>
+  new Error(`unsupported ${what} "\\${marker ?? '?'}": add it to the supported list in ADR-0001 and normalize.ts consciously`);
 
-function paraShape(marker: string): BlockShape | null {
-  // heading branch
-  if (/^mt\d?$/.test(marker)) return { genre: 'heading', role: 'book_title', indent: 0 };
-  if (/^ms\d?$/.test(marker)) return { genre: 'heading', role: 'major_section', indent: 0 };
-  if (/^s\d?$/.test(marker)) return { genre: 'heading', role: 'section', indent: 0 };
-  if (marker === 'd') return { genre: 'heading', role: 'psalm_title', indent: 0 };
-  // \qd: how parse.ts re-encodes a VERSIFIED \d title (grammar gap, see parse.ts)
-  if (marker === 'qd') return { genre: 'heading', role: 'psalm_title', indent: 0 };
-  if (marker === 'qa') return { genre: 'heading', role: 'acrostic', indent: 0 };
-  // poetry branch: indent = line depth (\q = \q1)
-  const q = marker.match(/^q([1-4])?$/);
-  if (q) return { genre: 'poetry', role: null, indent: q[1] ? parseInt(q[1], 10) : 1 };
-  if (marker === 'qr') return { genre: 'poetry', role: 'refrain', indent: 1 };
-  // prose branch
-  if (marker === 'p') return { genre: 'prose', role: null, indent: 0 };
-  if (marker === 'm') return { genre: 'prose', role: 'margin', indent: 0 };
-  if (marker === 'nb') return { genre: 'prose', role: 'no_break', indent: 0 };
-  if (/^pi\d?$/.test(marker)) return { genre: 'prose', role: 'indented', indent: 0 };
-  if (/^li\d?$/.test(marker)) return { genre: 'prose', role: 'list_item', indent: 0 };
-  if (marker === 'pmo') return { genre: 'prose', role: 'embedded_opening', indent: 0 };
-  if (marker === 'pc') return { genre: 'prose', role: 'centered', indent: 0 };
-  if (marker === 'mi') return { genre: 'prose', role: 'margin_indented', indent: 0 };
-  if (marker === 'sp') return { genre: 'heading', role: 'speaker', indent: 0 };
-  if (/^(ip|ipi|im)$/.test(marker)) return { genre: 'prose', role: 'intro', indent: 0 };
-  if (/^is\d?$/.test(marker)) return { genre: 'heading', role: 'intro_heading', indent: 0 };
-  return null;
+/**
+ * Split a book's USJ into one document per chapter. Chapter 0 is everything
+ * before the first `\c`. The nodes are not copied or changed.
+ */
+export function splitChapters(usj: UsjDoc): ChapterDoc[] {
+  const docs: ChapterDoc[] = [{ chapter: 0, content: [] }];
+  for (const node of usj.content) {
+    if (typeof node !== 'string' && node.type === 'chapter') {
+      const n = /^\d+$/.test(node.number ?? '') ? Number(node.number) : NaN;
+      if (!(n >= 1)) throw new Error(`unparseable chapter number "${node.number}"`);
+      if (docs.some((d) => d.chapter === n)) throw new Error(`chapter ${n} printed twice`);
+      docs.push({ chapter: n, content: [] });
+    }
+    docs[docs.length - 1].content.push(node);
+  }
+  return docs[0].content.length === 0 ? docs.slice(1) : docs;
 }
 
 const newStats = (): IngestStats => ({
@@ -124,11 +117,10 @@ const newStats = (): IngestStats => ({
   wWrapped: 0,
   preVerseWordTokens: 0,
   sectionRefs: 0,
-  figures: 0,
   altVerseNumbers: 0,
+  altChapterNumbers: 0,
   verseBridges: 0,
-  droppedParas: {},
-  droppedInline: {},
+  metadataParas: {},
 });
 
 export interface NormalizeOptions {
@@ -138,12 +130,26 @@ export interface NormalizeOptions {
    * chapter's first verse becomes verse 0 there.
    */
   readonly titleChapters?: ReadonlySet<number>;
+  /**
+   * Whether the edition's scheme has a verse of this book. A verse marker
+   * printed with no words, for a verse the scheme lacks (WEB's ROM 16:25), gets
+   * no verse-text row and is listed in `droppedVerses`: its address would name
+   * a verse the scheme lacks. The marker stays in the document. Without this
+   * option every verse marker gets a row.
+   */
+  readonly hasVerse?: (chapter: number, verse: number) => boolean;
 }
 
-/** Normalize one book's USJ into blocks + tokens + stats. */
+/** Normalize one book's USJ: split it into chapter documents and derive from those. */
 export function normalizeUsj(usj: UsjDoc, opts: NormalizeOptions = {}): NormalizeResult {
+  return normalizeChapters(splitChapters(usj), opts);
+}
+
+/** Derive one book's blocks, tokens, verse text and stats from its chapter documents, in order. */
+export function normalizeChapters(docs: readonly ChapterDoc[], opts: NormalizeOptions = {}): NormalizeResult {
   const blocks: Block[] = [];
   const tokens: Token[] = [];
+  const verses: VerseText[] = [];
   const stats = newStats();
 
   let chapter = 0; // front matter before \c 1 = chapter 0
@@ -152,11 +158,14 @@ export function normalizeUsj(usj: UsjDoc, opts: NormalizeOptions = {}): Normaliz
   let wordIndexInVerse = 0;
   let seqInChapter = 0;
   let pendingVerseStart = false;
+  // the verse-text row that text of the current verse goes to
+  type VerseRow = { chapter: number; verse: number; segment: string; text: string };
+  let verseText: VerseRow | null = null;
 
   // the block a para WILL create if it emits a token (lazy: empty paras — e.g.
   // a para holding only a verse marker — must not break the partition with an
   // empty block)
-  let pendingShape: BlockShape | null = null;
+  let pendingMarker: { marker: string; genre: Genre } | null = null;
   let cur: Block | null = null;
   let inHeading = false;
   // verse carried by heading tokens: null unless an EXPLICIT \v occurred
@@ -164,18 +173,19 @@ export function normalizeUsj(usj: UsjDoc, opts: NormalizeOptions = {}): Normaliz
   let headingVerse: number | null = null;
   let buf = '';
 
+  const verseRows = new Map<string, VerseRow>();
+  const startVerseText = (v: number) => {
+    const key = `${chapter}:${v}${segment}`;
+    if (verseRows.has(key)) throw new Error(`chapter ${chapter}: verse ${v}${segment} printed twice`);
+    verseText = { chapter, verse: v, segment, text: '' };
+    verseRows.set(key, verseText);
+    verses.push(verseText);
+  };
+
   const ensureBlock = (): Block => {
     if (cur) return cur;
-    // guard: text with no block marker → registered "implicit" prose block
-    const shape = pendingShape ?? { genre: 'prose', role: 'implicit' as const, indent: 0 };
-    cur = {
-      id: blocks.length,
-      chapter,
-      genre: shape.genre,
-      role: shape.role,
-      indent: shape.indent,
-      seq: seqInChapter,
-    };
+    if (!pendingMarker) throw new Error(`chapter ${chapter}: text outside a paragraph`);
+    cur = { id: blocks.length, chapter, genre: pendingMarker.genre, marker: pendingMarker.marker, seq: seqInChapter };
     blocks.push(cur);
     return cur;
   };
@@ -188,14 +198,16 @@ export function normalizeUsj(usj: UsjDoc, opts: NormalizeOptions = {}): Normaliz
     // glyph run. Also keeps decomposed base+mark from splitting a word apart
     // (a combining mark is category M, which the tokenizer's punct branch
     // would otherwise capture). Idempotent on already-NFC (ASCII) text.
-    const raw = tokenize(buf.normalize('NFC'), { paragraphMarks: !inHeading });
+    const run = buf.normalize('NFC');
+    const raw = tokenize(run, { paragraphMarks: !inHeading });
     buf = '';
-    if (raw.length === 0) return;
-    const blk = ensureBlock();
     // #1/#3: heading tokens carry only a verse EXPLICITLY set inside the
     // heading (never the inherited one); other tokens need a \v seen.
     const effectiveVerse = inHeading ? headingVerse : verse;
     const inVerse = effectiveVerse != null;
+    if (inVerse && verseText) verseText.text += ` ${run}`;
+    if (raw.length === 0) return;
+    const blk = ensureBlock();
     for (const t of raw) {
       const isWord = t.kind === 'word';
       tokens.push({
@@ -221,12 +233,19 @@ export function normalizeUsj(usj: UsjDoc, opts: NormalizeOptions = {}): Normaliz
     return v;
   };
 
-  const dropInline = (marker: string) => {
-    stats.droppedInline[marker] = (stats.droppedInline[marker] ?? 0) + 1;
+  /** Check a note's parts against the supported list. Note text is never surface text. */
+  const checkNote = (nodes: readonly UsjNode[]) => {
+    for (const node of nodes) {
+      if (typeof node === 'string') continue;
+      if (node.type !== 'char' || !(NOTE_PARTS.has(node.marker ?? '') || CHAR_STYLES.has(node.marker ?? ''))) {
+        throw unsupported(`marker inside a note (${node.type})`, node.marker);
+      }
+      checkNote(node.content ?? []);
+    }
   };
 
   /** Walk inline content, appending scripture surface text to the buffer. */
-  const walkInline = (nodes: UsjNode[]) => {
+  const walkInline = (nodes: readonly UsjNode[]) => {
     for (const node of nodes) {
       if (typeof node === 'string') {
         buf += node;
@@ -239,113 +258,120 @@ export function normalizeUsj(usj: UsjDoc, opts: NormalizeOptions = {}): Normaliz
           const m = (node.number ?? '').match(/^(\d+)([a-z]?)(-\d+[a-z]?)?$/);
           if (!m) throw new Error(`unparseable verse number "${node.number}"`);
           if (m[3]) stats.verseBridges++;
+          if (node.altnumber !== undefined) stats.altVerseNumbers++;
+          if (node.pubnumber !== undefined) stats.altVerseNumbers++;
           verse = parseInt(m[1], 10);
           segment = m[2];
           if (inHeading) headingVerse = verse; // versified title (\d + \v)
           wordIndexInVerse = 0;
           pendingVerseStart = true;
+          startVerseText(verse);
           break;
         }
         case 'char': {
           const marker = node.marker ?? '';
-          if (marker === 'va' || marker === 'vp') {
-            stats.altVerseNumbers++;
-            break; // alternate verse numbers are not surface text
-          }
-          if (marker === 'w' || marker === '+w') stats.wWrapped++;
-          if (marker === 'wj' || marker === '+wj') stats.wordsOfJesus++;
-          if (marker === 'qs' || marker === '+qs') stats.selah++;
+          if (!CHAR_STYLES.has(marker)) throw unsupported('character style', node.marker);
+          if (marker === 'w') stats.wWrapped++;
+          if (marker === 'wj') stats.wordsOfJesus++;
+          if (marker === 'qs') stats.selah++;
           if (node.strong) stats.strongAttrs++;
-          // keep the surface text of any other char style (\add \nd \it …)
           walkInline(node.content ?? []);
           break;
         }
         case 'note': {
-          if (node.marker === 'f' || node.marker === 'fe') stats.footnotes++;
-          else if (node.marker === 'x') stats.xrefs++;
-          else dropInline(node.marker ?? node.type);
+          if (!NOTES.has(node.marker ?? '')) throw unsupported('note', node.marker);
+          if (node.marker === 'f') stats.footnotes++;
+          else stats.xrefs++;
+          checkNote(node.content ?? []);
           break; // note content is never scripture surface text
         }
-        case 'figure': {
-          stats.figures++;
-          break;
-        }
-        case 'ms': // milestones (\qt-s etc.) carry no surface text
-          dropInline(node.marker ?? node.type);
-          break;
         default:
-          throw new Error(
-            `unmapped inline USJ node type "${node.type}" (marker "${node.marker}") — extend normalizeUsj consciously`,
-          );
+          throw unsupported(`inline node "${node.type}"`, node.marker);
       }
     }
   };
 
-  for (const node of usj.content) {
-    if (typeof node === 'string') {
-      // stray top-level text — implicit-block guard
-      buf += node;
-      flushText();
-      continue;
+  for (const doc of docs) {
+    const first = doc.content[0];
+    if (doc.chapter === 0) {
+      if (typeof first !== 'string' && first?.type === 'chapter') throw new Error('chapter 0 document starts with a \\c');
+    } else if (typeof first === 'string' || first?.type !== 'chapter' || Number(first.number) !== doc.chapter) {
+      throw new Error(`chapter ${doc.chapter} document does not start with its own \\c`);
     }
-    switch (node.type) {
-      case 'book':
-        break; // \id line — metadata
-      case 'chapter': {
-        const n = parseInt(node.number ?? '', 10);
-        if (isNaN(n)) throw new Error(`unparseable chapter number "${node.number}"`);
-        chapter = n;
-        verse = null;
-        segment = '';
-        wordIndexInVerse = 0;
-        seqInChapter = 0;
-        pendingVerseStart = false;
-        cur = null;
-        pendingShape = null;
-        inHeading = false;
-        break;
+    for (const node of doc.content) {
+      if (typeof node === 'string') {
+        if (node.trim()) throw new Error(`chapter ${doc.chapter}: text outside a paragraph`);
+        continue;
       }
-      case 'para': {
-        const marker = node.marker ?? '';
-        cur = null;
-        buf = '';
-        if (marker === 'b') break; // stanza break — never a block
-        if (marker === 'r' || marker === 'mr') {
-          stats.sectionRefs++;
-          break; // reference lines under \s / \ms — not modelled in Phase 1
-        }
-        if (METADATA_PARAS.has(marker)) {
-          stats.droppedParas[marker] = (stats.droppedParas[marker] ?? 0) + 1;
+      switch (node.type) {
+        case 'book':
+          break; // \id line — metadata
+        case 'chapter': {
+          if (node !== first) throw new Error(`chapter ${doc.chapter} document holds a second \\c`);
+          if (node.altnumber !== undefined) stats.altChapterNumbers++;
+          if (node.pubnumber !== undefined) stats.altChapterNumbers++;
+          chapter = doc.chapter;
+          verse = null;
+          segment = '';
+          wordIndexInVerse = 0;
+          seqInChapter = 0;
+          pendingVerseStart = false;
+          verseText = null;
+          cur = null;
+          pendingMarker = null;
+          inHeading = false;
           break;
         }
-        const shape = paraShape(marker);
-        if (!shape) {
-          throw new Error(
-            `unmapped USFM para marker "\\${marker}" — the block-role vocabulary is a ` +
-              `registered contract (schema.dbml); extend paraShape consciously`,
-          );
+        case 'para': {
+          const marker = node.marker ?? '';
+          cur = null;
+          buf = '';
+          if (marker === 'b') break; // stanza break — never a block
+          if (REFERENCE_PARAS.has(marker)) {
+            stats.sectionRefs++;
+            break;
+          }
+          if (METADATA_PARAS.has(marker)) {
+            stats.metadataParas[marker] = (stats.metadataParas[marker] ?? 0) + 1;
+            break;
+          }
+          const genre = blockGenre(marker);
+          if (!genre) throw unsupported('paragraph', node.marker);
+          pendingMarker = { marker, genre };
+          inHeading = genre === 'heading';
+          headingVerse = null; // a heading starts unversed — no inheritance
+          if (marker === 'd' && verse === null && opts.titleChapters?.has(chapter)) {
+            headingVerse = 0; // the scheme numbers this title as verse 0
+            // A title printed as several \d paragraphs is one verse 0: later
+            // ones continue its text and its word indexes.
+            const title = verseRows.get(`${chapter}:0`);
+            if (title) verseText = title;
+            else {
+              wordIndexInVerse = 0;
+              startVerseText(0);
+            }
+          }
+          walkInline(node.content ?? []);
+          flushText();
+          cur = null;
+          pendingMarker = null;
+          inHeading = false;
+          break;
         }
-        pendingShape = shape;
-        inHeading = shape.genre === 'heading';
-        headingVerse = null; // a heading starts unversed — no inheritance
-        if (marker === 'd' && verse === null && opts.titleChapters?.has(chapter)) {
-          headingVerse = 0; // the scheme numbers this title as verse 0
-          wordIndexInVerse = 0;
-        }
-        walkInline(node.content ?? []);
-        flushText();
-        cur = null;
-        pendingShape = null;
-        inHeading = false;
-        break;
+        default:
+          throw unsupported(`top-level node "${node.type}"`, node.marker);
       }
-      default:
-        throw new Error(
-          `unmapped top-level USJ node type "${node.type}" — extend normalizeUsj consciously`,
-        );
     }
   }
   flushText();
 
-  return { blocks, tokens, stats };
+  const kept: VerseText[] = [];
+  const droppedVerses: { chapter: number; verse: number }[] = [];
+  for (const row of verses) {
+    const v = { ...row, text: row.text.replace(/\s+/g, ' ').trim() };
+    if (v.text === '' && v.verse !== 0 && opts.hasVerse && !opts.hasVerse(v.chapter, v.verse)) {
+      droppedVerses.push({ chapter: v.chapter, verse: v.verse });
+    } else kept.push(v);
+  }
+  return { blocks, tokens, verses: kept, droppedVerses, stats };
 }

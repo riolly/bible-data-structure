@@ -6,6 +6,8 @@
  * INVARIANTS (CONTEXT.md):
  * - Blocks PARTITION the token stream: every Token belongs to exactly one Block.
  * - Whitespace is never a Token — spacing is a presentation concern.
+ * - The stored truth is the chapter document (ChapterDoc). Blocks, tokens and
+ *   verse text are derived from it (ADR-0001 amendment, plan step 7).
  * - Heading Tokens carry verse=null and wordIndex=null; a mid-chapter
  *   section heading never inherits the preceding verse. A Psalm title the
  *   scheme numbers as verse 0 carries verse 0 and word indexes (ADR-0001).
@@ -21,39 +23,17 @@ export type Genre = 'prose' | 'poetry' | 'heading';
 /** Word/punct classification is registered anchor policy (ADR-0004). */
 export type TokenKind = 'word' | 'punct';
 
-/**
- * REGISTERED role vocabulary (schema.dbml `block.role`) — the contract between
- * the ingester and the presentation cascade. `null` = plain prose paragraph
- * (\p) or a plain poetry line (poetry depth lives in `indent`).
- */
-export type BlockRole =
-  | 'book_title' // \mt
-  | 'major_section' // \ms
-  | 'section' // \s
-  | 'psalm_title' // \d
-  | 'acrostic' // \qa (heading; e.g. Psalm 119 stanza letters)
-  | 'section_break' // literary-edition ornament op (old-repo ADR-0017/0018)
-  | 'margin' // \m
-  | 'no_break' // \nb
-  | 'indented' // \pi
-  | 'list_item' // \li
-  | 'embedded_opening' // \pmo (BSB narrative-frame lines)
-  | 'centered' // \pc (inscriptions)
-  | 'refrain' // \qr (poetry; right-aligned refrain)
-  | 'speaker' // \sp (heading; Song of Songs speakers in WEB)
-  | 'margin_indented' // \mi (indented, flush left: letters in WEB Ezra)
-  | 'intro' // \ip, \ipi, \im (prose before \c 1: Sirach's prologue, ebible's book notes)
-  | 'intro_heading' // \is (heading before \c 1)
-  | 'implicit'; // guard: text seen with no block marker
-
 /** One literary unit — a prose paragraph, a poetry line, or a heading. */
 export interface Block {
   readonly id: number;
   readonly chapter: number;
   readonly genre: Genre;
-  readonly role: BlockRole | null;
-  /** Poetry line depth (\q1–\q4); 0 for prose/heading. */
-  readonly indent: number;
+  /**
+   * The paragraph's USFM marker with its level, as the source wrote it (`p`,
+   * `q2`, `pi2`, `li2`, `s2`, `d`). The supported list is in ADR-0001's step 7
+   * amendment and in normalize.ts.
+   */
+  readonly marker: string;
   /** Render order within the chapter (= seq of its first token). */
   readonly seq: number;
 }
@@ -105,4 +85,45 @@ export interface Reading {
   readonly text: string;
   /** The source's ids of the reading's words, in order: what an alignment points at (ADR-0003). */
   readonly owIds: readonly string[];
+}
+
+//---- the stored chapter document (ADR-0001 amendment, plan step 7) ----
+
+/** A USJ node: text, or an element as usfm-grammar 3.x writes it. */
+export type UsjNode = string | UsjElement;
+
+export interface UsjElement {
+  readonly type: string;
+  readonly marker?: string;
+  /** Chapter and verse number (`5`, `35a`, `17-18`). */
+  readonly number?: string;
+  /** Published number (`\cp`, `\vp`). */
+  readonly pubnumber?: string;
+  /** Alternate number (`\ca`, `\va`). */
+  readonly altnumber?: string;
+  readonly code?: string;
+  readonly caller?: string;
+  readonly content?: UsjNode[];
+  readonly strong?: string;
+}
+
+/**
+ * One chapter of an edition as its source has it: the USJ nodes from its `\c`
+ * up to the next, unchanged. Chapter 0 is the front matter before `\c 1`.
+ */
+export interface ChapterDoc {
+  readonly chapter: number;
+  readonly content: UsjNode[];
+}
+
+/**
+ * One verse marker's surface text, derived from the chapter document: notes
+ * left out, whitespace runs made one space, a space where the verse crosses a
+ * block. Empty when the marker is printed with no words.
+ */
+export interface VerseText {
+  readonly chapter: number;
+  readonly verse: number;
+  readonly segment: string;
+  readonly text: string;
 }

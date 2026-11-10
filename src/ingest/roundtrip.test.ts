@@ -3,9 +3,9 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { readChapter, readReadings } from '../db/corpus-read';
+import { readChapter, readChapterDoc, readReadings, readVerseText } from '../db/corpus-read';
 import { nativeModuleLoads } from './native-probe';
-import { normalizeUsj, type UsjDoc } from './normalize';
+import { normalizeChapters, splitChapters, type UsjDoc } from './normalize';
 
 /**
  * DB round-trip across the old-repo ADR-0009 seam: normalized rows written through
@@ -29,7 +29,8 @@ describe.skipIf(!native)('corpus DB round-trip (write seam ↔ read seam)', () =
     const usj = JSON.parse(
       readFileSync(join(__dirname, 'fixtures', 'adversarial.usj.json'), 'utf8'),
     ) as UsjDoc;
-    const { blocks, tokens } = normalizeUsj(usj);
+    const docs = splitChapters(usj);
+    const { blocks, tokens, verses } = normalizeChapters(docs);
 
     const { db, sqlite } = createCorpusDb(':memory:');
     seedBooksAndCanons(db);
@@ -43,7 +44,7 @@ describe.skipIf(!native)('corpus DB round-trip (write seam ↔ read seam)', () =
       scheme: 'kjv',
       edition: 'sha256:0000000000000000',
     });
-    insertBookRows(db, { translationId, book: 'JHN' }, { blocks, tokens });
+    insertBookRows(db, { translationId, book: 'JHN' }, { docs, verses, blocks, tokens });
 
     // chapter 1 read includes chapter-0 front matter (\mt book title)
     const ch1 = readChapter(db, 'FIX', 'JHN', 1);
@@ -53,8 +54,8 @@ describe.skipIf(!native)('corpus DB round-trip (write seam ↔ read seam)', () =
     expect(ch1.tokens.length).toBe(expectTokens.length);
     // domain fields survive the round-trip exactly (storage ids differ)
     expect(
-      ch1.blocks.map((b) => [b.chapter, b.genre, b.role, b.indent, b.seq]),
-    ).toEqual(expectBlocks.map((b) => [b.chapter, b.genre, b.role, b.indent, b.seq]));
+      ch1.blocks.map((b) => [b.chapter, b.genre, b.marker, b.seq]),
+    ).toEqual(expectBlocks.map((b) => [b.chapter, b.genre, b.marker, b.seq]));
     expect(
       ch1.tokens.map((t) => [t.chapter, t.verse, t.wordIndex, t.seq, t.kind, t.text, t.verseStart, t.owId]),
     ).toEqual(
@@ -71,6 +72,15 @@ describe.skipIf(!native)('corpus DB round-trip (write seam ↔ read seam)', () =
     const ch2 = readChapter(db, 'FIX', 'JHN', 2);
     expect(ch2.blocks.every((b) => b.chapter === 2)).toBe(true);
     expect(ch2.tokens.some((t) => t.verse === null)).toBe(true); // \d + \qa headings
+
+    // the stored chapter documents come back unchanged, and derive the same rows
+    const stored = docs.map((d) => readChapterDoc(db, 'FIX', 'JHN', d.chapter)!);
+    expect(stored).toEqual(docs);
+    const again = normalizeChapters(stored);
+    expect(again.tokens).toEqual(tokens);
+    expect(again.blocks).toEqual(blocks);
+    expect(readChapterDoc(db, 'FIX', 'JHN', 3)).toBeNull();
+    expect(readVerseText(db, 'FIX', 'JHN', 1)).toEqual(verses.filter((v) => v.chapter === 1));
 
     // unknown coordinate reads empty, not throwing
     expect(readChapter(db, 'KJV', 'JHN', 1)).toEqual({ blocks: [], tokens: [] });

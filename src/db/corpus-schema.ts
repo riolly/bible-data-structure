@@ -1,7 +1,5 @@
 import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
-import type { BlockRole } from '../model/corpus';
-
 /**
  * Corpus DB schema (read-only, bundled asset — old-repo ADR-0009, schema.dbml). Shared
  * by BOTH sides of the Drizzle seam:
@@ -159,6 +157,49 @@ export const bookName = sqliteTable('book_name', {
     .references(() => dataSource.id),
 });
 
+/**
+ * The stored truth of an edition's text: one chapter's USJ nodes, from its
+ * `\c` up to the next, as JSON (ADR-0001 amendment, plan step 7). Chapter 0
+ * is the front matter. Blocks, tokens and verse text are derived from it.
+ */
+export const chapterDoc = sqliteTable(
+  'chapter_doc',
+  {
+    translationId: integer('translation_id')
+      .notNull()
+      .references(() => translation.id),
+    book: text('book')
+      .notNull()
+      .references(() => book.code),
+    chapter: integer('chapter').notNull(),
+    /** JSON array of the chapter's USJ nodes, unchanged. */
+    usj: text('usj').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.translationId, t.book, t.chapter] })],
+);
+
+/**
+ * One verse marker's surface text, derived from `chapter_doc`: notes left
+ * out, whitespace runs made one space. Empty when the marker is printed with
+ * no words; no row when the edition skips the verse.
+ */
+export const verseText = sqliteTable(
+  'verse_text',
+  {
+    translationId: integer('translation_id')
+      .notNull()
+      .references(() => translation.id),
+    book: text('book')
+      .notNull()
+      .references(() => book.code),
+    chapter: integer('chapter').notNull(),
+    verse: integer('verse').notNull(),
+    segment: text('segment').notNull().default(''),
+    text: text('text').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.translationId, t.book, t.chapter, t.verse, t.segment] })],
+);
+
 export const block = sqliteTable(
   'block',
   {
@@ -170,12 +211,10 @@ export const block = sqliteTable(
       .notNull()
       .references(() => book.code),
     chapter: integer('chapter').notNull(),
-    /** Typesetting branch. */
+    /** Typesetting branch, derived from the marker. */
     genre: text('genre', { enum: ['prose', 'poetry', 'heading'] }).notNull(),
-    /** REGISTERED role vocabulary — see model/corpus.ts BlockRole. */
-    role: text('role').$type<BlockRole>(),
-    /** Poetry line depth (\q1–\q4); 0 for prose/heading. */
-    indent: integer('indent').notNull().default(0),
+    /** The paragraph's USFM marker with its level (`p`, `q2`, `pi2`, `s2`), as the source wrote it. */
+    marker: text('marker').notNull(),
     /** Render order within the chapter (= seq of its first token). */
     seq: integer('seq').notNull(),
   },

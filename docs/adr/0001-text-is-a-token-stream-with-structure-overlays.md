@@ -29,3 +29,31 @@ ADR-0002 and the `kjv`, `bsb` and `web` schemes make `PSA 51:0/kjv` a valid addr
 - An unnumbered `\d` title before a chapter's first verse gets verse 0 and word indexes when the edition's scheme lists that chapter in `scheme_title`. `normalize.ts` takes the chapters as `titleChapters`, and `run.ts` reads them from the scheme.
 - Other headings keep `verse = NULL`. So does a `\d` the scheme doesn't number, such as WEB's title of Psalm 151 (`PS2`), which no scheme gives a verse 0.
 - Verse 0 prints no verse number, so its first word has no `verseStart`.
+
+## Amendment: the stored truth is one USJ document per chapter (2026-11-10, plan step 7)
+
+The token stream drops what a reader sees: footnotes, cross-references, character styles (`\add`, `\nd`, `\wj`), stanza breaks, published verse numbers and the spacing between words. A licensed provider returns chapter documents (plan step 10), and an app renders a chapter at a time. So the document becomes the truth, and the token stream is derived from it.
+
+- An edition's stored truth is one USJ document per chapter, in `chapter_doc`: the nodes usfm-grammar gives from one `\c` up to the next, unchanged. Chapter 0 holds the front matter before `\c 1`. The document keeps the whitespace, character styles, notes with their parts, `\b`, and the published numbers `\cp`, `\va` and `\vp` (usfm-grammar writes these as `pubnumber` and `altnumber` on the chapter and verse nodes).
+- `normalize.ts` derives tokens, blocks and verse text (`verse_text`) from the chapter documents, with the tokenizer of ADR-0004 unchanged. It reads nothing else, so a document read back from the corpus gives the same rows (`roundtrip.test.ts`). Note text was never tokens, so no word address moved, and every edition's words stamp stayed the same (README, Editions).
+- A block keeps its USFM marker (`p`, `q2`, `pi2`, `li2`, `s2`, `d`) in `block.marker`, in place of the role vocabulary and `indent`. `genre` (prose, poetry or heading) is still derived from the marker.
+- Verse text has one row per verse marker, keyed by verse and segment. It is the verse's surface text without notes, with each run of whitespace made one space and a space where the verse crosses a block. A verse whose marker is printed with no words has a row with empty text. A verse the edition skips has no row. Neither does an empty marker for a verse the edition's scheme lacks: its address would name a verse the scheme lacks, so the ingest warns and the marker stays only in the document. The same derivation drops it, so a document read back still gives the same rows. Real cases are in [research/source-markup.md](../../research/source-markup.md).
+- WLC and SBLGNT arrive as XML. `oshb-xml.ts` and `sblgnt-xml.ts` convert them to USFM, and from there they take the same parse, so they are stored in the same form.
+- `parse.ts` still rewrites a versified `\d` to `\qd` for the grammar, and now writes `d` back into the USJ, so the stored document has the source's marker. A source with the rewrite on that also has a real `\qd` stops the parse.
+
+### Supported markers
+
+The ingest stops on any marker or node type not listed here, at any depth. The list is what the seven pinned sources use, plus `\sc` ([research/source-markup.md](../../research/source-markup.md)). A marker joins the list when a source or a contract call needs it (ADR-0008). Numbered markers accept the bare form and levels 1 to 4 (`\s`, `\s1` to `\s4`).
+
+| Kind | Markers | Derived rows |
+|---|---|---|
+| Book and numbers | `\id`, `\c`, `\cp`, `\v`, `\va`, `\vp` | `\v` sets the verse of later tokens |
+| Heading blocks | `\mt#`, `\ms#`, `\s#`, `\is#`, `\d`, `\qa`, `\sp` | Blocks with genre `heading` |
+| Prose blocks | `\p`, `\m`, `\nb`, `\mi`, `\pc`, `\pmo`, `\pi#`, `\li#`, `\ip` | Blocks with genre `prose` |
+| Poetry blocks | `\q#`, `\qr` | Blocks with genre `poetry` |
+| Paragraphs with no block | `\b` (stanza break), `\r`, `\mr` (reference lines), `\h`, `\toc1` to `\toc3`, `\ide`, `\cl` | None. The text stays in the document |
+| Character styles | `\w`, `\add`, `\nd`, `\sc`, `\wj`, `\qs`, `\tl`, `\it`, `\bk` | Their text becomes tokens |
+| Notes | `\f`, `\x` | None |
+| Inside a note | `\fr`, `\ft`, `\fq`, `\fqa`, `\fl`, `\xo`, `\xt`, `\wh`, and the character styles | None |
+
+usfm-grammar writes a nested style (`\+w`) with the plain marker, so it needs no row of its own. Milestones, figures, tables and sidebars are not supported.

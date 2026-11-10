@@ -223,10 +223,10 @@ export function addBookText(
     }
     if (t.verse === 1 && !firstVerse1.has(t.chapter)) firstVerse1.set(t.chapter, t.seq);
   }
-  const role = new Map(blocks.map((b) => [b.id, b.role]));
+  const marker = new Map(blocks.map((b) => [b.id, b.marker]));
   for (const t of tokens) {
     // a title is unnumbered (NULL) or verse 0 where the scheme numbers it so
-    if ((t.verse !== null && t.verse !== 0) || role.get(t.blockId) !== 'psalm_title') continue;
+    if ((t.verse !== null && t.verse !== 0) || marker.get(t.blockId) !== 'd') continue;
     if (t.seq < (firstVerse1.get(t.chapter) ?? Infinity)) into.titled.add(`${book} ${t.chapter}`);
   }
 }
