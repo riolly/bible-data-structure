@@ -39,11 +39,14 @@ A deterministic id for what an edition's word addresses hold: sha256 over every 
 The upstream URL plus the edition stamp its text must give (`src/ingest/sources.ts`). A zip rebuilt with the same text passes, and another stamp stops the download. Updating a pin is a new edition. TVTMS, which has no edition stamp, is pinned by the sha256 of its file. (ADR-0005 amendment)
 
 **Full edition**:
-An edition we hold as files, that passes the ingest checks, and whose every word has a Strong's number. Word taps, part-verse marks and whole-Bible offline use need it. Computed from the checks and the rights record, never set by hand. (ADR-0008)
+An edition we hold as files, that passes the ingest checks, and whose every word that translates an original word has a Strong's number. Supplied words (`\add`) and words the tag source marks as having no original counterpart need none. Word taps, part-verse marks and whole-Bible offline use need it. Computed from the checks and the rights record, never set by hand. (ADR-0008)
 
 **Reading edition**:
 An edition that passes the numbering and markup checks but isn't Full. It connects to the original language verse by verse through the pivot. (ADR-0008)
 _Avoid_: partial edition, lite edition
+
+**Target edition**:
+An edition the first apps read: the English editions in ADR-0008's support table (BSB, KJV, NASB, NLT, NIV, CSB, NKJV, ESV) and the hub texts WLC and SBLGNT. A model feature lands when a contract call or a fixture from one of them needs it. (ADR-0008)
 
 **Rights record** *(planned)*:
 One record per edition saying what its license allows: the route (provider), offline use (`none`, `cache` or `full`), refresh days, copy limit, AI use and attribution. (ADR-0008)
