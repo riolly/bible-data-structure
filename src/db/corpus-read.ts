@@ -14,7 +14,7 @@ import * as schema from './corpus-schema';
  */
 
 /** Driver-agnostic bound satisfied by both sync drizzle drivers. */
-type SyncSqliteDb = BaseSQLiteDatabase<'sync', any, any, any, any>;
+export type SyncSqliteDb = BaseSQLiteDatabase<'sync', any, any, any, any>;
 
 export interface Chapter {
   blocks: Block[];
@@ -78,6 +78,20 @@ export function listEditions(db: SyncSqliteDb): string[] {
     .orderBy(asc(schema.translation.edition))
     .all()
     .map((r) => r.edition);
+}
+
+/** One edition's scheme and stamps (ADR-0002, ADR-0005), or null when the corpus has no such edition. */
+export function readEdition(
+  db: SyncSqliteDb,
+  translationAbbrev: string,
+): { abbrev: string; scheme: string; edition: string; wordsStamp: string | null } | null {
+  const t = schema.translation;
+  const [row] = db
+    .select({ abbrev: t.abbrev, scheme: t.scheme, edition: t.edition, wordsStamp: t.wordsStamp })
+    .from(t)
+    .where(eq(t.abbrev, translationAbbrev))
+    .all();
+  return row ?? null;
 }
 
 /**
@@ -306,7 +320,7 @@ export function readMappings(db: SyncSqliteDb): MappingRow[] {
     }));
 }
 
-/** Load the schemes and mappings, ready to move addresses between schemes. */
-export function loadMappings(db: SyncSqliteDb): Mappings {
-  return new Mappings(readMappings(db), readSchemes(db));
+/** Load the schemes and mappings, ready to move addresses between schemes. Pass `schemes` when they are already loaded. */
+export function loadMappings(db: SyncSqliteDb, schemes = readSchemes(db)): Mappings {
+  return new Mappings(readMappings(db), schemes);
 }
