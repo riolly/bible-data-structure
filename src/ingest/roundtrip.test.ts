@@ -3,7 +3,7 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { readChapter } from '../db/corpus-read';
+import { readChapter, readReadings } from '../db/corpus-read';
 import { nativeModuleLoads } from './native-probe';
 import { normalizeUsj, type UsjDoc } from './normalize';
 
@@ -74,6 +74,21 @@ describe.skipIf(!native)('corpus DB round-trip (write seam ↔ read seam)', () =
 
     // unknown coordinate reads empty, not throwing
     expect(readChapter(db, 'KJV', 'JHN', 1)).toEqual({ blocks: [], tokens: [] });
+
+    // readings (ADR-0007) come back with their ids split, in word order
+    const { insertReadings } = await import('./write-db');
+    const qere = { book: 'JHN', chapter: 1, verse: 1, segment: '', kind: 'qere' as const };
+    insertReadings(db, translationId, 'oshb', [
+      { ...qere, wordIndex: 3, wordCount: 0, text: 'פְּרָת', owIds: ['10dp9'] },
+      { ...qere, wordIndex: 1, wordCount: 2, text: 'הִיא־וָהוּא', owIds: ['11k9N', '111M5'] },
+      { ...qere, wordIndex: 3, wordCount: 1, text: '', owIds: [] },
+    ]);
+    expect(readReadings(db, 'FIX', 'JHN', 1).map((r) => [r.wordIndex, r.wordCount, r.text, r.owIds])).toEqual([
+      [1, 2, 'הִיא־וָהוּא', ['11k9N', '111M5']],
+      [3, 0, 'פְּרָת', ['10dp9']],
+      [3, 1, '', []],
+    ]);
+    expect(readReadings(db, 'FIX', 'JHN', 2)).toEqual([]);
 
     sqlite.close();
   });

@@ -226,9 +226,42 @@ export const token = sqliteTable(
 );
 
 /**
+ * A qere: another reading of a range of written words, beside the token stream
+ * so it never moves a word address (ADR-0007). The range is
+ * [word_index, word_index + word_count) of one verse segment. `word_count` 0
+ * is read before word `word_index`; empty `text` is a written word not read.
+ */
+export const reading = sqliteTable(
+  'reading',
+  {
+    translationId: integer('translation_id')
+      .notNull()
+      .references(() => translation.id),
+    book: text('book')
+      .notNull()
+      .references(() => book.code),
+    chapter: integer('chapter').notNull(),
+    verse: integer('verse').notNull(),
+    segment: text('segment').notNull().default(''),
+    wordIndex: integer('word_index').notNull(),
+    wordCount: integer('word_count').notNull(),
+    kind: text('kind', { enum: ['qere'] }).notNull(),
+    /** The reading's own text, pointed, NFC. */
+    text: text('text').notNull(),
+    /** The source's ids of the reading's words, space-separated, in order: what an alignment points at (ADR-0003). */
+    owIds: text('ow_ids').notNull(),
+    /** A data_source id: whose ids `ow_ids` are. */
+    source: text('source')
+      .notNull()
+      .references(() => dataSource.id),
+  },
+  (t) => [primaryKey({ columns: [t.translationId, t.book, t.chapter, t.verse, t.segment, t.wordIndex, t.wordCount] })],
+);
+
+/**
  * Where seeded data came from, with the attribution and note of changes each
- * licence asks for: the USFM spec's book names and TVTMS (CC BY 4.0), and the
- * libpalaso `.vrs` files (MIT).
+ * licence asks for: the USFM spec's book names, TVTMS and OSHB's word ids
+ * (CC BY 4.0), and the libpalaso `.vrs` files (MIT).
  */
 export const dataSource = sqliteTable('data_source', {
   id: text('id').primaryKey(),

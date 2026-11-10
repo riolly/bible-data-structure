@@ -82,6 +82,16 @@ _Avoid_: word (ambiguous with Original Word)
 A contiguous run of Tokens forming one literary unit (prose paragraph, poetry line, heading) with a genre and indent level, derived from USFM markers (`\p`, `\q#`, `\s`, `\d`). Blocks partition the token stream. Heading Tokens carry no verse and no word index, except a Psalm title that the edition's scheme numbers as verse 0. (ADR-0001)
 _Avoid_: paragraph (poetry lines and headings are Blocks too)
 
+**Ketiv**:
+"What is written": the consonants on the line of a Hebrew manuscript where tradition reads a different word. The ketiv is in the token stream and has word addresses. The vowel points printed with it belong to the qere, so a ketiv token is usually unpointed. (ADR-0007)
+
+**Qere**:
+"What is read": the word tradition reads in place of a ketiv, given in the manuscript's margin. Translations almost always follow it. Stored as a Reading, never as Tokens. A qere can stand for several written words, or for none. (ADR-0007)
+
+**Reading**:
+Another text for a range of written words in one edition, stored beside the token stream (`reading` table): a verse address, a word range `[word_index, word_index + word_count)`, its own text and the source ids of its words. Today every Reading is a qere. A Reading never changes a word address. A range of 0 words is a qere read before word `word_index`; empty text is a ketiv not read at all. (ADR-0007)
+_Avoid_: variant (OSHB's word for the note, but also used for textual variants between manuscripts)
+
 **Structure overlay** *(planned)*:
 Any further grouping laid over the token stream: sections, pericopes, literary units that cross chapter boundaries, chiasm, parallelism. Unlike Blocks, overlays may overlap. The old repo's curated literary edition was one such overlay (`docs/prior-art/old-adr-0017-*`).
 
