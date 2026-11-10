@@ -30,7 +30,7 @@
  * chapter 0 — the reader fetches chapter 0 alongside chapter 1.
  */
 
-import type { Block, ChapterDoc, Genre, Token, UsjElement, UsjNode, VerseText } from '../model/corpus';
+import { verseNumbers, type Block, type ChapterDoc, type Genre, type Token, type UsjElement, type UsjNode, type VerseText } from '../model/corpus';
 import { tokenize } from './tokenize';
 
 export type { UsjElement, UsjNode } from '../model/corpus';
@@ -54,7 +54,7 @@ export interface IngestStats {
   sectionRefs: number; // \r and \mr reference lines (no block)
   altVerseNumbers: number; // \va and \vp numbers on a verse
   altChapterNumbers: number; // \ca and \cp numbers on a chapter
-  verseBridges: number; // \v 17-18 bridged verses (first number used)
+  verseBridges: number; // \v 17-18 bridged verses (one unit with a range)
   metadataParas: Record<string, number>; // \h, \toc1 … paragraphs (no block)
 }
 
@@ -158,8 +158,8 @@ export function normalizeChapters(docs: readonly ChapterDoc[], opts: NormalizeOp
   let wordIndexInVerse = 0;
   let seqInChapter = 0;
   let pendingVerseStart = false;
-  // the verse-text row that text of the current verse goes to
-  type VerseRow = { chapter: number; verse: number; segment: string; text: string };
+  // the verse unit that text of the current verse goes to
+  type VerseRow = { chapter: number; verse: number; lastVerse: number; segment: string; text: string };
   let verseText: VerseRow | null = null;
 
   // the block a para WILL create if it emits a token (lazy: empty paras — e.g.
@@ -173,12 +173,24 @@ export function normalizeChapters(docs: readonly ChapterDoc[], opts: NormalizeOp
   let headingVerse: number | null = null;
   let buf = '';
 
+  // The verse-text row per `chapter:verse+segment`, for a title printed in several \d paragraphs.
   const verseRows = new Map<string, VerseRow>();
-  const startVerseText = (v: number) => {
-    const key = `${chapter}:${v}${segment}`;
-    if (verseRows.has(key)) throw new Error(`chapter ${chapter}: verse ${v}${segment} printed twice`);
-    verseText = { chapter, verse: v, segment, text: '' };
-    verseRows.set(key, verseText);
+  // Rule 6a (ADR-0004 v1.5): within a chapter each unit's first verse is above
+  // the previous unit's last verse, or the same single verse with a later letter.
+  const startVerseText = (v: number, last = v) => {
+    const prev = verses.at(-1);
+    if (prev && prev.chapter === chapter) {
+      const rises = v > prev.lastVerse || (v === prev.verse && v === prev.lastVerse && v === last && segment > prev.segment);
+      if (!rises) {
+        const show = (u: { verse: number; lastVerse: number; segment: string }) =>
+          `${u.verse}${u.segment}${u.lastVerse > u.verse ? `-${u.lastVerse}` : ''}`;
+        throw new Error(
+          `chapter ${chapter}: verse ${show({ verse: v, lastVerse: last, segment })} does not rise after ${show(prev)}`,
+        );
+      }
+    }
+    verseText = { chapter, verse: v, lastVerse: last, segment, text: '' };
+    verseRows.set(`${chapter}:${v}${segment}`, verseText);
     verses.push(verseText);
   };
 
@@ -254,18 +266,22 @@ export function normalizeChapters(docs: readonly ChapterDoc[], opts: NormalizeOp
       switch (node.type) {
         case 'verse': {
           flushText();
-          // a lettered verse (\v 35a) is a segment, and its words count from 0
-          const m = (node.number ?? '').match(/^(\d+)([a-z]?)(-\d+[a-z]?)?$/);
+          // a lettered verse (\v 35a) is a segment, and its words count from 0;
+          // a bridge (\v 17-18) is one unit with a range, and has no letters
+          const m = (node.number ?? '').match(/^(\d+)(?:([a-z])|-(\d+))?$/);
           if (!m) throw new Error(`unparseable verse number "${node.number}"`);
+          const first = parseInt(m[1], 10);
+          const last = m[3] ? parseInt(m[3], 10) : first;
+          if (m[3] && last <= first) throw new Error(`verse range "${node.number}" does not rise`);
           if (m[3]) stats.verseBridges++;
           if (node.altnumber !== undefined) stats.altVerseNumbers++;
           if (node.pubnumber !== undefined) stats.altVerseNumbers++;
-          verse = parseInt(m[1], 10);
-          segment = m[2];
+          verse = first;
+          segment = m[2] ?? '';
           if (inHeading) headingVerse = verse; // versified title (\d + \v)
           wordIndexInVerse = 0;
           pendingVerseStart = true;
-          startVerseText(verse);
+          startVerseText(first, last);
           break;
         }
         case 'char': {
@@ -369,9 +385,18 @@ export function normalizeChapters(docs: readonly ChapterDoc[], opts: NormalizeOp
   const droppedVerses: { chapter: number; verse: number }[] = [];
   for (const row of verses) {
     const v = { ...row, text: row.text.replace(/\s+/g, ' ').trim() };
-    if (v.text === '' && v.verse !== 0 && opts.hasVerse && !opts.hasVerse(v.chapter, v.verse)) {
-      droppedVerses.push({ chapter: v.chapter, verse: v.verse });
-    } else kept.push(v);
+    if (v.text !== '' || v.verse === 0 || opts.hasVerse === undefined) {
+      kept.push(v);
+      continue;
+    }
+    // an empty unit keeps only the numbers its scheme has: `\v 25-27` with 27 outside keeps 25-26
+    const inside = verseNumbers(v).filter((n) => opts.hasVerse!(v.chapter, n));
+    for (const n of verseNumbers(v)) if (!inside.includes(n)) droppedVerses.push({ chapter: v.chapter, verse: n });
+    if (inside.length === 0) continue;
+    if (inside.at(-1)! - inside[0] + 1 !== inside.length) {
+      throw new Error(`chapter ${v.chapter}: the scheme has verses ${inside.join(', ')} of the empty bridge ${v.verse}-${v.lastVerse}, not one run`);
+    }
+    kept.push({ ...v, verse: inside[0], lastVerse: inside.at(-1)! });
   }
   return { blocks, tokens, verses: kept, droppedVerses, stats };
 }

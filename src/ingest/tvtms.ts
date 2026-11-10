@@ -189,7 +189,8 @@ export interface EditionText {
   readonly books: ReadonlySet<string>;
   /**
    * Word tokens per verse, keyed `BOOK c:v`. A verse that isn't here has 0,
-   * and so does the second verse of a bridge (ADR-0004 rule 6). No tested
+   * and so does the second verse of a bridge, whose words carry its first
+   * number (ADR-0004 v1.5). No tested
    * verse is in a bridge in the pinned editions (research/tvtms-text-tests.md).
    */
   readonly words: ReadonlyMap<string, number>;

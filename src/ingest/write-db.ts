@@ -122,6 +122,7 @@ CREATE TABLE verse_text (
   book TEXT NOT NULL REFERENCES book(code),
   chapter INTEGER NOT NULL,
   verse INTEGER NOT NULL,
+  last_verse INTEGER NOT NULL,
   segment TEXT NOT NULL DEFAULT '',
   text TEXT NOT NULL,
   PRIMARY KEY (translation_id, book, chapter, verse, segment)
@@ -362,7 +363,7 @@ export function insertBookRows(
     stmts = {
       doc: sqlite.prepare('INSERT INTO chapter_doc (translation_id, book, chapter, usj) VALUES (?, ?, ?, ?)'),
       verse: sqlite.prepare(
-        'INSERT INTO verse_text (translation_id, book, chapter, verse, segment, text) VALUES (?, ?, ?, ?, ?, ?)',
+        'INSERT INTO verse_text (translation_id, book, chapter, verse, last_verse, segment, text) VALUES (?, ?, ?, ?, ?, ?, ?)',
       ),
       block: sqlite.prepare(
         'INSERT INTO block (translation_id, book, chapter, genre, marker, seq) VALUES (?, ?, ?, ?, ?, ?)',
@@ -374,7 +375,7 @@ export function insertBookRows(
   }
   const { doc, verse, block, token, tokens } = stmts;
   for (const d of rows.docs) doc.run(ids.translationId, ids.book, d.chapter, JSON.stringify(d.content));
-  for (const v of rows.verses) verse.run(ids.translationId, ids.book, v.chapter, v.verse, v.segment, v.text);
+  for (const v of rows.verses) verse.run(ids.translationId, ids.book, v.chapter, v.verse, v.lastVerse, v.segment, v.text);
   const blockRowId = new Map<number, number>();
   for (const b of rows.blocks) {
     const { lastInsertRowid } = block.run(ids.translationId, ids.book, b.chapter, b.genre, b.marker, b.seq);

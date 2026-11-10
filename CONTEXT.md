@@ -80,10 +80,13 @@ A synthetic scheme that only grows, which all scheme mappings go through. Its id
 Data that moves a verse address from one scheme to the pivot and back, including partial verses, merges, cross-book moves and verses absent in one scheme. Compiled from STEPBible TVTMS and Paratext `.vrs`. (ADR-0006)
 
 **Word address**:
-A verse address plus a **word index**: the 0-based ordinal of a word Token in that verse or segment, punctuation excluded. The corpus enforces that one word address names one word. In address strings the word number counts from 1 (`MAT 2:1!3/kjv` is index 2). A punctuation Token is addressed by the word it follows. Valid only for one edition, since editions differ in words. Its meaning depends on the tokenizer policy (ADR-0004).
+A verse address plus a **word index**: the 0-based ordinal of a word Token in that verse unit or segment, punctuation excluded. In a bridge, each number of the range gives the same word for the same index. The corpus enforces that one word address names one word. In address strings the word number counts from 1 (`MAT 2:1!3/kjv` is index 2). A punctuation Token is addressed by the word it follows. Valid only for one edition, since editions differ in words. Its meaning depends on the tokenizer policy (ADR-0004).
+
+**Verse unit**:
+What one verse marker covers: one verse, or a range for a verse bridge. It has a first and a last verse, equal for a single verse. Within a chapter, units rise and never overlap. (ADR-0004 v1.5)
 
 **Verse bridge**:
-A USFM verse marker covering several verses (`\v 17-18`). Today it collapses to its first number, and the later numbers get no address (ADR-0004, rule 6; open for revisiting).
+A USFM verse marker covering several verses (`\v 17-18`): one verse unit with a range. Every number in the range resolves to the unit, so NLT's Numbers 1:20-21 is found from 20 and from 21. Its tokens carry the first number, and its word indexes count across the whole unit. (ADR-0004 v1.5)
 
 **Quote witness**:
 The surface text of the words an outside reference points at, plus the edition stamp it was made against. Stored beside the address as proof, used to detect and repair drift after a revision. (ADR-0005)
@@ -94,7 +97,7 @@ The surface text of the words an outside reference points at, plus the edition s
 The stored truth of one chapter of an edition: its USJ as usfm-grammar gives it, with the whitespace, character styles, footnotes, cross-references, stanza breaks and published verse numbers. Tokens, Blocks and verse text are derived from it. Chapter 0 is the book's front matter. Only the markers listed in ADR-0001's step 7 amendment are supported, and the ingest stops on any other. (ADR-0001 amendment)
 
 **Verse text**:
-One verse marker's surface text, derived from the chapter document, without notes. Empty when the edition prints the number with no words. A verse the edition skips has none. (ADR-0001 amendment)
+One verse unit's surface text, derived from the chapter document, without notes. Empty when the edition prints the number with no words. A verse the edition skips has none. (ADR-0001 amendment)
 
 **Token**:
 One word or punctuation occurrence in one edition's text, derived from the chapter document: the unit of word addressing. Whitespace is never a Token. A KJV Token and a BSB Token are never the same object. (ADR-0001)

@@ -13,7 +13,7 @@
 import { existsSync, readFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import type { Block, Token, VerseText } from '../model/corpus';
+import { verseNumbers, type Block, type Token, type VerseText } from '../model/corpus';
 import type { IngestStats } from './normalize';
 import { PIVOT, checkCoverage } from '../model/mapping';
 import { checkVerses, hasVerse, titleChapters, type Scheme } from '../model/scheme';
@@ -142,15 +142,15 @@ async function main() {
             console.warn(`  ⚠ ${file.code} ${v.chapter}:${v.verse}: printed with no words and not in scheme ${scheme.id}, no verse text`);
           }
           validate(file.code, blocks, tokens);
-          warnVerseGaps(file.code, tokens);
+          warnVerseGaps(file.code, tokens, verses);
           // Every token's verse has a verse-text row, so the rows alone cover the check.
-          checkScheme(scheme, file.code, verses);
+          checkScheme(scheme, file.code, verses.flatMap(unitVerses));
           insertBookRows(db, { translationId, book: file.code }, { docs, verses, blocks, tokens });
           const bookReadings = readings.filter((r) => r.book === file.code);
           checkReadings(file.code, bookReadings, tokens);
           insertReadings(db, translationId, 'oshb', bookReadings);
           addBookText(text, file.code, blocks, tokens);
-          words.add(file.code, tokens);
+          words.add(file.code, tokens, verses);
           addStats(totals, stats);
           blockCount += blocks.length;
           tokenCount += tokens.length;
@@ -271,11 +271,15 @@ function checkPivotGrowth(pivot: Scheme) {
   if (violations.length > 0) throw new Error(`the pivot shrank:\n  ${violations.slice(0, 10).join('\n  ')}`);
 }
 
+function unitVerses(u: VerseText): { chapter: number; verse: number }[] {
+  return verseNumbers(u).map((verse) => ({ chapter: u.chapter, verse }));
+}
+
 /**
- * Every verse an edition has must exist in its declared scheme (ADR-0002), or
- * its addresses would name verses the scheme lacks. A chapter that ends early
- * only warns: an edition may omit verses, and a verse bridge stores only its
- * first number (ADR-0004 rule 6).
+ * Every verse an edition has, each number of a bridge included, must exist in
+ * its declared scheme (ADR-0002), or its addresses would name verses the
+ * scheme lacks. A chapter that ends early only warns: an edition may omit
+ * verses.
  */
 function checkScheme(scheme: Scheme, code: string, rows: readonly { chapter: number; verse: number }[]) {
   const { unknown, short } = checkVerses(scheme, code, rows);
@@ -320,11 +324,14 @@ function validate(code: string, blocks: readonly Block[], tokens: readonly Token
  * the parser dropped text (a real translation may also legitimately omit
  * late-manuscript verses — hence warn, not throw; a human reads the log).
  */
-function warnVerseGaps(code: string, tokens: { chapter: number; verse: number | null }[]) {
+function warnVerseGaps(code: string, tokens: { chapter: number; verse: number | null }[], units: readonly VerseText[]) {
+  // a bridge's tokens carry its first number and cover the rest (ADR-0004 v1.5)
+  const last = new Map(units.map((u) => [`${u.chapter}:${u.verse}`, u.lastVerse]));
   const byChapter = new Map<number, Set<number>>();
   for (const t of tokens) {
     if (t.verse == null) continue;
-    (byChapter.get(t.chapter) ?? byChapter.set(t.chapter, new Set()).get(t.chapter)!).add(t.verse);
+    const verses = byChapter.get(t.chapter) ?? byChapter.set(t.chapter, new Set()).get(t.chapter)!;
+    for (let v = t.verse; v <= (last.get(`${t.chapter}:${t.verse}`) ?? t.verse); v++) verses.add(v);
   }
   for (const [chapter, verses] of byChapter) {
     const max = Math.max(...verses);

@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNull, max, or } from 'drizzle-orm';
+import { and, asc, eq, gte, inArray, isNull, lte, max, or } from 'drizzle-orm';
 import type { BaseSQLiteDatabase } from 'drizzle-orm/sqlite-core';
 
 import type { Block, ChapterDoc, Reading, Token, VerseText } from '../model/corpus';
@@ -174,16 +174,56 @@ export function readChapterDoc(
   return row ? { chapter, content: JSON.parse(row.usj) } : null;
 }
 
-/** One chapter's verse text, in verse order. */
+const verseUnitColumns = {
+  chapter: schema.verseText.chapter,
+  verse: schema.verseText.verse,
+  lastVerse: schema.verseText.lastVerse,
+  segment: schema.verseText.segment,
+  text: schema.verseText.text,
+};
+
+/** One chapter's verse units with their text, in verse order. */
 export function readVerseText(db: SyncSqliteDb, translationAbbrev: string, bookCode: string, chapter: number): VerseText[] {
   const v = schema.verseText;
   return db
-    .select({ chapter: v.chapter, verse: v.verse, segment: v.segment, text: v.text })
+    .select(verseUnitColumns)
     .from(v)
     .innerJoin(schema.translation, eq(v.translationId, schema.translation.id))
     .where(and(eq(schema.translation.abbrev, translationAbbrev), eq(v.book, bookCode), eq(v.chapter, chapter)))
     .orderBy(asc(v.verse), asc(v.segment))
     .all();
+}
+
+/**
+ * The verse unit that holds `chapter:verse` in one edition, or null when the
+ * edition has none. A bridge `\v 20-21` is found from 20 and from 21, and its
+ * words are the tokens of verse 20 (ADR-0004 v1.5).
+ */
+export function readVerseUnit(
+  db: SyncSqliteDb,
+  translationAbbrev: string,
+  bookCode: string,
+  chapter: number,
+  verse: number,
+  segment = '',
+): VerseText | null {
+  const v = schema.verseText;
+  const [row] = db
+    .select(verseUnitColumns)
+    .from(v)
+    .innerJoin(schema.translation, eq(v.translationId, schema.translation.id))
+    .where(
+      and(
+        eq(schema.translation.abbrev, translationAbbrev),
+        eq(v.book, bookCode),
+        eq(v.chapter, chapter),
+        eq(v.segment, segment),
+        lte(v.verse, verse),
+        gte(v.lastVerse, verse),
+      ),
+    )
+    .all();
+  return row ?? null;
 }
 
 /** One chapter's readings (ADR-0007), in word order. The ketiv they cover are the chapter's tokens. */
