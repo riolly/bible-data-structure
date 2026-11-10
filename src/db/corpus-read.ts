@@ -1,7 +1,7 @@
 import { and, asc, eq, inArray, isNull, max, or } from 'drizzle-orm';
 import type { BaseSQLiteDatabase } from 'drizzle-orm/sqlite-core';
 
-import type { Block, Reading, Token } from '../model/corpus';
+import type { Block, ChapterDoc, Reading, Token, VerseText } from '../model/corpus';
 import { Mappings, type MappingRow } from '../model/mapping';
 import type { Scheme } from '../model/scheme';
 import * as schema from './corpus-schema';
@@ -122,8 +122,7 @@ export function readChapter(
       id: schema.block.id,
       chapter: schema.block.chapter,
       genre: schema.block.genre,
-      role: schema.block.role,
-      indent: schema.block.indent,
+      marker: schema.block.marker,
       seq: schema.block.seq,
     })
     .from(schema.block)
@@ -153,6 +152,38 @@ export function readChapter(
     .all();
 
   return { blocks, tokens };
+}
+
+/**
+ * One chapter's stored document (ADR-0001 amendment, plan step 7), or null
+ * when the edition has no such chapter. Chapter 0 is the front matter.
+ */
+export function readChapterDoc(
+  db: SyncSqliteDb,
+  translationAbbrev: string,
+  bookCode: string,
+  chapter: number,
+): ChapterDoc | null {
+  const d = schema.chapterDoc;
+  const [row] = db
+    .select({ usj: d.usj })
+    .from(d)
+    .innerJoin(schema.translation, eq(d.translationId, schema.translation.id))
+    .where(and(eq(schema.translation.abbrev, translationAbbrev), eq(d.book, bookCode), eq(d.chapter, chapter)))
+    .all();
+  return row ? { chapter, content: JSON.parse(row.usj) } : null;
+}
+
+/** One chapter's verse text, in verse order. */
+export function readVerseText(db: SyncSqliteDb, translationAbbrev: string, bookCode: string, chapter: number): VerseText[] {
+  const v = schema.verseText;
+  return db
+    .select({ chapter: v.chapter, verse: v.verse, segment: v.segment, text: v.text })
+    .from(v)
+    .innerJoin(schema.translation, eq(v.translationId, schema.translation.id))
+    .where(and(eq(schema.translation.abbrev, translationAbbrev), eq(v.book, bookCode), eq(v.chapter, chapter)))
+    .orderBy(asc(v.verse), asc(v.segment))
+    .all();
 }
 
 /** One chapter's readings (ADR-0007), in word order. The ketiv they cover are the chapter's tokens. */

@@ -49,7 +49,7 @@ describe.skipIf(!native || !hasTvtms)('trouble spots (research/README.md)', () =
 
   beforeAll(async () => {
     const { usfmToUsj } = await import('./parse');
-    const { normalizeUsj } = await import('./normalize');
+    const { normalizeChapters, splitChapters } = await import('./normalize');
     const w = await import('./write-db');
     const { readChapter, loadMappings } = await import('../db/corpus-read');
 
@@ -77,10 +77,13 @@ describe.skipIf(!native || !hasTvtms)('trouble spots (research/README.md)', () =
         const { usj, parseErrors } = usfmToUsj(usfm);
         expect(parseErrors, `${e.dir}/${name}`).toEqual([]);
         const book = name.slice(0, 3);
-        const { blocks, tokens } = normalizeUsj(usj, { titleChapters: titleChapters(schemes.get(e.scheme)!, book) });
+        const docs = splitChapters(usj);
+        const { blocks, tokens, verses: texts } = normalizeChapters(docs, {
+          titleChapters: titleChapters(schemes.get(e.scheme)!, book),
+        });
         const verses = tokens.flatMap((t) => (t.verse == null ? [] : [{ chapter: t.chapter, verse: t.verse }]));
         expect(checkVerses(schemes.get(e.scheme)!, book, verses).unknown, `${e.dir}/${name}`).toEqual([]);
-        w.insertBookRows(db, { translationId, book }, { blocks, tokens });
+        w.insertBookRows(db, { translationId, book }, { docs, verses: texts, blocks, tokens });
       }
     }
 

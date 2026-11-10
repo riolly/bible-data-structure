@@ -1,7 +1,9 @@
 # Corpus ingest (ADR-0001)
 
-Build-time Node pipeline: USFM → USJ (usfm-grammar) → normalize → a
-read-only corpus SQLite file. Consumers read normalized rows through the Drizzle
+Build-time Node pipeline: USFM → USJ (usfm-grammar) → one stored document
+per chapter → derived blocks, tokens and verse text → a read-only corpus
+SQLite file. The chapter documents are the stored truth (ADR-0001 amendment,
+plan step 7). Consumers read normalized rows through the Drizzle
 schema in `src/db/corpus-schema.ts`, shared by the writer here and the reader in
 `src/db/corpus-read.ts`.
 
@@ -19,10 +21,12 @@ the `.vrs` files disagree.
 
 - `tokenize.ts` — **the registered tokenization policy (ADR-0004).** Part of
   the locked anchor seam; a change here is an anchor migration.
-- `normalize.ts` — USJ → `Token[]`/`Block[]` (the canonical model types) +
-  stats bag of everything Phase 1 deliberately drops. Unknown structure throws.
+- `normalize.ts`: `splitChapters` cuts a book's USJ into chapter documents,
+  and `normalizeChapters` derives `Block[]`, `Token[]` and verse text from
+  them, with a stats bag of notes and styles. A marker outside the supported
+  list in ADR-0001 throws.
 - `parse.ts` — usfm-grammar wrapper (strict first, lenient with logged errors;
-  versified-`\d` grammar-gap preprocess).
+  versified-`\d` grammar-gap preprocess, written back as `d` after the parse).
 - `parse-pool.ts` / `parse-worker.ts`: run `parse.ts` in worker threads and
   cache each result in `build/usj-cache/`, keyed by the USFM text, the parse
   options, `parse.ts` and the parser versions. Delete the directory to force
@@ -55,13 +59,15 @@ the `.vrs` files disagree.
 
 ## Golden fixtures
 
-`fixtures/adversarial.usfm` + its committed USJ. Pure-TS suites
+`fixtures/adversarial.usfm` and `fixtures/chapter-doc.usfm`, each with its
+committed USJ. Pure-TS suites
 (`tokenize.test.ts`, `normalize.test.ts`) always run — including in CI, which
 installs with `ignore-scripts` and has no native modules. `parse.test.ts`
 (USFM→USJ drift guard) and `roundtrip.test.ts` (write seam ↔ read seam)
 self-skip where the native tree-sitter / better-sqlite3 bindings are unbuilt.
 
-After editing the fixture USFM, regenerate the committed USJ:
+After editing a fixture's USFM, regenerate its committed USJ (shown for
+`adversarial`):
 
 ```
 node -e "const{readFileSync,writeFileSync}=require('node:fs');const{USFMParser}=require('usfm-grammar');writeFileSync('src/ingest/fixtures/adversarial.usj.json',JSON.stringify(new USFMParser(readFileSync('src/ingest/fixtures/adversarial.usfm','utf8')).toUSJ(),null,2)+'\n')"

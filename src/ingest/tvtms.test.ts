@@ -169,14 +169,14 @@ describe('text tests against an edition', () => {
 });
 
 describe('addBookText', () => {
-  const block = (id: number, role: Block['role']): Block => ({ id, chapter: 3, genre: 'heading', role, indent: 0, seq: 0 });
+  const block = (id: number, marker: string): Block => ({ id, chapter: 3, genre: 'heading', marker, seq: 0 });
   const token = (blockId: number, verse: number | null, seq: number, kind: Token['kind'] = 'word'): Token => ({
     id: seq, blockId, chapter: 3, verse, segment: '', wordIndex: null, seq, kind, text: 'x', verseStart: false, owId: null,
   });
 
   it('counts word tokens per verse and finds a psalm title before verse 1', () => {
     const into = editionText('E');
-    addBookText(into, 'PSA', [block(0, 'section'), block(1, 'psalm_title'), block(2, null)], [
+    addBookText(into, 'PSA', [block(0, 's1'), block(1, 'd'), block(2, 'p')], [
       token(0, null, 0), token(1, null, 1), token(2, 1, 2), token(2, 1, 3), token(2, 1, 4, 'punct'), token(2, 2, 5),
     ]);
     expect([...into.words]).toEqual([['PSA 3:1', 2], ['PSA 3:2', 1]]);
@@ -186,7 +186,7 @@ describe('addBookText', () => {
 
   it('does not count a section heading, or a title numbered as verse 1', () => {
     const into = editionText('E');
-    addBookText(into, 'PSA', [block(0, 'section'), block(1, 'psalm_title')], [token(0, null, 0), token(1, 1, 1)]);
+    addBookText(into, 'PSA', [block(0, 's1'), block(1, 'd')], [token(0, null, 0), token(1, 1, 1)]);
     expect(into.titled.size).toBe(0);
   });
 });

@@ -32,4 +32,23 @@ describe.skipIf(!native)('usfm-grammar → committed USJ fixture', () => {
     expect(parseErrors).toEqual([]);
     expect(usj).toEqual(committed);
   });
+
+  it('fixtures/chapter-doc.usj.json matches a fresh parse of fixtures/chapter-doc.usfm', async () => {
+    const { usfmToUsj } = await import('./parse');
+    const usfm = readFileSync(join(__dirname, 'fixtures', 'chapter-doc.usfm'), 'utf8');
+    const committed = JSON.parse(readFileSync(join(__dirname, 'fixtures', 'chapter-doc.usj.json'), 'utf8'));
+    const { usj, parseErrors } = usfmToUsj(usfm);
+    expect(parseErrors).toEqual([]);
+    expect(usj).toEqual(committed);
+  });
+
+  it('writes a versified \\d title back as d after the \\qd rewrite', async () => {
+    const { usfmToUsj } = await import('./parse');
+    const usfm = '\\id ZEC\n\\c 12\n\\d\n\\v 1 The burden of the word.\n\\p\n\\v 2 Behold.\n';
+    const { usj, versifiedTitleRewrites } = usfmToUsj(usfm, { rewriteVersifiedD: true });
+    expect(versifiedTitleRewrites).toBe(1);
+    const paras = usj.content.flatMap((n) => (typeof n !== 'string' && n.type === 'para' ? [n.marker] : []));
+    expect(paras).toEqual(['d', 'p']);
+    expect(() => usfmToUsj(usfm + '\\qd Hebrew note\n', { rewriteVersifiedD: true })).toThrow(/real \\qd/);
+  });
 });

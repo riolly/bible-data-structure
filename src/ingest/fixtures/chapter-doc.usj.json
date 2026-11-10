@@ -1,0 +1,259 @@
+{
+  "type": "USJ",
+  "version": "3.1",
+  "content": [
+    {
+      "type": "book",
+      "marker": "id",
+      "code": "PSA",
+      "content": [
+        "Chapter-document fixture, NOT scripture: what the stored chapter document keeps (ADR-0001 amendment, plan step 7)"
+      ]
+    },
+    {
+      "type": "para",
+      "marker": "h",
+      "content": [
+        "Fixture\n"
+      ]
+    },
+    {
+      "type": "para",
+      "marker": "mt1",
+      "content": [
+        "The Chapter Fixture\n"
+      ]
+    },
+    {
+      "type": "chapter",
+      "marker": "c",
+      "number": "1",
+      "sid": "PSA 1",
+      "pubnumber": "A"
+    },
+    {
+      "type": "para",
+      "marker": "s1",
+      "content": [
+        "Footnotes and styles\n"
+      ]
+    },
+    {
+      "type": "para",
+      "marker": "p",
+      "content": [
+        {
+          "type": "verse",
+          "marker": "v",
+          "number": "1",
+          "sid": "PSA 1:1"
+        },
+        "The ",
+        {
+          "type": "char",
+          "marker": "nd",
+          "content": [
+            "Lord"
+          ]
+        },
+        " spoke,",
+        {
+          "type": "note",
+          "marker": "f",
+          "content": [
+            " ",
+            {
+              "type": "char",
+              "marker": "fr",
+              "content": [
+                "1:1 "
+              ]
+            },
+            {
+              "type": "char",
+              "marker": "ft",
+              "content": [
+                "Or "
+              ]
+            },
+            {
+              "type": "char",
+              "marker": "fqa",
+              "content": [
+                "the Master"
+              ]
+            }
+          ],
+          "caller": "+"
+        },
+        " and his ",
+        {
+          "type": "char",
+          "marker": "add",
+          "content": [
+            "servant"
+          ]
+        },
+        " heard.\n"
+      ]
+    },
+    {
+      "type": "para",
+      "marker": "pi2",
+      "content": [
+        {
+          "type": "verse",
+          "marker": "v",
+          "number": "2",
+          "altnumber": "3",
+          "pubnumber": "2a",
+          "sid": "PSA 1:2"
+        },
+        "A cross-reference",
+        {
+          "type": "note",
+          "marker": "x",
+          "content": [
+            {
+              "type": "char",
+              "marker": "xo",
+              "content": [
+                "1:2 "
+              ]
+            },
+            {
+              "type": "char",
+              "marker": "xt",
+              "content": [
+                "Gen 1:1"
+              ]
+            }
+          ],
+          "caller": "-"
+        },
+        " in ",
+        {
+          "type": "char",
+          "marker": "sc",
+          "content": [
+            "small caps"
+          ]
+        },
+        ".\n",
+        {
+          "type": "verse",
+          "marker": "v",
+          "number": "3",
+          "sid": "PSA 1:3"
+        },
+        {
+          "type": "note",
+          "marker": "f",
+          "content": [
+            " ",
+            {
+              "type": "char",
+              "marker": "fr",
+              "content": [
+                "1:3 "
+              ]
+            },
+            {
+              "type": "char",
+              "marker": "ft",
+              "content": [
+                "Some manuscripts add a verse here."
+              ]
+            }
+          ],
+          "caller": "+"
+        },
+        "\n",
+        {
+          "type": "verse",
+          "marker": "v",
+          "number": "5",
+          "sid": "PSA 1:5"
+        },
+        {
+          "type": "char",
+          "marker": "wj",
+          "content": [
+            "Words of Jesus"
+          ]
+        },
+        " after a skipped verse.\n"
+      ]
+    },
+    {
+      "type": "chapter",
+      "marker": "c",
+      "number": "2",
+      "sid": "PSA 2"
+    },
+    {
+      "type": "para",
+      "marker": "d",
+      "content": [
+        "A song for the fixture.\n"
+      ]
+    },
+    {
+      "type": "para",
+      "marker": "q1",
+      "content": [
+        {
+          "type": "verse",
+          "marker": "v",
+          "number": "1",
+          "sid": "PSA 2:1"
+        },
+        "The first stanza ends here;\n"
+      ]
+    },
+    {
+      "type": "para",
+      "marker": "b"
+    },
+    {
+      "type": "para",
+      "marker": "q2",
+      "content": [
+        {
+          "type": "verse",
+          "marker": "v",
+          "number": "2",
+          "sid": "PSA 2:2"
+        },
+        "the second stanza begins.\n"
+      ]
+    },
+    {
+      "type": "para",
+      "marker": "li2",
+      "content": [
+        "A list item at level two.\n"
+      ]
+    },
+    {
+      "type": "para",
+      "marker": "s2",
+      "content": [
+        "A second-level heading\n"
+      ]
+    },
+    {
+      "type": "para",
+      "marker": "p",
+      "content": [
+        {
+          "type": "verse",
+          "marker": "v",
+          "number": "3",
+          "sid": "PSA 2:3"
+        },
+        "The last verse.\n"
+      ]
+    }
+  ]
+}
