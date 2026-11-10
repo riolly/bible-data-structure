@@ -128,13 +128,23 @@ async function main() {
           }
           // The chapter documents are the stored truth; every other row is derived from them (ADR-0001 amendment).
           const docs = splitChapters(usj);
-          const { blocks, tokens, verses: allVerses, stats } = normalizeChapters(docs, {
-            titleChapters: titleChapters(scheme, file.code),
-          });
+          let normalized;
+          try {
+            normalized = normalizeChapters(docs, {
+              titleChapters: titleChapters(scheme, file.code),
+              hasVerse: (c, v) => hasVerse(scheme, file.code, c, v),
+            });
+          } catch (e) {
+            throw new Error(`${file.code}: ${(e as Error).message}`, { cause: e });
+          }
+          const { blocks, tokens, verses, droppedVerses, stats } = normalized;
+          for (const v of droppedVerses) {
+            console.warn(`  ⚠ ${file.code} ${v.chapter}:${v.verse}: printed with no words and not in scheme ${scheme.id}, no verse text`);
+          }
           validate(file.code, blocks, tokens);
-          warnVerseGaps(file.code, tokens, allVerses);
-          const verses = dropEmptyVersesOutsideScheme(scheme, file.code, allVerses);
-          checkScheme(scheme, file.code, [...tokens, ...verses.flatMap(unitVerses)]);
+          warnVerseGaps(file.code, tokens, verses);
+          // Every token's verse has a verse-text row, so the rows alone cover the check.
+          checkScheme(scheme, file.code, verses.flatMap(unitVerses));
           insertBookRows(db, { translationId, book: file.code }, { docs, verses, blocks, tokens });
           const bookReadings = readings.filter((r) => r.book === file.code);
           checkReadings(file.code, bookReadings, tokens);
@@ -272,9 +282,8 @@ function unitVerses(u: VerseText): { chapter: number; verse: number }[] {
  * scheme lacks. A chapter that ends early only warns: an edition may omit
  * verses.
  */
-function checkScheme(scheme: Scheme, code: string, tokens: { chapter: number; verse: number | null }[]) {
-  const verses = tokens.flatMap((t) => (t.verse == null ? [] : [{ chapter: t.chapter, verse: t.verse }]));
-  const { unknown, short } = checkVerses(scheme, code, verses);
+function checkScheme(scheme: Scheme, code: string, rows: readonly { chapter: number; verse: number }[]) {
+  const { unknown, short } = checkVerses(scheme, code, rows);
   if (unknown.length > 0) {
     const list = unknown.map((v) => `${v.chapter}:${v.verse}`).join(', ');
     throw new Error(`${code}: verses not in scheme ${scheme.id}: ${list}`);
@@ -282,23 +291,6 @@ function checkScheme(scheme: Scheme, code: string, tokens: { chapter: number; ve
   for (const s of short) {
     console.warn(`  ⚠ ${code} ${s.chapter}: ends at verse ${s.last}, scheme ${scheme.id} has ${s.expected}`);
   }
-}
-
-/**
- * A verse marker printed with no words, for a verse the scheme lacks (WEB's
- * ROM 16:25, a footnote saying where TR puts the doxology), gets no verse-text
- * row: its address would name a verse the scheme lacks. The marker stays in
- * the chapter document. A verse with words outside the scheme still stops
- * the ingest (checkScheme).
- */
-function dropEmptyVersesOutsideScheme(scheme: Scheme, code: string, verses: readonly VerseText[]): VerseText[] {
-  const kept = verses.filter(
-    (v) => v.text !== '' || v.verse === 0 || unitVerses(v).every((u) => hasVerse(scheme, code, u.chapter, u.verse)),
-  );
-  for (const v of verses) {
-    if (!kept.includes(v)) console.warn(`  ⚠ ${code} ${v.chapter}:${v.verse}: printed with no words and not in scheme ${scheme.id}, no verse text`);
-  }
-  return kept;
 }
 
 /** Corpus invariants (CONTEXT.md) — fail the build, not the reader. */
