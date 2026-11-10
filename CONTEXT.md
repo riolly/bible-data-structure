@@ -45,8 +45,8 @@ An edition we hold as files, that passes the ingest checks, and whose every word
 An edition that passes the numbering and markup checks but isn't Full. It connects to the original language verse by verse through the pivot. (ADR-0008)
 _Avoid_: partial edition, lite edition
 
-**Rights record** *(planned)*:
-One record per edition saying what its license allows: the route (provider), offline use (`none`, `cache` or `full`), refresh days, copy limit, AI use and attribution. (ADR-0008)
+**Rights record**:
+One record per edition saying what its license allows: the route (provider), offline use (`none`, `cache` or `full`), refresh days, copy limit, AI use and attribution. The type and the seven local editions' records are in `src/contract/rights.ts`. Step 10 adds the licensed editions. (ADR-0008)
 
 **Provider** *(planned)*:
 Where an edition's text comes from at read time: a local pack, or a licensed API such as API.Bible. A fetched chapter carries its own stamp, because the provider can refresh it. (ADR-0008)
@@ -145,6 +145,21 @@ The editorial word-level rendering under an Original Word ("Word" under λόγο
 
 **Cross-reference**:
 An editorial link between two passages (for example from the Treasury of Scripture Knowledge). Relates verse addresses, not one edition's words.
+
+## App contract
+
+**App contract**:
+The calls an app makes to read the model: `chapter`, `passage`, `verseText`, `map` and `rights` (`src/contract/contract.ts`). An app names an edition, and the edition supplies the scheme, so app code writes `JHN 3:16`. Every result carries the edition stamps, and never a row id. A pack (plan step 13) or a provider (step 10) implements the same interface.
+
+**Reference**:
+A human-written string such as "1 Cor 13:4-7" or "Ps 23". `passage` resolves it to addresses under the edition's scheme with bible-passage-reference-parser, English only. (ADR-0008)
+_Avoid_: address (an address names its scheme and has one syntax)
+
+**Lookup result**:
+What an address gives in one edition: the verse, the bridge that contains it, or absent. Absent says why: the edition's scheme has no such verse, or the edition prints no text there (BSB's Acts 8:37). A verse printed with no words is found, with empty text.
+
+**Mapping result**:
+What `map` gives for one verse in another edition: one verse, several, part of a verse, or absent. Each kind has a display rule, written once in `src/contract/contract.ts` (`MapKind`).
 
 ## Rules
 
