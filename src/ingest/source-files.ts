@@ -66,3 +66,8 @@ export function readSource(
   });
   return { edition: computeEdition(raw), files: applyTextFixes(usfm, src.textFixes), readings };
 }
+
+/** The edition stamp of a source's unpacked files under `root`, as the ingest computes it. */
+export function sourceEdition(src: SourceDef, root = SOURCES_ROOT): string {
+  return computeEdition(readUpstream(src, root));
+}
