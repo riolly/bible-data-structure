@@ -15,7 +15,7 @@ A word address is a verse plus a `word_index`: the 0-based ordinal of a word Tok
 
 ## Open for the research
 
-- Rule 6 (a verse bridge collapses to its first number) loses information. Surfacing verse ranges needs re-ingest and is an address migration. Decide before any external reference exists.
+- ~~Rule 6 (a verse bridge collapses to its first number) loses information. Surfacing verse ranges needs re-ingest and is an address migration. Decide before any external reference exists.~~ Decided by v1.5.
 - The rules were written for English. Amendment v1.2 registers what they do with Hebrew and Greek. A script without spaces between words still needs its own policy.
 - The petuha and setuma marks (פ, ס) are punctuation since v1.3. Reading them as paragraph structure later needs no address change, since punctuation has no word index.
 
@@ -98,3 +98,13 @@ Brenton numbers Septuagint text with no Hebrew counterpart as letters on the pre
 
 - **Rule 7.** A verse marker with a letter (`\v 35a`) sets the token's `segment`, and word indexes count from 0 within each segment. `1KI 2:35a!1/brenton` is the first word of 35a. Verses without letters have segment `''`, so no other edition's address changes.
 - The corpus holds a unique index on edition, book, chapter, verse, segment and word index, so a collision stops the ingest.
+
+## Amendment v1.5: a verse bridge is one unit with a range (2026-11-10, plan step 8)
+
+Rule 6 collapsed `\v 17-18` to 17, so 18 named nothing. NLT prints Numbers 1:20-21 as one unit, and an app asked for Numbers 1:21 must find it. This amendment replaces rule 6 of the v1 policy, the verse bridge rule. It is the address migration that rule said a range would need. The paragraph-mark rule that v1.3 also numbered 6 is unchanged, and so is `tokenize.ts`.
+
+- **Rule 6, replaced.** A verse marker with a range makes one verse unit with a first and a last verse. Every number from the first to the last resolves to the unit: `NUM 1:21/nlt` finds the unit 20-21. The unit's tokens carry the first number in `token.verse`, and word indexes count from 0 across the whole unit, so `NUM 1:20!3/nlt` and `NUM 1:21!3/nlt` name the same word. `verse_text.last_verse` holds the last verse, equal to `verse` for a single verse, and `readVerseUnit` in `src/db/corpus-read.ts` resolves a number to its unit.
+- **Rule 6a, the unit check.** A unit has one number or one unbroken range: the last verse is above the first, and neither end has a segment letter. Within a chapter the units rise in source order. A unit's first verse is above the previous unit's last verse, or the same single verse with a later segment letter (Brenton's `35`, `35a`). `normalize.ts` stops the ingest otherwise. All seven pinned editions pass.
+- **Every number must be in the scheme.** The ingest checks each number of a range against the edition's scheme, not just the first.
+- **Words stamp.** A word in a bridge hashes its address with the range (`4MA 8:28-29!3`), so the stamp changes when what a number resolves to changes. Other words hash as before. WEB is the only pinned edition with bridges. Five of its six bridges hold only a footnote (Sirach), and one holds words (4 Maccabees 8:28-29). So WEB's words stamp changed from `sha256:8fa638d577ba7d01` to `sha256:4e13d87b9f25701f`, and the other six stayed the same.
+- **Migration.** No word moved: each word keeps its first-verse address and index. The later numbers of a bridge gain an address. No outside reference existed yet, so nothing needs migrating.
