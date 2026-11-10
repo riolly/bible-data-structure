@@ -46,3 +46,38 @@ The ebible.org catalog with its `Redistributable` and `Copyright` columns is [tr
 [byz]: https://ebible.org/grcbyz/copyright.htm
 [brenton]: https://ebible.org/grcbrent/copyright.htm
 [grclxx]: https://ebible.org/grclxx/copyright.htm
+
+## Closed-license translations
+
+Status: researched 2026-11-10 from publisher pages. These texts are fetched under a license and never committed. The API.Bible clauses were read twice. The rest was read once and needs a second check before a decision rests on it.
+
+| Translation | Route for a free app from a registered organization | Limit that shapes the design |
+|---|---|---|
+| NASB 1995, NASB 2020, AMP | API.Bible standard license. YouVersion Platform lists them (listing not rechecked). A direct Lockman license for files | Without a license, at most 1,000 stored verses ([Lockman][lockman]) |
+| NLT, The Message | API.Bible. Tyndale's permissions page sends app makers there (read from a Tyndale-hosted mirror) | Exact text, punctuation and capitalization included |
+| NIV | Biblica express license through API.Bible or YouVersion | Non-commercial, no AI features in the app, no unrestricted download (from search excerpts, Biblica's site refused the fetch) |
+| ESV | Crossway's API, or an organization license | At most 500 stored verses or half a book ([ESV API][esv]) |
+| CSB, NKJV | API.Bible | API.Bible terms |
+
+API.Bible [terms][ab-terms], updated 2026-09-03:
+
+- Section 4.1: no change to "any part of the structure or content".
+- Section 11: content stored offline is checked for updates at least every 30 days.
+- Section 12: DRM, and no printing of more than 100 verses.
+- Section 10.2: content removed within 72 hours of termination.
+- Section 9.2: no AI training without written consent from API.Bible and the publisher.
+- Section 3.3: web apps report usage through FUMS.
+
+API.Bible plans ([Express Licensing FAQs][ab-express], updated 2026-10-01, and the [developer FAQ][ab-faq]): Starter is free, non-commercial, three copyrighted Bibles and 5,000 calls a month. Pro for a non-commercial app is $29 a month, all eligible copyrighted Bibles and 150,000 calls a month.
+
+Open questions:
+
+- Whether a whole licensed Bible may be stored on a device. The terms allow offline storage with a 30-day refresh, the Express FAQ says "Caching is allowed and recommended", and the developer FAQ asks for "fewer than 500 consecutive verses". Ask API.Bible in writing.
+- Whether API.Bible delivers Strong's numbers for NASB. Lockman licenses a Strong's-keyed NASB to Bible software such as Blue Letter Bible.
+- What file format a direct Lockman or Digital Bible Library license delivers.
+
+[lockman]: https://www.lockman.org/permission-to-quote-copyright-trademark-information/
+[esv]: https://api.esv.org/
+[ab-terms]: https://api.bible/terms-and-conditions
+[ab-express]: https://care.api.bible/article/405-express-licensing-faqs
+[ab-faq]: https://docs.api.bible/common-questions/

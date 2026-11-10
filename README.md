@@ -22,7 +22,52 @@ Started 2026-11-09 from the research in [bible-codex](https://github.com/riolly/
    4. Trouble-spot fixtures and `src/ingest/trouble-spots.test.ts`. Every spot but the Greek additions to Daniel and Esther passes. Done.
 
    Left open by this step: 100 verses in chapters a derived scheme changes map nowhere, Brenton's 97 and WEB's 3. TVTMS's text tests run per edition and don't decide them (ADR-0006 amendment, text tests). There is no Catholic or Orthodox canon yet, so the deuterocanonical books have no canon order.
-4. **Design app projections.** Write the contract any Bible app needs (render a chapter, resolve "Ps 23", map a verse to another edition, anchor a user's mark, search), then compile the model into per-app packs and measure size and speed. Content changes become rebuilds. Only app user data needs migrations.
+4. **Design app projections.** Replaced on 2026-11-10 by steps 5 to 14, after a review of the model against licensed translations. The scope they assume is in [Scope](#scope).
+5. **Record the scope and the support levels.** Write ADR-0008 from the Scope section below. Add the terms Full edition, Reading edition, rights record and provider to CONTEXT.md. Change the product principle in CLAUDE.md to "a model feature lands when a contract call or a fixture from a target edition needs it". Done when the three files agree and no code has changed.
+6. **Make a clean checkout build.** ebible rebuilt the KJV zip on 2026-11-10, so the zip hash pinned on 2026-11-09 fails and `bun run ingest:download` stops. Verify a download by the edition stamp, which ignores repackaging, and keep our own copy of every pinned source. Done when a fresh clone runs `ingest:download` and `ingest` to the end.
+7. **Store each chapter as a document, and derive tokens from it.** Amend ADR-0001. The stored truth is the USJ of one chapter, with its whitespace, character styles, footnotes, cross-references, stanza breaks and published verse numbers (`\va`, `\vp`). A block keeps its USFM marker and level (`pi2`, `li2`, `s2`) in place of the role vocabulary. Tokens, blocks and verse text are derived by the same tokenizer, so word addresses and both stamps stay as they are. List the supported markers in the ADR, and stop the ingest on any other. Done when fixtures pass for a footnote, a cross-reference, `\add`, `\nd`, `\sc`, `\wj`, a stanza break and an omitted verse, and the KJV and BSB words stamps are unchanged.
+8. **Give a verse bridge its range.** Amend ADR-0004 rule 6. A verse unit holds a first and a last verse, every number in the range resolves to the unit, and word indexes count within the unit. NLT prints Numbers 1:20-21 as one unit. Check the rule that each unit has one number or one unbroken range, in rising order within its chapter. Done when the `\v 5-6` fixture resolves both `5` and `6`, and no stored reference exists yet.
+9. **Write the app contract.** Five calls, with the reading screen as the first consumer: `chapter`, `passage`, `verseText`, `map` and `rights`. The edition supplies the scheme, so app code writes `JHN 3:16`. Human references go through `bible-passage-reference-parser`, English only. Every address returns the verse, the bridge that contains it, or "absent in this edition". Record the display rule for each mapping result (one verse, several, part of a verse, absent) in the contract. Done when the contract is a typed module with tests against KJV and BSB.
+10. **Add the rights record and two providers.** A rights record per edition holds the route, offline (`none`, `cache` or `full`), refresh days, copy limit, AI use and attribution. The providers are a local pack and API.Bible. The API.Bible provider caches by chapter and refreshes within 30 days. NASB text is fetched with a key and never committed. Needs the API.Bible key from the first human step below. Done when NASB 2020 John 3, Psalm 119 and Numbers 1 render through the step 9 contract.
+11. **Put Strong's numbers on the original words.** Keep OSHB's lemma field, which holds the Strong's number and which `oshb-xml.ts` drops today. Choose a Greek source with Strong's numbers and glosses (MACULA Greek or STEPBible TAGNT) and record its license verdict in research/licensing.md. Done when `map` plus one read returns the Hebrew or Greek words of any verse of any edition, each with a Strong's number and a gloss.
+12. **Compile packs and measure.** The pack is what ships, and `corpus.db` never does. Baseline from 2026-11-10 for KJV: token rows with the current indexes are 71.3 MB (22.0 MB gzipped), and one compressed document per chapter plus one text row per verse is 9.7 MB (3.6 MB gzipped). Done when a pack builds for KJV and BSB, and its size and chapter read time are recorded here.
+13. **Anchor user marks to a verse.** Amend ADR-0005. A mark's truth is the verse address plus the quote, and a word index is a hint. Word anchors exist only on Full editions. A fetched edition reconciles on the device when a refreshed chapter's hash changes. Done when the amendment is written. Apps build the storage.
+14. **Decide what stays in the build.** The Brenton, WEB and Robinson-Pierpont tests stay while they pass. When a step above breaks one, delete it instead of fixing it.
+
+Steps only a person can do:
+
+- Sign up for API.Bible's Starter plan and put the key in the environment (blocks step 10).
+- Ask API.Bible in writing whether NASB and NLT may be stored whole on a device, and whether our server may cache chapters for our app.
+- Ask the Lockman Foundation for terms on NASB files with Strong's numbers. That license moves NASB from Reading to Full.
+
+## Scope
+
+Decided 2026-11-10 with the owner. The first apps are our own, free, published by a registered organization, for English readers. AI features may come later. Every cut below is reversible, because addresses name their scheme (ADR-0002).
+
+In scope:
+
+- The 66-book Protestant canon with English numbering.
+- Scripture text only, with a fixed list of USFM markers.
+- One Hebrew text (WLC) and one Greek text (SBLGNT) as the hub.
+- English text and English reference parsing.
+- One house set of cross-references and one outline, keyed to the pivot.
+- Editions that never change in place. A revision is a new edition.
+
+Out of scope for now: the Septuagint, the Vulgate, deuterocanonical books, Catholic and Orthodox canons, manuscript variants, study notes, book introductions, other languages, and guessing which translation word matches which original word.
+
+Support levels, computed from ingest checks and the rights record:
+
+| | Full | Reading |
+|---|---|---|
+| Requirement | We hold the files, they pass the checks, and each word has a Strong's number | It passes the numbering and markup checks |
+| Reading with formatting and footnotes | Yes | Yes |
+| Verse highlight, note, bookmark, compare, cross-references | Yes | Yes |
+| The verse's Hebrew or Greek words with Strong's numbers | Yes | Yes |
+| Tap one English word to reach its original word, part-verse marks | Yes | No |
+| Whole Bible offline, search on the device | Yes | Cached chapters, unless the license grants more |
+| Examples | BSB, KJV | NASB, NLT, NIV, CSB, NKJV, ESV |
+
+A Reading edition connects to the original language verse by verse through the pivot. Closed-license routes and terms are in [research/licensing.md](research/licensing.md).
 
 ## Carried over from bible-codex
 
