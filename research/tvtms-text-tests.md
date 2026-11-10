@@ -13,7 +13,7 @@ The TVTMS header defines them at lines 117-127.
 ## How they were evaluated
 
 - A verse's word count is the number of `word` tokens with that verse number in the edition. A verse the edition lacks counts 0. A verse bridge puts all its words in the first verse (ADR-0004 rule 6).
-- `TextBeforeV1` holds when the chapter has a `psalm_title` block before its first verse-1 token. Section headings (BSB's "Deliver Me, O LORD!") are not canonical text and don't count. KJV, BSB and WEB have unnumbered titles. In WLC and Brenton the title is part of verse 1.
+- `TextBeforeV1` holds when the chapter has a `\d` block (a Psalm title) before its first verse-1 token. Section headings (BSB's "Deliver Me, O LORD!") are not canonical text and don't count. KJV, BSB and WEB have unnumbered titles. In WLC and Brenton the title is part of verse 1.
 - A row is evaluated only if the edition has every book its text tests name. Otherwise it stays undecided, as today.
 - After its count tests pass, a row whose text tests all pass is kept, and a row with a failing text test is dropped. `compileTvtms` then runs unchanged.
 

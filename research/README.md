@@ -14,6 +14,7 @@ One file per topic, written from primary sources with links. A finding that chan
 | Hebrew written and read forms | `hebrew-ketiv-qere.md` | noted 2026-11-09 | ebible's WLC keeps only the ketiv. Move to upstream OSHB? How to store a qere without moving word indexes? |
 | Lexicons and morphology | `lexicons.md` | not started | Strong's, BDB, Thayer, Louw-Nida. Morphology code systems per source. Licenses. |
 | Structure | `structure.md` | not started | Paragraphing and section headings across editions. Pericope systems. Literary units that cross chapters. |
+| Markup in the pinned sources | `source-markup.md` | noted 2026-11-10 | Which USFM markers the sources use. Verse markers with no words, and verses with no marker. |
 | Notes and cross-references | `apparatus.md` | not started | USFM footnotes (`\f`), cross-references (`\x`), the Treasury of Scripture Knowledge, OpenBible.info. |
 | Tokenization beyond English | `tokenization.md` | not started | Rules for Greek, Hebrew and other scripts. Verse bridges (ADR-0004 open item). |
 | Licensing | `licensing.md` | done 2026-11-09 for the step 3 sources | Per source, whether it can be redistributed in an app, its attribution, and whether raw files may be committed. |
