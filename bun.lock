@@ -6,6 +6,7 @@
       "name": "bible-data-structure",
       "dependencies": {
         "better-sqlite3": "12.11.1",
+        "bible-passage-reference-parser": "4.0.0",
         "drizzle-orm": "1.0.0-rc.4-5d5b77c",
         "usfm-grammar": "3.2.0",
       },
@@ -147,6 +148,8 @@
     "base64-js": ["base64-js@1.5.1", "", {}, "sha512-AKpaYlHn8t4SVbOHCy+b5+KKgvR4vrsD8vbvrbiQJps7fKDTkjkDry6ji0rUJjC0kzbNePLwzxq8iypo41qeWA=="],
 
     "better-sqlite3": ["better-sqlite3@12.11.1", "", { "dependencies": { "bindings": "^1.5.0", "prebuild-install": "^7.1.1" }, "hasInstallScript": true }, "sha512-dq9AtApgg5PGFtBzPFSBl3HZQjHok5gaQCM6zh2Yk0aSmDCs1CbnVI8/HgASQkNKsWFpseIO9beg5xxpYhbIfA=="],
+
+    "bible-passage-reference-parser": ["bible-passage-reference-parser@4.0.0", "", {}, "sha512-glCq4RVcvbeNMI2h+XppurZ2zyaelsI23dX1Uv+xXQ2KRjkWRpITyNHD2+qvLG8HSSWYw/71MOEa4DgsY+i1oA=="],
 
     "bindings": ["bindings@1.5.0", "", { "dependencies": { "file-uri-to-path": "1.0.0" } }, "sha512-p2q/t/mhvuOj/UeLlV6566GD/guowlr0hHxClI0W9m7MWYkL1F0hLo+0Aexs9HSPCtR1SXQ0TD3MMKrXZajbiQ=="],
 

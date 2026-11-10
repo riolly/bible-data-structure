@@ -47,6 +47,18 @@ The ebible.org catalog with its `Redistributable` and `Copyright` columns is [tr
 [brenton]: https://ebible.org/grcbrent/copyright.htm
 [grclxx]: https://ebible.org/grclxx/copyright.htm
 
+## Libraries an app ships
+
+Status: checked 2026-11-10 for plan step 9.
+
+| Library | License | Ship in an app | Attribution | Used |
+|---|---|---|---|---|
+| [bible-passage-reference-parser][bpr] 4.0.0 (npm), by Stephen Smith / OpenBible.info | MIT, "Copyright (c) 2011-2026 Stephen Smith" (`LICENSE.md` in the npm tarball, and the README's License section) | Yes | Keep the MIT notice in the shipped bundle's third-party notices | Yes, English only (`esm/lang/en.js`), in `src/contract/reference.ts` |
+
+The parser's book names and abbreviations are its own data, under the same MIT license. Its verse counts are not used: `passage` checks every verse against the edition's scheme.
+
+[bpr]: https://github.com/openbibleinfo/Bible-Passage-Reference-Parser
+
 ## Closed-license translations
 
 Status: researched 2026-11-10 from publisher pages. These texts are fetched under a license and never committed. The API.Bible clauses were read twice. The rest was read once and needs a second check before a decision rests on it.

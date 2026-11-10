@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "better-sqlite3": "12.11.1",
+    "bible-passage-reference-parser": "4.0.0",
     "drizzle-orm": "1.0.0-rc.4-5d5b77c",
     "usfm-grammar": "3.2.0"
   },
