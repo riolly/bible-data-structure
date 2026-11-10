@@ -65,7 +65,7 @@ Status: researched 2026-11-10 from publisher pages. These texts are fetched unde
 
 | Translation | Route for a free app from a registered organization | Limit that shapes the design |
 |---|---|---|
-| NASB 1995, NASB 2020, AMP | API.Bible standard license. YouVersion Platform lists them (listing not rechecked). A direct Lockman license for files | Without a license, at most 1,000 stored verses ([Lockman][lockman]) |
+| NASB 1995, NASB 2020, AMP | API.Bible standard license. YouVersion Platform lists them (listing not rechecked). A direct Lockman license for files | Without a license, at most 1,000 verses, quoted or stored in an electronic retrieval system, as long as they aren't a whole book and are at most 50% of the work they appear in ([Lockman][lockman], checked 2026-11-10) |
 | NLT, The Message | API.Bible. Tyndale's permissions page sends app makers there (read from a Tyndale-hosted mirror) | Exact text, punctuation and capitalization included |
 | NIV | Biblica express license through API.Bible or YouVersion | Non-commercial, no AI features in the app, no unrestricted download (from search excerpts, Biblica's site refused the fetch) |
 | ESV | Crossway's API, or an organization license | At most 500 stored verses or half a book ([ESV API][esv]) |

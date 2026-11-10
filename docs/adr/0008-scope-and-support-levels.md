@@ -2,7 +2,7 @@
 
 Status: accepted 2026-11-10 with the owner, after a review of the model against licensed translations. Moved here from the README plan (step 5).
 
-The first apps are our own, free, published by a registered organization, for English readers. AI features may come later. Every cut below can be undone, because addresses name their scheme (ADR-0002). A model feature lands when a contract call or a fixture from a target edition needs it.
+The first apps are our own, free, published by a registered organization, for English readers. AI features may come later. Every cut below can be undone, because addresses name their scheme (ADR-0002). A model feature lands when a contract call or a fixture from a target edition needs it. The target editions are the English editions in the Examples row below, plus the hub texts WLC and SBLGNT.
 
 ## In scope
 
@@ -25,7 +25,7 @@ The level is computed from the ingest checks and the edition's rights record, ne
 
 | | Full | Reading |
 |---|---|---|
-| Requirement | We hold the files, they pass the checks, and each word has a Strong's number | It passes the numbering and markup checks |
+| Requirement | We hold the files, they pass the checks, and each word that translates an original word has a Strong's number. Supplied words (`\add`) and words the tag source marks as having no counterpart need none | It passes the numbering and markup checks |
 | Reading with formatting and footnotes | Yes | Yes |
 | Verse highlight, note, bookmark, compare, cross-references | Yes | Yes |
 | The verse's Hebrew or Greek words with Strong's numbers | Yes | Yes |
