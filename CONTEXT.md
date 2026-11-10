@@ -32,6 +32,9 @@ _Avoid_: version (ambiguous between translation and revision)
 **Edition stamp**:
 A deterministic id for an edition's revision, computed as sha256 over its source text (`src/ingest/edition.ts`). A text change gives a new stamp; repackaging the zip doesn't. (ADR-0005)
 
+**Words stamp**:
+A deterministic id for what an edition's word addresses hold: sha256 over every word address and the word stored there (`translation.words_stamp`). Unlike the edition stamp, it changes when a text fix, the tokenizer or the parser changes stored words. Reconciliation compares this one. (ADR-0005 amendment)
+
 **Source pin**:
 The upstream URL plus the sha256 of the downloaded file (`src/ingest/sources.ts`). A mismatch stops the download. Updating a pin is a new edition.
 
@@ -41,7 +44,7 @@ The upstream URL plus the sha256 of the downloaded file (`src/ingest/sources.ts`
 A numbering system for chapters and verses: KJV, Masoretic, Septuagint, Vulgate and others. The same `chapter:verse` can mean different text under different schemes (Psalm titles, Joel 2/3, Malachi 3/4, Revelation 12/13). (ADR-0002)
 
 **Scheme id**:
-A lowercase name from our registry: `kjv`, the Paratext names `org`, `eng`, `lxx`, `vul`, `rso`, `rsc`, and the derived schemes `rp`, `web`, `brenton`. Paratext `eng` is not KJV numbering.
+A lowercase name from our registry: `kjv`, the Paratext names `org`, `eng`, `lxx`, `vul`, `rso`, `rsc`, and the derived schemes `rp`, `web`, `brenton`, `bsb`. Paratext `eng` is not KJV numbering.
 _Avoid_: av11n (that is SWORD's name for its mapping feature, not a scheme)
 
 **Verse address**:
@@ -49,7 +52,7 @@ A book, chapter, verse and optional segment **under a named versification scheme
 _Avoid_: reference, citation (those are human-written strings that resolve to an address)
 
 **Segment**:
-A lettered part of a verse (`13:1a`), used where schemes split a verse differently. Addresses use one letter; pivot mapping rows may use TVTMS's longer subverse ids (ADR-0006).
+A lettered part of a verse (`13:1a`), used where schemes split a verse differently, and where an edition letters text it adds after a verse (Brenton's `1KI 2:35a` to `35o`). A Token carries the segment its source marks, and a word index counts within the segment (ADR-0004 v1.4). Addresses use one letter; pivot mapping rows may use TVTMS's longer subverse ids (ADR-0006).
 
 **Derived scheme**:
 A registered scheme plus a listed set of chapter-length changes, for an edition that fits no registered scheme. It has its own scheme id. `kjv` is `eng` with two changes. (ADR-0002 amendment)
@@ -61,7 +64,7 @@ A synthetic scheme that only grows, which all scheme mappings go through. Its id
 Data that moves a verse address from one scheme to the pivot and back, including partial verses, merges, cross-book moves and verses absent in one scheme. Compiled from STEPBible TVTMS and Paratext `.vrs`. (ADR-0006)
 
 **Word address**:
-A verse address plus a **word index**: the 0-based ordinal of a word Token in that verse, punctuation excluded. In address strings the word number counts from 1 (`MAT 2:1!3/kjv` is index 2). A punctuation Token is addressed by the word it follows. Valid only for one edition, since editions differ in words. Its meaning depends on the tokenizer policy (ADR-0004).
+A verse address plus a **word index**: the 0-based ordinal of a word Token in that verse or segment, punctuation excluded. The corpus enforces that one word address names one word. In address strings the word number counts from 1 (`MAT 2:1!3/kjv` is index 2). A punctuation Token is addressed by the word it follows. Valid only for one edition, since editions differ in words. Its meaning depends on the tokenizer policy (ADR-0004).
 
 **Verse bridge**:
 A USFM verse marker covering several verses (`\v 17-18`). Today it collapses to its first number, and the later numbers get no address (ADR-0004, rule 6; open for revisiting).
@@ -76,7 +79,7 @@ One word or punctuation occurrence in one edition's text: the unit of storage an
 _Avoid_: word (ambiguous with Original Word)
 
 **Block**:
-A contiguous run of Tokens forming one literary unit (prose paragraph, poetry line, heading) with a genre and indent level, derived from USFM markers (`\p`, `\q#`, `\s`, `\d`). Blocks partition the token stream. Heading Tokens carry no verse and no word index. (ADR-0001)
+A contiguous run of Tokens forming one literary unit (prose paragraph, poetry line, heading) with a genre and indent level, derived from USFM markers (`\p`, `\q#`, `\s`, `\d`). Blocks partition the token stream. Heading Tokens carry no verse and no word index, except a Psalm title that the edition's scheme numbers as verse 0. (ADR-0001)
 _Avoid_: paragraph (poetry lines and headings are Blocks too)
 
 **Structure overlay** *(planned)*:

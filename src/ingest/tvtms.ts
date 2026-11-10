@@ -225,7 +225,8 @@ export function addBookText(
   }
   const role = new Map(blocks.map((b) => [b.id, b.role]));
   for (const t of tokens) {
-    if (t.verse !== null || role.get(t.blockId) !== 'psalm_title') continue;
+    // a title is unnumbered (NULL) or verse 0 where the scheme numbers it so
+    if ((t.verse !== null && t.verse !== 0) || role.get(t.blockId) !== 'psalm_title') continue;
     if (t.seq < (firstVerse1.get(t.chapter) ?? Infinity)) into.titled.add(`${book} ${t.chapter}`);
   }
 }

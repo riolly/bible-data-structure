@@ -67,6 +67,16 @@ function dedupe(refs: Ref[]): Ref[] {
 }
 
 /**
+ * Drops a whole verse when one of its own parts is also in the list. TVTMS
+ * often gives both a whole-verse row (`Concatenation`) and per-part rows for
+ * the same verse, and the part is the precise answer.
+ */
+function dropCoveredWholes(refs: Ref[]): Ref[] {
+  const split = new Set(refs.filter((r) => r.segment !== '').map(verseOf));
+  return refs.filter((r) => r.segment !== '' || !split.has(verseOf(r)));
+}
+
+/**
  * One direction-agnostic relation from a scheme's references to another
  * scheme's, with identity wherever no row speaks.
  */
@@ -123,7 +133,7 @@ export class Relation {
     if (r.segment !== '') out.push(...(this.byTo.get(refKey(whole(r))) ?? []));
     else for (const k of this.toParts.get(verseOf(r)) ?? []) if (k !== refKey(r)) out.push(...this.byTo.get(k)!);
     if (!this.speaksFor(r) && exists(r)) out.push(r);
-    return dedupe(out);
+    return dropCoveredWholes(dedupe(out));
   }
 }
 

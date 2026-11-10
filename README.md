@@ -10,7 +10,7 @@ Started 2026-11-09 from the research in [bible-codex](https://github.com/riolly/
 2. **Model the Bible itself.** Research each topic in [research/](research/README.md) from primary sources and fold the findings into CONTEXT.md, ADRs and the code. Versification and canons are researched and decided (ADR-0002, ADR-0006), and their code is built:
    1. Address module, `src/model/address.ts`: parses and formats `PSA 51:3/org`, `REV 13:1a/kjv`, `GEN 1:1-31/kjv` and `MAT 2:1!3/kjv`, with 1-based word numbers in strings and 0-based in storage. Done.
    2. Books keyed by USFM code and canons as rows (`book`, `canon`, `canon_section`, `canon_entry`, `canon_entry_book`, `book_name`), seeded with the USFM spec's 101 books, their English names and the protestant canon. `book.slug`, `testament`, `position` and `src/ingest/books.ts` are gone. Done.
-   3. Scheme registry, `src/ingest/schemes.ts`: `kjv` plus the six Paratext schemes, with verse counts from libpalaso's `.vrs` files (MIT, copied from libpalaso commit `f1f70e9` and checked by sha256). KJV and BSB ingest under `kjv`, and ingest rejects verses a scheme lacks. Done.
+   3. Scheme registry, `src/ingest/schemes.ts`: `kjv` plus the six Paratext schemes, with verse counts from libpalaso's `.vrs` files (MIT, copied from libpalaso commit `f1f70e9` and checked by sha256). KJV and BSB ingested under `kjv`, and ingest rejects verses a scheme lacks. Done. BSB later moved to `bsb` (step 3.3).
    4. Full `.vrs` parser and `scheme_mapping` rows to an extend-only `pivot` scheme, with a coverage check in place of the bijection check. `versification_map` and `divergent.vrs` are gone; `fixtures/real-cases.vrs` holds real lines for the ADR-0006 cases. Done.
    5. TVTMS compiled per scheme, pinned by URL and sha256 in `src/ingest/sources.ts`. TVTMS rows are stored where TVTMS decides from verse counts, `.vrs` rows elsewhere, and `build/mapping-diff.tsv` lists where they disagree. Done.
 
@@ -18,7 +18,7 @@ Started 2026-11-09 from the research in [bible-codex](https://github.com/riolly/
 3. **Test against texts that disagree.** Import KJV, BSB, a Bible with deuterocanonical books, OSHB Hebrew, a Greek New Testament and, if licensable, the Septuagint. Make the trouble-spot fixtures in research/README.md pass.
    1. Licensing verdicts per source in [research/licensing.md](research/licensing.md). Every text below is public domain except SBLGNT (CC BY 4.0). Done.
    2. Each source lists the books it must have, and may carry counted text fixes. WLC (OSHB's Hebrew) and SBLGNT ingest under `org`. ADR-0004 v1.2 records that Hebrew and Greek tokenize under the v1.1 rules unchanged. Done.
-   3. Derived schemes (ADR-0002 amendment): `rp` for Robinson-Pierpont 2018, `web` for the World English Bible with deuterocanon, and `brenton` for Brenton's Greek Septuagint. Done.
+   3. Derived schemes (ADR-0002 amendment): `rp` for Robinson-Pierpont 2018, `web` for the World English Bible with deuterocanon, and `brenton` for Brenton's Greek Septuagint, and `bsb` for the BSB's order of Philippians 1:16-17 (ADR-0006 amendment, text tests). Done.
    4. Trouble-spot fixtures and `src/ingest/trouble-spots.test.ts`. Every spot but the Greek additions to Daniel and Esther passes. Done.
 
    Left open by this step: 100 verses in chapters a derived scheme changes map nowhere, Brenton's 97 and WEB's 3. TVTMS's text tests run per edition and don't decide them (ADR-0006 amendment, text tests). There is no Catholic or Orthodox canon yet, so the deuterocanonical books have no canon order.
@@ -46,14 +46,14 @@ Started 2026-11-09 from the research in [bible-codex](https://github.com/riolly/
 
 ## Editions
 
-Every pin update in `src/ingest/sources.ts` is a new edition (ADR-0005). Record it here.
+Every pin update in `src/ingest/sources.ts` is a new edition (ADR-0005). Record it here. The words stamp (ADR-0005 amendment) changes whenever stored words change, so record it after any ingest that changes one.
 
-| Edition | Pinned zip sha256 | Edition stamp | Pinned on | Note |
-|---|---|---|---|---|
-| KJV | `c7ba60db…621aaf` | `sha256:7ead3d28b2b34c9b` | 2026-11-09 | July pin no longer matched. No July stamp exists, so a text change can't be confirmed |
-| BSB | `75ca91d5…f7fbc4` | `sha256:3b0004861fcf2481` | 2026-11-09 | Same as KJV. Scheme `bsb` since the TVTMS text tests (ADR-0006 amendment) |
-| WLC | `464225e1…bd1df7` | `sha256:a548fe69e09108f4` | 2026-11-09 | ebible `hboWLC`, scheme `org` |
-| SBLGNT | `04c5c536…b10a73` | `sha256:89a22750abd8cdbe` | 2026-11-09 | ebible `grcsbl`, scheme `org`. Stamp is before the text fix |
-| RP | `33b208ee…874048` | `sha256:1defb25636d232d6` | 2026-11-09 | ebible `grcmt`, scheme `rp` |
-| WEB | `05b0440b…3589c8` | `sha256:5f722b4d8f3f4e8e` | 2026-11-09 | ebible `eng-web`, scheme `web` |
-| Brenton | `9de434f4…86e9a4` | `sha256:3db40d92c53c8d1d` | 2026-11-09 | ebible `grcbrent`, scheme `brenton` |
+| Edition | Pinned zip sha256 | Edition stamp | Words stamp | Pinned on | Note |
+|---|---|---|---|---|---|
+| KJV | `c7ba60db…621aaf` | `sha256:7ead3d28b2b34c9b` | `sha256:13f8787f02884340` | 2026-11-09 | July pin no longer matched. No July stamp exists, so a text change can't be confirmed |
+| BSB | `75ca91d5…f7fbc4` | `sha256:3b0004861fcf2481` | `sha256:f5dbe0632c8c21ad` | 2026-11-09 | Same as KJV. Scheme `bsb` since the TVTMS text tests (ADR-0006 amendment) |
+| WLC | `464225e1…bd1df7` | `sha256:a548fe69e09108f4` | `sha256:496bcbfec1bf8375` | 2026-11-09 | ebible `hboWLC`, scheme `org` |
+| SBLGNT | `bcb9cfd8…3cbf56` | `sha256:33876ae1d14e3756` | `sha256:b029321cde54e6b7` | 2026-11-09 | Upstream LogosBible/SBLGNT at `d7f35ad`, scheme `org`. Replaced ebible `grcsbl` (`04c5c536…b10a73`, stamp `sha256:89a22750abd8cdbe`), whose text was damaged (research/licensing.md) |
+| RP | `33b208ee…874048` | `sha256:1defb25636d232d6` | `sha256:f991602ae5d26c3f` | 2026-11-09 | ebible `grcmt`, scheme `rp` |
+| WEB | `05b0440b…3589c8` | `sha256:5f722b4d8f3f4e8e` | `sha256:8fa638d577ba7d01` | 2026-11-09 | ebible `eng-web`, scheme `web` |
+| Brenton | `9de434f4…86e9a4` | `sha256:3db40d92c53c8d1d` | `sha256:968ebb8e2132bf89` | 2026-11-09 | ebible `grcbrent`, scheme `brenton` |

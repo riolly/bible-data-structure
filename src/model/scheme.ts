@@ -45,6 +45,13 @@ export interface VerseCheck {
 }
 
 /** Compare one book of an edition's verses against its declared scheme. Verse 0 is ignored. */
+/** The chapters of `book` whose title the scheme numbers as verse 0. */
+export function titleChapters(s: Scheme, book: string): Set<number> {
+  const out = new Set<number>();
+  for (const k of s.titles) if (k.startsWith(`${book} `)) out.add(Number(k.slice(book.length + 1)));
+  return out;
+}
+
 export function checkVerses(
   s: Scheme,
   book: string,

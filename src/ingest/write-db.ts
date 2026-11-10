@@ -9,6 +9,7 @@
  */
 
 import Database from 'better-sqlite3';
+import { eq } from 'drizzle-orm';
 import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 
 import { BOOKS, ENGLISH_NAMES, USFM_SPEC_URL } from '../model/books';
@@ -17,6 +18,7 @@ import type { Block, Token } from '../model/corpus';
 import { PIVOT, type MappingRow } from '../model/mapping';
 import { LIBPALASO_URL } from './schemes';
 import { TVTMS } from './sources';
+import { WORD_TEST_MARGIN } from './tvtms';
 import type { Scheme } from '../model/scheme';
 import * as schema from '../db/corpus-schema';
 
@@ -60,7 +62,8 @@ CREATE TABLE translation (
   year INTEGER,
   license TEXT,
   scheme TEXT NOT NULL REFERENCES scheme(id),
-  edition TEXT NOT NULL
+  edition TEXT NOT NULL,
+  words_stamp TEXT
 );
 CREATE TABLE book (
   code TEXT PRIMARY KEY,
@@ -124,6 +127,7 @@ CREATE TABLE token (
   book TEXT NOT NULL REFERENCES book(code),
   chapter INTEGER NOT NULL,
   verse INTEGER,
+  segment TEXT NOT NULL DEFAULT '',
   word_index INTEGER,
   seq INTEGER NOT NULL,
   kind TEXT NOT NULL,
@@ -133,7 +137,7 @@ CREATE TABLE token (
   ow_id TEXT
 );
 CREATE INDEX token_render ON token (translation_id, book, chapter, verse, seq);
-CREATE INDEX token_anchor ON token (translation_id, book, chapter, verse, word_index);
+CREATE UNIQUE INDEX token_anchor ON token (translation_id, book, chapter, verse, segment, word_index);
 CREATE TABLE scheme_segment (
   scheme TEXT NOT NULL REFERENCES scheme(id),
   book TEXT NOT NULL REFERENCES book(code),
@@ -166,8 +170,8 @@ CREATE INDEX mapping_from ON scheme_mapping (scheme, book, chapter, verse);
 CREATE INDEX mapping_to ON scheme_mapping (scheme, pivot_book, pivot_chapter, pivot_verse);
 `;
 
-const INDEX_DDL = DDL.match(/^CREATE INDEX .*;$/gm)!.join('\n');
-const TABLE_DDL = DDL.replace(/^CREATE INDEX .*;\n/gm, '');
+const INDEX_DDL = DDL.match(/^CREATE (?:UNIQUE )?INDEX .*;$/gm)!.join('\n');
+const TABLE_DDL = DDL.replace(/^CREATE (?:UNIQUE )?INDEX .*;\n/gm, '');
 if (/\bINDEX\b/.test(TABLE_DDL)) throw new Error('write-db.ts: an index in DDL is not one line of `CREATE INDEX ...;`');
 
 /**
@@ -213,6 +217,11 @@ export function insertTranslation(db: CorpusDb, meta: TranslationMeta): number {
     .returning({ id: schema.translation.id })
     .all();
   return row.id;
+}
+
+/** Record an edition's words stamp once its books are written (ADR-0005 amendment). */
+export function setWordsStamp(db: CorpusDb, translationId: number, stamp: string): void {
+  db.update(schema.translation).set({ wordsStamp: stamp }).where(eq(schema.translation.id, translationId)).run();
 }
 
 /** Write the data sources, every USFM book, every canon and the default English names (ADR-0002). */
@@ -291,9 +300,9 @@ function seedSchemesIn(db: CorpusDb, schemes: ReadonlyMap<string, Scheme>): void
 
 /** Tokens per multi-row INSERT: one call into SQLite per row was most of the insert time. */
 const TOKENS_PER_INSERT = 100;
-const TOKEN_INSERT = `INSERT INTO token (translation_id, book, chapter, verse, word_index, seq, kind, text, block_id,
-  verse_start, ow_id) VALUES `;
-const TOKEN_VALUES = '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+const TOKEN_INSERT = `INSERT INTO token (translation_id, book, chapter, verse, segment, word_index, seq, kind, text,
+  block_id, verse_start, ow_id) VALUES `;
+const TOKEN_VALUES = '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
 
 /** Prepared once per connection: drizzle's insert builder took about 6 s for a 51k-token book. */
 const bookStatements = new WeakMap<
@@ -332,7 +341,7 @@ export function insertBookRows(
   const values = (t: Token) => {
     const blockId = blockRowId.get(t.blockId);
     if (blockId == null) throw new Error(`token ${t.id} references unknown block ${t.blockId}`);
-    return [ids.translationId, ids.book, t.chapter, t.verse, t.wordIndex, t.seq, t.kind, t.text, blockId,
+    return [ids.translationId, ids.book, t.chapter, t.verse, t.segment, t.wordIndex, t.seq, t.kind, t.text, blockId,
       t.verseStart ? 1 : 0, t.owId];
   };
   // Rows go in token order either way, so the rowids match one insert per row.
@@ -361,9 +370,11 @@ export const DATA_SOURCES = [
     attribution: TVTMS.attribution,
     changes:
       'Compiled per scheme: each row kept when its =Exist, =NotExist and =Last tests hold for the scheme\'s ' +
-      'verse counts; rows that also need word-count or TextBeforeV1 tests, or that disagree for one verse, ' +
-      'are left out; Ade rows (no USFM code) are skipped; 4Es is read as 2ES; a test without a book uses ' +
-      'the row\'s source book; identity rows are dropped.',
+      'verse counts and its word-count and TextBeforeV1 tests hold for every edition ingested under the ' +
+      `scheme; a word test decides only when its two sides differ by at least ${WORD_TEST_MARGIN * 100}% of ` +
+      'the larger; rows no test decides, or that disagree for one verse, are left out; Ade rows (no USFM ' +
+      'code) are skipped; 4Es is read as 2ES; a test without a book uses the row\'s source book; identity ' +
+      'rows are dropped.',
   },
   {
     id: 'vrs',

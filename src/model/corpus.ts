@@ -6,8 +6,9 @@
  * INVARIANTS (CONTEXT.md):
  * - Blocks PARTITION the token stream: every Token belongs to exactly one Block.
  * - Whitespace is never a Token — spacing is a presentation concern.
- * - Heading Tokens carry verse=null (never 0) and wordIndex=null; a mid-chapter
- *   section heading never inherits the preceding verse.
+ * - Heading Tokens carry verse=null and wordIndex=null; a mid-chapter
+ *   section heading never inherits the preceding verse. A Psalm title the
+ *   scheme numbers as verse 0 carries verse 0 and word indexes (ADR-0001).
  * - `id` fields are STORAGE ids only. Outside references use addresses
  *   (address.ts), never these ids; they do not survive re-ingest.
  *
@@ -62,9 +63,14 @@ export interface Token {
   readonly id: number;
   readonly blockId: number;
   readonly chapter: number;
-  /** Verse number under the edition's scheme; null = non-verse content (headings/titles). */
+  /** Verse number under the edition's scheme; 0 = a numbered Psalm title; null = other non-verse content. */
   readonly verse: number | null;
-  /** Word ordinal within the verse, punct excluded; null on punct and heading tokens. */
+  /**
+   * The verse's lettered part, `''` when the source letters none. Brenton
+   * numbers Septuagint pluses as letters on the previous verse (`1KI 2:35a`).
+   */
+  readonly segment: string;
+  /** Word ordinal within the verse segment, punct excluded; null on punct and heading tokens. */
   readonly wordIndex: number | null;
   /** Dense render order within the chapter. */
   readonly seq: number;

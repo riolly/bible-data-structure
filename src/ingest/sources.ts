@@ -39,6 +39,11 @@ export interface SourceDef {
   readonly books: readonly string[];
   readonly textFixes?: readonly TextFix[];
   /**
+   * How to read the unpacked source. Absent: its `.usfm` files. `sblgnt-xml`:
+   * upstream SBLGNT's per-book XML under `path`, converted by sblgnt-xml.ts.
+   */
+  readonly format?: { readonly kind: 'sblgnt-xml'; readonly path: string };
+  /**
    * Opt-in to the versified-\d → \qd grammar-gap rewrite (parse.ts). Only set
    * after eyeballing the source's \d+\v constructs — parse fails loudly when
    * the construct appears without this flag, so a new translation never gets
@@ -104,21 +109,20 @@ export const SOURCES: readonly SourceDef[] = [
       abbrev: 'SBLGNT',
       language: 'greek',
       year: 2010,
-      license: 'CC BY 4.0, © 2010 Society of Biblical Literature and Logos Bible Software; changed: see textFixes',
+      license:
+        'CC BY 4.0, © 2010 Society of Biblical Literature and Logos Bible Software; ' +
+        'changed: converted from the upstream XML to USFM, words and punctuation unchanged',
       scheme: 'org',
       edition: '',
     },
-    url: 'https://ebible.org/Scriptures/grcsbl_usfm.zip',
-    sha256: '04c5c536b8ef977e30de3f37e2ec16300e8452173322dc2e8c25b1a02bb10a73',
-    dir: 'sblgnt',
+    // Upstream, not ebible's grcsbl: ebible's USFM lost words and punctuation in
+    // 2,299 verses where it turned apparatus marks into footnotes (research/licensing.md).
+    url: 'https://github.com/LogosBible/SBLGNT/archive/d7f35adca9ec410e1d1499c63b4dd989d76c8d4d.zip',
+    sha256: 'bcb9cfd8678a863be77c01641aab14c31515e7057852b5abfe0920aac73cbf56',
+    dir: 'sblgnt-logos',
+    format: { kind: 'sblgnt-xml', path: 'SBLGNT-d7f35adca9ec410e1d1499c63b4dd989d76c8d4d/data/sblgnt/xml' },
     books: sectionBookCodes(PROTESTANT, 'nt'),
     rewriteVersifiedD: false,
-    // ebible.org left XML tags as text after the last verse of every book but
-    // Revelation, in two forms; upstream SBLGNT has neither. Applied in order.
-    textFixes: [
-      { find: ' ‘p /’ ‘/book’', replace: '', count: 19, why: 'ebible XML leftover, with ‘p /’' },
-      { find: ' ‘/book’', replace: '', count: 7, why: 'ebible XML leftover, alone (MRK, JHN, ACT, 1CO, HEB, 1PE, JUD)' },
-    ],
   },
   {
     meta: {
@@ -165,6 +169,21 @@ export const SOURCES: readonly SourceDef[] = [
         replace: '\\qs Selah.\\qs*',
         count: 17,
         why: 'grammar gap: nested \\+w inside \\qs',
+      },
+      // A footnote stands where the space between two words should be, so the
+      // words ran together ("hellwill", "willheap"). Only whitespace is added;
+      // no other source has a note between two letters.
+      {
+        find: '\\fqa Gehenna. \\f*will be shown',
+        replace: '\\fqa Gehenna. \\f* will be shown',
+        count: 1,
+        why: 'missing space after a footnote, 2ES 7:36',
+      },
+      {
+        find: '\\fqa set in order.\\f*heap up',
+        replace: '\\fqa set in order.\\f* heap up',
+        count: 1,
+        why: 'missing space after a footnote, 2ES 12:32',
       },
     ],
   },

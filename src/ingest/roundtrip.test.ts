@@ -131,20 +131,20 @@ describe.skipIf(!native)('DDL ↔ drizzle schema parity (write-db.ts hand-mirror
         .sort((a, b) => a.name.localeCompare(b.name));
       expect(ddlCols, `columns of ${table.name}`).toEqual(schemaCols);
 
-      // same named indexes over the same column lists (UNIQUE autoindexes excluded)
+      // same named indexes over the same column lists, unique or not (UNIQUE autoindexes excluded)
       const ddlIndexes = new Map<string, string[]>();
       const list = sqlite.prepare(`PRAGMA index_list(${table.name})`).all() as {
-        name: string; origin: string;
+        name: string; origin: string; unique: number;
       }[];
       for (const idx of list) {
         if (idx.origin !== 'c') continue; // 'u'/'pk' autoindexes are column-level, checked below
         const cols = sqlite.prepare(`PRAGMA index_info(${idx.name})`).all() as { name: string }[];
-        ddlIndexes.set(idx.name, cols.map((c) => c.name));
+        ddlIndexes.set(idx.name, [idx.unique ? 'UNIQUE' : 'INDEX', ...cols.map((c) => c.name)]);
       }
       const schemaIndexes = new Map<string, string[]>(
         table.indexes.map((idx) => [
           idx.config.name,
-          idx.config.columns.map((c) => (c as { name: string }).name),
+          [idx.config.unique ? 'UNIQUE' : 'INDEX', ...idx.config.columns.map((c) => (c as { name: string }).name)],
         ]),
       );
       expect(ddlIndexes, `indexes of ${table.name}`).toEqual(schemaIndexes);

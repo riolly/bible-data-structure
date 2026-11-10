@@ -25,12 +25,21 @@
  *     (run edge, after space, after punct) — falls here as punct rather than
  *     vanishing, so tokens still cover every non-space character.
  *  5. Whitespace is NEVER a token — spacing belongs to the presentation layer.
+ *  6. In verse text, a STANDALONE unpointed פ or ס (no letter or mark touching
+ *     it) is PUNCT: the petuha and setuma paragraph marks of Hebrew
+ *     manuscripts, not words (ADR-0004 v1.3). Headings keep them as words,
+ *     where they label Psalm 119's stanzas beside the other 20 letters.
  */
 
 import type { TokenKind } from '../model/corpus';
 
 const TOKEN_PATTERN =
-  /(\p{N}+(?:[,.]\p{N}+)+|[\p{L}\p{N}][\p{L}\p{N}\p{M}]*(?:['’-][\p{L}\p{N}][\p{L}\p{N}\p{M}]*)*)|([^\s\p{L}\p{N}]+)/gu;
+  /((?<![\p{L}\p{M}])[פס](?![\p{L}\p{M}]))|(\p{N}+(?:[,.]\p{N}+)+|[\p{L}\p{N}][\p{L}\p{N}\p{M}]*(?:['’-][\p{L}\p{N}][\p{L}\p{N}\p{M}]*)*)|([^\s\p{L}\p{N}]+)/gu;
+
+export interface TokenizeOptions {
+  /** Rule 6: read a standalone פ or ס as a paragraph mark. Normalize sets it outside headings. */
+  readonly paragraphMarks?: boolean;
+}
 
 export interface RawToken {
   readonly kind: TokenKind;
@@ -38,11 +47,12 @@ export interface RawToken {
 }
 
 /** Split one contiguous text run into word/punct tokens per the policy above. */
-export function tokenize(run: string): RawToken[] {
+export function tokenize(run: string, opts: TokenizeOptions = {}): RawToken[] {
   const out: RawToken[] = [];
   for (const m of run.matchAll(TOKEN_PATTERN)) {
-    if (m[1] !== undefined) out.push({ kind: 'word', text: m[1] });
-    else out.push({ kind: 'punct', text: m[2] });
+    if (m[1] !== undefined) out.push({ kind: opts.paragraphMarks ? 'punct' : 'word', text: m[1] });
+    else if (m[2] !== undefined) out.push({ kind: 'word', text: m[2] });
+    else out.push({ kind: 'punct', text: m[3] });
   }
   return out;
 }

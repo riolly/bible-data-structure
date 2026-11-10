@@ -138,6 +138,7 @@ export function readChapter(
       blockId: schema.token.blockId,
       chapter: schema.token.chapter,
       verse: schema.token.verse,
+      segment: schema.token.segment,
       wordIndex: schema.token.wordIndex,
       seq: schema.token.seq,
       kind: schema.token.kind,

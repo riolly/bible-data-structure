@@ -9,7 +9,7 @@ import { checkVerses, hasVerse, lastVerse } from '../model/scheme';
 import { nativeModuleLoads } from './native-probe';
 import { DERIVED_SCHEMES, KJV_TITLES, SCHEME_IDS, deriveScheme, loadSchemes } from './schemes';
 import { SOURCES as SOURCE_DEFS } from './sources';
-import { applyTextFixes } from './text-fixes';
+import { readSource } from './source-files';
 
 const schemes = loadSchemes();
 
@@ -57,6 +57,23 @@ describe('scheme registry', () => {
     const kjv = schemes.get('kjv')!;
     expect(lastVerse(kjv, 'GEN', 51)).toBeUndefined();
     expect(hasVerse(kjv, 'TOB', 1, 1)).toBe(false);
+  });
+});
+
+describe('the scheme of each ingested edition (ADR-0006 amendment)', () => {
+  // An ingested edition keeps its scheme: its addresses name it. When a new
+  // edition conflicts with a scheme's rows, the newcomer gets a derived scheme.
+  // Changing an entry here moves every address of that edition.
+  it('stays as first ingested', () => {
+    expect(Object.fromEntries(SOURCE_DEFS.map((s) => [s.meta.abbrev, s.meta.scheme]))).toEqual({
+      KJV: 'kjv',
+      BSB: 'bsb',
+      WLC: 'org',
+      SBLGNT: 'org',
+      RP: 'rp',
+      WEB: 'web',
+      Brenton: 'brenton',
+    });
   });
 });
 
@@ -184,18 +201,13 @@ describe.each(['kjv', 'bsb'])('%s source text under the kjv scheme', (dir) => {
 describe.each(SOURCE_DEFS.map((s) => [s.meta.abbrev, s] as const))('%s source text', (_, src) => {
   it.skipIf(!existsSync(join(SOURCES, src.dir)))('has its listed books, and no verse its scheme lacks', () => {
     const scheme = schemes.get(src.meta.scheme)!;
-    const wanted = new Set(src.books);
-    const files: { code: string; usfm: string }[] = [];
-    for (const name of readdirSync(join(SOURCES, src.dir))) {
-      if (!name.endsWith('.usfm')) continue;
-      const usfm = readFileSync(join(SOURCES, src.dir, name), 'utf8');
-      const code = usfm.match(/^\\id (\w{3})/)?.[1];
-      if (code && wanted.has(code)) files.push({ code, usfm });
-    }
-    expect(files.map((f) => f.code).sort()).toEqual([...src.books].sort());
-    // the ingest's text fixes, with their counts, leave no ebible XML leftover
-    for (const { code, usfm } of applyTextFixes(files, src.textFixes)) {
+    // the books as the ingest reads them: converted, with the counted text fixes applied
+    const { files } = readSource(src);
+    expect(files.map((f) => f.code)).toEqual([...src.books]);
+    for (const { code, usfm } of files) {
       expect(usfm, code).not.toMatch(/‘\/?(book|p)\b/);
+      // a footnote or cross-reference standing between two letters runs two words together (WEB 2ES 7:36)
+      expect(usfm, code).not.toMatch(/[\p{L}\p{M}](?:\\w\*)?\\[fx] [^\\]*(?:\\(?![fx]\*)[^\\]*)*\\[fx]\*(?:\\w )?\p{L}/u);
       expect(checkVerses(scheme, code, versesWithText(usfm)).unknown, code).toEqual([]);
     }
   });

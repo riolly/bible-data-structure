@@ -10,19 +10,20 @@
  * build/ are generated and gitignored.
  */
 
-import { existsSync, readdirSync, readFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import type { Block, Token } from '../model/corpus';
 import type { IngestStats } from './normalize';
 import { PIVOT, checkCoverage } from '../model/mapping';
-import { checkVerses, type Scheme } from '../model/scheme';
+import { checkVerses, titleChapters, type Scheme } from '../model/scheme';
 import { loadSchemes } from './schemes';
-import { computeEdition, type SourceFile } from './edition';
 import { normalizeUsj } from './normalize';
 import { usjBookCode, type ParseOutcome } from './parse';
 import { createParsePool, type ParsePool } from './parse-pool';
 import { SOURCES, type SourceDef } from './sources';
-import { applyTextFixes } from './text-fixes';
+import { readSource } from './source-files';
+import { wordsStamp } from './edition';
 import { checkExtendOnly, formatPivotSnapshot, pivotSnapshot, type PivotSnapshot } from './pivot';
 import {
   TVTMS_PATH,
@@ -42,33 +43,15 @@ import {
   insertBookRows,
   insertTranslation,
   insertMappings,
+  setWordsStamp,
   seedBooksAndCanons,
   seedSchemes,
 } from './write-db';
 
-const SOURCES_ROOT = join(import.meta.dirname, 'sources');
 const OUT_DIR = join(import.meta.dirname, '..', '..', 'build');
 const OUT_PATH = join(OUT_DIR, 'corpus.db');
 const PIVOT_SNAPSHOT = join(import.meta.dirname, 'fixtures', 'pivot.json');
 const EDITION_TEXT_SNAPSHOT = join(import.meta.dirname, 'fixtures', 'edition-text.json');
-
-/** The source's listed books, in its order. Files for other books (FRT, GLO, …) are skipped. */
-function readSourceFiles(src: SourceDef): SourceFile[] {
-  const root = join(SOURCES_ROOT, src.dir);
-  const wanted = new Set(src.books);
-  const byCode = new Map<string, SourceFile>();
-  for (const name of readdirSync(root)) {
-    if (!name.toLowerCase().endsWith('.usfm')) continue;
-    const usfm = readFileSync(join(root, name), 'utf8');
-    const code = usfm.match(/^\\id (\w{3})/)?.[1];
-    if (!code || !wanted.has(code)) continue;
-    if (byCode.has(code)) throw new Error(`${src.dir}: two files for ${code}`);
-    byCode.set(code, { code, usfm });
-  }
-  const missing = src.books.filter((c) => !byCode.has(c));
-  if (missing.length > 0) throw new Error(`${src.dir}: no file for ${missing.join(', ')}`);
-  return src.books.map((c) => byCode.get(c)!);
-}
 
 const addStats = (into: Record<string, number>, from: IngestStats) => {
   for (const [k, v] of Object.entries(from)) {
@@ -109,6 +92,7 @@ async function main() {
       // A source that fails to prepare throws again when its turn comes, so errors keep source order.
       if (i + 1 < SOURCES.length) try { prepare(i + 1); } catch {}
       const translationId = insertTranslation(db, { ...src.meta, edition });
+      const words = wordsStamp();
       const text = editionText(src.meta.abbrev);
       texts.set(scheme.id, [...(texts.get(scheme.id) ?? []), text]);
       editions.push({ scheme: scheme.id, text });
@@ -139,23 +123,25 @@ async function main() {
           if (usjCode !== file.code) {
             throw new Error(`${file.code}: USJ book code mismatch ("${usjCode}")`);
           }
-          const { blocks, tokens, stats } = normalizeUsj(usj);
-          validate(file.code, blocks.length, tokens);
+          const { blocks, tokens, stats } = normalizeUsj(usj, { titleChapters: titleChapters(scheme, file.code) });
+          validate(file.code, blocks, tokens);
           warnVerseGaps(file.code, tokens);
           checkScheme(scheme, file.code, tokens);
           insertBookRows(db, { translationId, book: file.code }, { blocks, tokens });
           addBookText(text, file.code, blocks, tokens);
+          words.add(file.code, tokens);
           addStats(totals, stats);
           blockCount += blocks.length;
           tokenCount += tokens.length;
         }
+        setWordsStamp(db, translationId, words.digest());
         sqlite.exec('COMMIT');
         prepared.delete(i); // free this edition's parse results
       } catch (e) {
         sqlite.exec('ROLLBACK');
         throw e;
       }
-      console.log(`  ${blockCount} blocks, ${tokenCount} tokens`);
+      console.log(`  ${blockCount} blocks, ${tokenCount} tokens, words stamp ${words.digest()}`);
       console.log(`  not modelled in Phase 1 (dropped/unwrapped, counted): ${JSON.stringify(totals)}`);
       console.log(`  ${seconds(started)}`);
     }
@@ -185,9 +171,7 @@ const seconds = (since: number) => `${((performance.now() - since) / 1000).toFix
  * still stop the ingest in book order.
  */
 function prepareSource(src: SourceDef, pool: ParsePool) {
-  const raw = readSourceFiles(src);
-  const edition = computeEdition(raw);
-  const files = applyTextFixes(raw, src.textFixes);
+  const { edition, files } = readSource(src);
   const outcomes = files.map((f) => pool.parse(f.usfm, { rewriteVersifiedD: src.rewriteVersifiedD }));
   for (const o of outcomes) o.catch(() => {}); // awaited later; keep an early rejection from counting as unhandled
   return { edition, files, outcomes };
@@ -280,7 +264,8 @@ function checkScheme(scheme: Scheme, code: string, tokens: { chapter: number; ve
 }
 
 /** Corpus invariants (CONTEXT.md) — fail the build, not the reader. */
-function validate(code: string, blockCount: number, tokens: { blockId: number; verse: number | null; wordIndex: number | null; text: string; kind: string }[]) {
+function validate(code: string, blocks: readonly Block[], tokens: readonly Token[]) {
+  const blockCount = blocks.length;
   const usedBlocks = new Set<number>();
   for (const t of tokens) {
     if (t.blockId < 0 || t.blockId >= blockCount) {
@@ -290,7 +275,9 @@ function validate(code: string, blockCount: number, tokens: { blockId: number; v
     if (/\s/.test(t.text) || t.text.length === 0) {
       throw new Error(`${code}: whitespace leaked into token text ${JSON.stringify(t.text)}`);
     }
-    if (t.verse === 0) throw new Error(`${code}: verse 0 sentinel — heading tokens must carry NULL`);
+    if (t.verse === 0 && blocks[t.blockId]?.role !== 'psalm_title') {
+      throw new Error(`${code}: verse 0 outside a psalm title — other heading tokens must carry NULL`);
+    }
     if (t.verse == null && t.wordIndex != null) {
       throw new Error(`${code}: non-verse token carries a word_index`);
     }

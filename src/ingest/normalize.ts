@@ -8,7 +8,10 @@
  *
  *  - Blocks PARTITION the token stream; whitespace is never a Token.
  *  - EVERY heading token (incl. mid-chapter \s) carries verse=NULL and
- *    wordIndex=NULL — a heading never INHERITS the preceding verse. An
+ *    wordIndex=NULL — a heading never INHERITS the preceding verse. One
+ *    exception: an unnumbered \d title before a chapter's first verse is
+ *    verse 0, with word indexes, where the edition's scheme numbers that
+ *    chapter's title as verse 0 (`titleChapters`, ADR-0001 amendment). An
  *    EXPLICIT \v inside a heading para is different: some translations set
  *    real verse text as a descriptive title (BSB Zech 12: \d containing
  *    \v 1), and those tokens carry their verse — the invariant bans
@@ -128,14 +131,24 @@ const newStats = (): IngestStats => ({
   droppedInline: {},
 });
 
+export interface NormalizeOptions {
+  /**
+   * Chapters whose title the edition's scheme numbers as verse 0 (the
+   * scheme's `titles` for this book). An unnumbered \d title before the
+   * chapter's first verse becomes verse 0 there.
+   */
+  readonly titleChapters?: ReadonlySet<number>;
+}
+
 /** Normalize one book's USJ into blocks + tokens + stats. */
-export function normalizeUsj(usj: UsjDoc): NormalizeResult {
+export function normalizeUsj(usj: UsjDoc, opts: NormalizeOptions = {}): NormalizeResult {
   const blocks: Block[] = [];
   const tokens: Token[] = [];
   const stats = newStats();
 
   let chapter = 0; // front matter before \c 1 = chapter 0
   let verse: number | null = null;
+  let segment = ''; // the lettered part of `verse` (\v 35a), '' when none
   let wordIndexInVerse = 0;
   let seqInChapter = 0;
   let pendingVerseStart = false;
@@ -175,7 +188,7 @@ export function normalizeUsj(usj: UsjDoc): NormalizeResult {
     // glyph run. Also keeps decomposed base+mark from splitting a word apart
     // (a combining mark is category M, which the tokenizer's punct branch
     // would otherwise capture). Idempotent on already-NFC (ASCII) text.
-    const raw = tokenize(buf.normalize('NFC'));
+    const raw = tokenize(buf.normalize('NFC'), { paragraphMarks: !inHeading });
     buf = '';
     if (raw.length === 0) return;
     const blk = ensureBlock();
@@ -190,6 +203,7 @@ export function normalizeUsj(usj: UsjDoc): NormalizeResult {
         blockId: blk.id,
         chapter,
         verse: inVerse ? effectiveVerse : null,
+        segment: inVerse ? segment : '',
         wordIndex: inVerse && isWord ? wordIndexInVerse++ : null,
         seq: seqInChapter++,
         kind: t.kind,
@@ -221,10 +235,12 @@ export function normalizeUsj(usj: UsjDoc): NormalizeResult {
       switch (node.type) {
         case 'verse': {
           flushText();
-          const m = (node.number ?? '').match(/^(\d+)(-\d+)?/);
+          // a lettered verse (\v 35a) is a segment, and its words count from 0
+          const m = (node.number ?? '').match(/^(\d+)([a-z]?)(-\d+[a-z]?)?$/);
           if (!m) throw new Error(`unparseable verse number "${node.number}"`);
-          if (m[2]) stats.verseBridges++;
+          if (m[3]) stats.verseBridges++;
           verse = parseInt(m[1], 10);
+          segment = m[2];
           if (inHeading) headingVerse = verse; // versified title (\d + \v)
           wordIndexInVerse = 0;
           pendingVerseStart = true;
@@ -280,6 +296,7 @@ export function normalizeUsj(usj: UsjDoc): NormalizeResult {
         if (isNaN(n)) throw new Error(`unparseable chapter number "${node.number}"`);
         chapter = n;
         verse = null;
+        segment = '';
         wordIndexInVerse = 0;
         seqInChapter = 0;
         pendingVerseStart = false;
@@ -311,6 +328,10 @@ export function normalizeUsj(usj: UsjDoc): NormalizeResult {
         pendingShape = shape;
         inHeading = shape.genre === 'heading';
         headingVerse = null; // a heading starts unversed — no inheritance
+        if (marker === 'd' && verse === null && opts.titleChapters?.has(chapter)) {
+          headingVerse = 0; // the scheme numbers this title as verse 0
+          wordIndexInVerse = 0;
+        }
         walkInline(node.content ?? []);
         flushText();
         cur = null;

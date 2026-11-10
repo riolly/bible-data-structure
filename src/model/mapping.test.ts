@@ -50,6 +50,25 @@ describe('Mappings', () => {
     expect(m.map('nrs', 'kjv', ref('REV', 12, 18))).toEqual([ref('REV', 13, 1, 'a')]);
   });
 
+  it('drops a whole verse when one of its own parts covers the same target (TVTMS gives both)', () => {
+    // org-style ACT 19:40-41: the whole verse concatenates two pivot verses, and its parts map one each.
+    const pv = scheme(PIVOT, { ACT: [...Array(18).fill(1), 41] });
+    const org = scheme('org', { ACT: [...Array(18).fill(1), 40] });
+    const kjv = scheme('kjv', { ACT: [...Array(18).fill(1), 41] });
+    const acts = new Mappings(
+      [
+        { scheme: 'org', from: ref('ACT', 19, 40), to: ref('ACT', 19, 40), kind: 'Concatenation' },
+        { scheme: 'org', from: ref('ACT', 19, 40), to: ref('ACT', 19, 41), kind: 'Concatenation' },
+        { scheme: 'org', from: ref('ACT', 19, 40, 'a'), to: ref('ACT', 19, 40), kind: 'Keep verse' },
+        { scheme: 'org', from: ref('ACT', 19, 40, 'b'), to: ref('ACT', 19, 41), kind: 'MergedPrev verse' },
+      ],
+      new Map([[PIVOT, pv], ['org', org], ['kjv', kjv]]),
+    );
+    expect(acts.map('kjv', 'org', ref('ACT', 19, 41))).toEqual([ref('ACT', 19, 40, 'b')]);
+    expect(acts.map('kjv', 'org', ref('ACT', 19, 40))).toEqual([ref('ACT', 19, 40, 'a')]);
+    expect(acts.map('org', 'kjv', ref('ACT', 19, 40))).toEqual([ref('ACT', 19, 40), ref('ACT', 19, 41)]);
+  });
+
   it('returns nothing where the target scheme lacks the verse', () => {
     // kjv's 12:17 is the last verse of Revelation 12; pivot 12:18 does not exist anywhere.
     expect(m.fromPivot('kjv', ref('REV', 12, 18))).toEqual([]);

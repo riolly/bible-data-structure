@@ -1,4 +1,4 @@
-import { index, integer, primaryKey, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
 import type { BlockRole } from '../model/corpus';
 
@@ -71,6 +71,13 @@ export const translation = sqliteTable('translation', {
    * the consent-gated quote-witness reconciliation pass.
    */
   edition: text('edition').notNull(),
+  /**
+   * WORDS stamp (ADR-0005 amendment): sha256 over every word address and the
+   * word stored there. It changes when a text fix, the tokenizer or the parser
+   * changes stored words, which the edition stamp can't see. Set after the
+   * edition's books are written.
+   */
+  wordsStamp: text('words_stamp'),
 });
 
 /**
@@ -187,12 +194,15 @@ export const token = sqliteTable(
       .references(() => book.code),
     chapter: integer('chapter').notNull(),
     /**
-     * Verse number under the translation's scheme; NULL = non-verse content. EVERY heading token
-     * (incl. mid-chapter \s) carries NULL — never 0, never the preceding verse.
+     * Verse number under the translation's scheme; NULL = non-verse content. A heading token
+     * (incl. mid-chapter \s) carries NULL, never the preceding verse. 0 is a Psalm title the
+     * scheme numbers as verse 0 (ADR-0001 amendment).
      */
     verse: integer('verse'),
+    /** The verse's lettered part (`1KI 2:35a` in Brenton), `''` when the source letters none. */
+    segment: text('segment').notNull().default(''),
     /**
-     * Word ordinal within verse, punct excluded; NULL on punct tokens and on
+     * Word ordinal within the verse segment, punct excluded; NULL on punct tokens and on
      * heading/non-verse word tokens.
      */
     wordIndex: integer('word_index'),
@@ -210,7 +220,8 @@ export const token = sqliteTable(
   },
   (t) => [
     index('token_render').on(t.translationId, t.book, t.chapter, t.verse, t.seq),
-    index('token_anchor').on(t.translationId, t.book, t.chapter, t.verse, t.wordIndex),
+    // A word address names one word (NULL word indexes are distinct in SQLite).
+    uniqueIndex('token_anchor').on(t.translationId, t.book, t.chapter, t.verse, t.segment, t.wordIndex),
   ],
 );
 

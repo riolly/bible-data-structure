@@ -10,6 +10,7 @@ import { buildPivot, checkExtendOnly, pivotSnapshot } from './pivot';
 import { DERIVED_SCHEMES, loadSchemes } from './schemes';
 import {
   TVTMS_PATH,
+  WORD_TEST_MARGIN,
   addBookText,
   compileTvtms,
   compileMappings,
@@ -113,6 +114,12 @@ const edition = (name: string, words: Record<string, number>, titled: string[] =
   titled: new Set(titled),
 });
 
+describe('the word-test margin', () => {
+  it('is the registered value (ADR-0006: changing it is a mapping migration)', () => {
+    expect(WORD_TEST_MARGIN).toBe(0.2);
+  });
+});
+
 describe('text tests against an edition', () => {
   // KJV and BSB word counts at TVTMS lines 4084-4087 (research/tvtms-text-tests.md).
   const kjv = edition('KJV', { 'PHP 1:16': 15, 'PHP 1:17': 16 }, ['PSA 3']);
@@ -164,7 +171,7 @@ describe('text tests against an edition', () => {
 describe('addBookText', () => {
   const block = (id: number, role: Block['role']): Block => ({ id, chapter: 3, genre: 'heading', role, indent: 0, seq: 0 });
   const token = (blockId: number, verse: number | null, seq: number, kind: Token['kind'] = 'word'): Token => ({
-    id: seq, blockId, chapter: 3, verse, wordIndex: null, seq, kind, text: 'x', verseStart: false, owId: null,
+    id: seq, blockId, chapter: 3, verse, segment: '', wordIndex: null, seq, kind, text: 'x', verseStart: false, owId: null,
   });
 
   it('counts word tokens per verse and finds a psalm title before verse 1', () => {
