@@ -20,16 +20,13 @@
  */
 
 import type { Reading, Token } from '../model/corpus';
+import { OSIS_BOOKS } from '../model/osis';
 import { tokenize } from './tokenize';
 
-/** Upstream file name (without `.xml`) → USFM book code. */
-export const OSHB_BOOKS: Readonly<Record<string, string>> = {
-  Gen: 'GEN', Exod: 'EXO', Lev: 'LEV', Num: 'NUM', Deut: 'DEU', Josh: 'JOS', Judg: 'JDG', Ruth: 'RUT',
-  '1Sam': '1SA', '2Sam': '2SA', '1Kgs': '1KI', '2Kgs': '2KI', '1Chr': '1CH', '2Chr': '2CH', Ezra: 'EZR',
-  Neh: 'NEH', Esth: 'EST', Job: 'JOB', Ps: 'PSA', Prov: 'PRO', Eccl: 'ECC', Song: 'SNG', Isa: 'ISA',
-  Jer: 'JER', Lam: 'LAM', Ezek: 'EZK', Dan: 'DAN', Hos: 'HOS', Joel: 'JOL', Amos: 'AMO', Obad: 'OBA',
-  Jonah: 'JON', Mic: 'MIC', Nah: 'NAM', Hab: 'HAB', Zeph: 'ZEP', Hag: 'HAG', Zech: 'ZEC', Mal: 'MAL',
-};
+/** Upstream file name (without `.xml`, an OSIS name) → USFM book code: the 39 books up to Malachi. */
+export const OSHB_BOOKS: Readonly<Record<string, string>> = Object.fromEntries(
+  OSIS_BOOKS.slice(0, OSIS_BOOKS.findIndex(([, usfm]) => usfm === 'MAL') + 1),
+);
 
 /** A qere reading as the converter finds it, before it is checked against the stored tokens. */
 export interface OshbReading extends Reading {
