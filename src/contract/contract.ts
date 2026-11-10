@@ -87,11 +87,22 @@ export interface Absent {
 /** What one address gives in one edition: the verse, the bridge that contains it, or absent. */
 export type Lookup = Verse | Absent;
 
+/**
+ * A whole verse the edition prints only in parts, with no unit for the whole
+ * (Brenton's `SIR 6:2`, printed as 6:2a and 6:2b). Show every part in order.
+ */
+export interface Parts {
+  readonly kind: 'parts';
+  /** The asked address with the edition's scheme: `SIR 6:2/brenton`. */
+  readonly address: string;
+  readonly parts: readonly Verse[];
+}
+
 export interface VerseTextResult {
   readonly edition: EditionStamp;
   /** The asked address with the edition's scheme: `JHN 3:16/kjv`. */
   readonly asked: string;
-  readonly found: Lookup;
+  readonly found: Lookup | Parts;
 }
 
 export type ChapterResult =
@@ -128,7 +139,9 @@ export interface PassagePart {
   readonly address: string;
   /**
    * One lookup per verse unit in the range, in order. A bridge appears once.
-   * A verse the edition skips is an `absent` entry in its place, so the
+   * A verse the edition prints in parts gives each unit the edition prints
+   * for it, as `chapter` does: Brenton's 1KI 2:35 is the whole verse, then
+   * 35a to 35o. A verse the edition skips is an `absent` entry in its place, so the
    * reader sees the gap (BSB's MAT 17:21).
    */
   readonly found: readonly Lookup[];
@@ -185,13 +198,16 @@ export interface BibleContract {
   /**
    * A human reference in English ("Ps 23", "1 Cor 13:4-7", "Matt 17:20-22;
    * Acts 8:37"), resolved under the edition's scheme. A whole chapter starts
-   * at its title where the scheme numbers one. A verse number past the
-   * chapter's end stops at the end.
+   * at its title where the scheme numbers one, and a book on its own is the
+   * whole book. A verse number past the chapter's end stops at the end. A
+   * part letter is ignored: "1 Kgs 2:35a" gives all of 2:35 with its parts.
+   * Use `verseText` to ask for one part.
    */
   passage(edition: string, reference: string): Promise<PassageResult>;
 
   /**
-   * One verse address: `JHN 3:16`, `PSA 51:0` (a title) or `REV 13:1a`. The
+   * One verse address: `JHN 3:16`, `PSA 51:0` (a title) or `REV 13:1a`. A
+   * verse printed only in parts gives `parts`. The
    * edition supplies the scheme. A `/scheme` suffix is allowed only when it
    * is the edition's own: use `map` to move between schemes. Throws on a
    * range or a word address.

@@ -47,9 +47,22 @@ describe('parseReference (bible-passage-reference-parser, English)', () => {
     expect(parseReference('Jude 3')).toEqual([{ book: 'JUD', start: { chapter: 1, verse: 3 }, end: { chapter: 1, verse: 3 } }]);
     expect(parseReference('no reference here')).toEqual([]);
   });
+
+  it('a book on its own is the whole book, at either end of a range', () => {
+    const whole = { chapter: 1, verse: null };
+    const rest = { chapter: Infinity, verse: null };
+    expect(parseReference('Jude')).toEqual([{ book: 'JUD', start: whole, end: whole }]); // a book of one chapter
+    expect(parseReference('Genesis')).toEqual([{ book: 'GEN', start: whole, end: rest }]);
+    expect(parseReference('Gen 1:3-Exod')).toEqual([
+      { book: 'GEN', start: { chapter: 1, verse: 3 }, end: rest },
+      { book: 'EXO', start: whole, end: rest },
+    ]);
+    // "to chapter 3" ends at the chapter's last verse
+    expect(parseReference('Gen 1:2 to chapter 3')).toEqual([{ book: 'GEN', start: { chapter: 1, verse: 2 }, end: { chapter: 3, verse: null } }]);
+  });
 });
 
-describe.skipIf(!native || !existsSync(CORPUS))('the app contract on KJV and BSB (build/corpus.db)', () => {
+describe.skipIf(!native || !existsSync(CORPUS))('the app contract on the corpus editions (build/corpus.db)', () => {
   let c: BibleContract;
 
   beforeAll(async () => {
@@ -108,6 +121,20 @@ describe.skipIf(!native || !existsSync(CORPUS))('the app contract on KJV and BSB
     const m = await c.map('KJV', 'ACT 8:37', 'BSB');
     expect(m).toMatchObject({ asked: 'ACT 8:37/kjv', kind: 'absent', verses: [] });
     expect(m.missing).toEqual([{ kind: 'absent', address: 'ACT 8:37/bsb', reason: 'text' }]);
+  });
+
+  it('verse parts: Brenton prints 1KI 2:35 whole with parts 35a to 35o, and SIR 6:2 only as 2a and 2b', async () => {
+    const parts = 'abcdefghiklmno'.split(''); // Brenton skips j
+    const kgs = await c.passage('Brenton', '1 Kgs 2:35');
+    expect(addresses(kgs.parts[0].found)).toEqual(['verse 1KI 2:35/brenton', ...parts.map((s) => `verse 1KI 2:35${s}/brenton`)]);
+    const ch = await c.chapter('Brenton', '1KI', 2);
+    expect(ch.kind === 'chapter' && ch.verses.filter((v) => v.verse === 35).map((v) => v.address)).toEqual(kgs.parts[0].found.map((l) => l.address));
+
+    const sir = await c.verseText('Brenton', 'SIR 6:2');
+    expect(sir.found.kind).toBe('parts');
+    expect(sir.found.kind === 'parts' && sir.found.parts.map((v) => v.address)).toEqual(['SIR 6:2a/brenton', 'SIR 6:2b/brenton']);
+    expect((await c.verseText('Brenton', 'SIR 6:2b')).found).toMatchObject({ kind: 'verse', address: 'SIR 6:2b/brenton' });
+    noRowIds(sir);
   });
 
   it('map gives one verse with another number: BSB PHP 1:16 is KJV PHP 1:17', async () => {

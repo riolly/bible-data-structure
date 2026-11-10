@@ -46,9 +46,12 @@ parser.set_options({
   captive_end_digits_strategy: 'include',
   // the 66 books of the Protestant canon (ADR-0008)
   testaments: 'on',
+  // "Genesis" is the whole book, and "Gen 1:3-Exod" ends at the end of Exodus
+  book_alone_strategy: 'full',
+  book_range_strategy: 'include',
 });
 
-/** The parser's "no verse given" end, with chapter or verse checks off. */
+/** The parser's "to the end" chapter or verse, with chapter and verse checks off: `Gen.1-Gen.999`. */
 const OPEN = 999;
 
 const USFM_ORDER = new Map(OSIS_BOOKS.map(([, usfm], i) => [usfm, i]));
@@ -73,8 +76,8 @@ function osisPoint(s: string): OsisPoint {
   const [b, c, v] = s.split('.');
   const book = OSIS_TO_USFM.get(b);
   if (!book) throw new Error(`reference: no USFM code for OSIS book "${b}"`);
-  // a book on its own ("Jude") comes back as its first chapter
-  const chapter = c === undefined ? 1 : Number(c);
+  if (c === undefined) throw new Error(`reference: OSIS "${s}" names no chapter`);
+  const chapter = Number(c) === OPEN ? Infinity : Number(c);
   const verse = v === undefined || Number(v) === OPEN ? null : Number(v);
   return { book, chapter, verse };
 }
@@ -82,9 +85,7 @@ function osisPoint(s: string): OsisPoint {
 function osisRange(range: string): BookRange[] {
   const [a, b] = range.split('-');
   const start = osisPoint(a);
-  const endRaw = b === undefined ? start : osisPoint(b);
-  // "Gen 1:2 to chapter 3" ends at chapter 3, verse 999: the whole chapter
-  const end = endRaw.chapter === OPEN ? { ...endRaw, chapter: Infinity } : endRaw;
+  const end = b === undefined ? start : osisPoint(b);
   if (start.book === end.book) {
     return [{ book: start.book, start: cv(start), end: cv(end) }];
   }

@@ -159,7 +159,7 @@ A human-written string such as "1 Cor 13:4-7" or "Ps 23". `passage` resolves it 
 _Avoid_: address (an address names its scheme and has one syntax)
 
 **Lookup result**:
-What an address gives in one edition: the verse, the bridge that contains it, or absent. Absent says why: the edition's scheme has no such verse, or the edition prints no text there (BSB's Acts 8:37). A verse printed with no words is found, with empty text.
+What an address gives in one edition: the verse, the bridge that contains it, its parts when the edition prints the verse only in parts (Brenton's Sirach 6:2a and 6:2b), or absent. Absent says why: the edition's scheme has no such verse, or the edition prints no text there (BSB's Acts 8:37). A verse printed with no words is found, with empty text.
 
 **Mapping result**:
 What `map` gives for one verse in another edition: one verse, several, part of a verse, or absent. Each kind has a display rule, written once in `src/contract/contract.ts` (`MapKind`).

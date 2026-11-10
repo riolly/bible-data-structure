@@ -320,7 +320,7 @@ export function readMappings(db: SyncSqliteDb): MappingRow[] {
     }));
 }
 
-/** Load the schemes and mappings, ready to move addresses between schemes. */
-export function loadMappings(db: SyncSqliteDb): Mappings {
-  return new Mappings(readMappings(db), readSchemes(db));
+/** Load the schemes and mappings, ready to move addresses between schemes. Pass `schemes` when they are already loaded. */
+export function loadMappings(db: SyncSqliteDb, schemes = readSchemes(db)): Mappings {
+  return new Mappings(readMappings(db), schemes);
 }

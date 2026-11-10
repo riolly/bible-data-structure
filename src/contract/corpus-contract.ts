@@ -5,9 +5,9 @@
  */
 
 import {
+  loadMappings,
   readChapterDoc,
   readEdition,
-  readMappings,
   readSchemes,
   readVerseText,
   readVerseUnit,
@@ -15,7 +15,7 @@ import {
 } from '../db/corpus-read';
 import { formatAddress, parseAddress, type Address, type VerseRef } from '../model/address';
 import type { VerseText } from '../model/corpus';
-import { Mappings, refExists, type Ref } from '../model/mapping';
+import { refExists, type Mappings, type Ref } from '../model/mapping';
 import { lastVerse, type Scheme } from '../model/scheme';
 import type {
   Absent,
@@ -26,6 +26,7 @@ import type {
   Lookup,
   MapKind,
   MapResult,
+  Parts,
   PassagePart,
   PassageResult,
   Verse,
@@ -78,8 +79,8 @@ export function corpusContract(db: SyncSqliteDb): BibleContract {
     return part ? { ...v, part } : v;
   }
 
-  /** One address in one edition: the verse, the bridge that holds it, or absent. */
-  function lookup(e: EditionStamp, r: Ref): Lookup {
+  /** One address in one edition: the verse, the bridge that holds it, its parts, or absent. */
+  function lookup(e: EditionStamp, r: Ref): Lookup | Parts {
     if (!refExists(schemeOf(e), r)) return absent(point(e, r), 'scheme');
     const unit = readVerseUnit(db, e.id, r.book, r.chapter, r.verse, r.segment);
     if (unit) return toVerse(e, r.book, unit);
@@ -87,11 +88,28 @@ export function corpusContract(db: SyncSqliteDb): BibleContract {
       // the edition doesn't mark the part: the whole unit, flagged
       const whole = readVerseUnit(db, e.id, r.book, r.chapter, r.verse);
       if (whole) return toVerse(e, r.book, whole, r.segment);
+    } else {
+      // the edition prints the verse only in parts
+      const parts = readVerseText(db, e.id, r.book, r.chapter).filter((u) => u.verse <= r.verse && u.lastVerse >= r.verse);
+      if (parts.length > 0) return { kind: 'parts', address: point(e, r), parts: parts.map((u) => toVerse(e, r.book, u)) };
     }
     return absent(point(e, r), 'text');
   }
 
-  /** Walk a range verse by verse under the edition's scheme. A bridge appears once. */
+  /** Every unit that holds each verse number of one chapter, in print order: a bridge under each of its numbers, a whole verse before its parts. */
+  function unitsByVerse(e: EditionStamp, book: string, chapter: number): Map<number, VerseText[]> {
+    const byVerse = new Map<number, VerseText[]>();
+    for (const u of readVerseText(db, e.id, book, chapter)) {
+      for (let v = u.verse; v <= u.lastVerse; v++) {
+        const list = byVerse.get(v);
+        if (list) list.push(u);
+        else byVerse.set(v, [u]);
+      }
+    }
+    return byVerse;
+  }
+
+  /** Walk a range verse by verse under the edition's scheme, one read per chapter. A bridge appears once. */
   function resolveRange(e: EditionStamp, range: BookRange): PassagePart {
     const s = schemeOf(e);
     const { book } = range;
@@ -113,13 +131,20 @@ export function corpusContract(db: SyncSqliteDb): BibleContract {
         last = { book, chapter: c, verse: from, segment: '' };
         continue;
       }
+      const units = unitsByVerse(e, book, c);
       for (let v = from; v <= to; v++) {
-        const l = lookup(e, { book, chapter: c, verse: v, segment: '' });
-        if (l.kind !== 'absent') {
-          if (seen.has(l.address)) continue;
-          seen.add(l.address);
+        const r = { book, chapter: c, verse: v, segment: '' };
+        const held = units.get(v);
+        if (!refExists(s, r)) found.push(absent(point(e, r), 'scheme'));
+        else if (!held) found.push(absent(point(e, r), 'text'));
+        else {
+          for (const u of held) {
+            const l = toVerse(e, book, u);
+            if (seen.has(l.address)) continue;
+            seen.add(l.address);
+            found.push(l);
+          }
         }
-        found.push(l);
       }
       last = { book, chapter: c, verse: to, segment: '' };
     }
@@ -167,7 +192,7 @@ export function corpusContract(db: SyncSqliteDb): BibleContract {
       const r = verseRef(from, address, 'map');
       const asked = point(from, r);
       if (!refExists(schemeOf(from), r)) throw new Error(`map: ${from.scheme} has no ${asked}`);
-      mappings ??= new Mappings(readMappings(db), schemes);
+      mappings ??= loadMappings(db, schemes);
       const verses: Verse[] = [];
       const missing: Absent[] = [];
       for (const t of mappings.map(from.scheme, to.scheme, r)) {
@@ -176,12 +201,14 @@ export function corpusContract(db: SyncSqliteDb): BibleContract {
           missing.push(l);
           continue;
         }
-        const i = verses.findIndex((v) => v.address === l.address);
-        if (i < 0) verses.push(l);
-        else if (verses[i].part !== l.part) {
-          // two parts of one unit, or a part and the whole: the whole unit matches
-          const { part: _, ...whole } = verses[i];
-          verses[i] = whole;
+        for (const u of l.kind === 'parts' ? l.parts : [l]) {
+          const i = verses.findIndex((v) => v.address === u.address);
+          if (i < 0) verses.push(u);
+          else if (verses[i].part !== u.part) {
+            // two parts of one unit, or a part and the whole: the whole unit matches
+            const { part: _, ...whole } = verses[i];
+            verses[i] = whole;
+          }
         }
       }
       const kind: MapKind =
