@@ -42,11 +42,19 @@ ebible's `hboWLC` was made from an older OSHB. Tokenizing every verse of both:
 - About 3,800 words differ only in how a doubled pashta accent is encoded: the pinned OSHB writes the first mark as U+05A8, ebible's copy as U+0599. A handful more were corrected upstream after ebible's copy, such as `DAN 2:39`, which became a ketiv with a qere.
 - OSHB's `/` morpheme breaks, maqqef, sof pasuq, paseq and paragraph-mark segments convert to the same words as ebible's text.
 
+- OSHB has no book titles. ebible's copy added each book's Hebrew name as a `\mt1` heading, so the 39 title headings are gone. They held no word addresses. A book's Hebrew name is display data and belongs in `book_name` (ADR-0002) if an app needs it, not in the edition's text.
+
 OSHB's README advises against NFC for Hebrew, because NFC reorders some point sequences. The ingest has applied NFC to WLC since ADR-0004 v1.1, and this change keeps that.
 
 ## Decided
 
 1. WLC moves to upstream OSHB at a pinned commit, as SBLGNT moved to upstream. OSHB marks the paragraph marks as their own elements, 1,181 `<seg type="x-pe">` and 1,981 `<seg type="x-samekh">`. The converter writes them as standalone letters, so ADR-0004 rule 6 still makes them punctuation.
 2. A qere is a reading on a range of written words, not a second token stream (ADR-0007).
+
+
+## Still open
+
+1. **NFC for Hebrew.** OSHB advises against it, and the ingest applies it to every edition (ADR-0004 v1.1). Dropping it for Hebrew would change stored word text, which changes the words stamp, though no word index moves. Decide before an app compares WLC text with another Hebrew source.
+2. **A stamp for readings.** Readings are left out of the words stamp (ADR-0007). Whether alignment data keyed on qere ids needs its own stamp is for the original-word hub (ADR-0003) to decide.
 
 [oshb]: https://github.com/openscriptures/morphhb/tree/3d15126fb1ef74867fc1434be1942e837932691f/wlc
