@@ -53,6 +53,7 @@ export interface IngestStats {
   preVerseWordTokens: number; // word tokens with verse=NULL (headings/titles)
   sectionRefs: number; // \r and \mr reference lines (no block)
   altVerseNumbers: number; // \va and \vp numbers on a verse
+  altChapterNumbers: number; // \ca and \cp numbers on a chapter
   verseBridges: number; // \v 17-18 bridged verses (first number used)
   metadataParas: Record<string, number>; // \h, \toc1 … paragraphs (no block)
 }
@@ -61,6 +62,8 @@ export interface NormalizeResult {
   blocks: Block[];
   tokens: Token[];
   verses: VerseText[];
+  /** Empty verse markers outside the scheme, which got no row (`NormalizeOptions.hasVerse`). */
+  droppedVerses: { chapter: number; verse: number }[];
   stats: IngestStats;
 }
 
@@ -95,8 +98,9 @@ export function splitChapters(usj: UsjDoc): ChapterDoc[] {
   const docs: ChapterDoc[] = [{ chapter: 0, content: [] }];
   for (const node of usj.content) {
     if (typeof node !== 'string' && node.type === 'chapter') {
-      const n = Number(node.number);
-      if (!Number.isInteger(n)) throw new Error(`unparseable chapter number "${node.number}"`);
+      const n = /^\d+$/.test(node.number ?? '') ? Number(node.number) : NaN;
+      if (!(n >= 1)) throw new Error(`unparseable chapter number "${node.number}"`);
+      if (docs.some((d) => d.chapter === n)) throw new Error(`chapter ${n} printed twice`);
       docs.push({ chapter: n, content: [] });
     }
     docs[docs.length - 1].content.push(node);
@@ -114,6 +118,7 @@ const newStats = (): IngestStats => ({
   preVerseWordTokens: 0,
   sectionRefs: 0,
   altVerseNumbers: 0,
+  altChapterNumbers: 0,
   verseBridges: 0,
   metadataParas: {},
 });
@@ -125,6 +130,14 @@ export interface NormalizeOptions {
    * chapter's first verse becomes verse 0 there.
    */
   readonly titleChapters?: ReadonlySet<number>;
+  /**
+   * Whether the edition's scheme has a verse of this book. A verse marker
+   * printed with no words, for a verse the scheme lacks (WEB's ROM 16:25), gets
+   * no verse-text row and is listed in `droppedVerses`: its address would name
+   * a verse the scheme lacks. The marker stays in the document. Without this
+   * option every verse marker gets a row.
+   */
+  readonly hasVerse?: (chapter: number, verse: number) => boolean;
 }
 
 /** Normalize one book's USJ: split it into chapter documents and derive from those. */
@@ -146,7 +159,8 @@ export function normalizeChapters(docs: readonly ChapterDoc[], opts: NormalizeOp
   let seqInChapter = 0;
   let pendingVerseStart = false;
   // the verse-text row that text of the current verse goes to
-  let verseText: { chapter: number; verse: number; segment: string; text: string } | null = null;
+  type VerseRow = { chapter: number; verse: number; segment: string; text: string };
+  let verseText: VerseRow | null = null;
 
   // the block a para WILL create if it emits a token (lazy: empty paras — e.g.
   // a para holding only a verse marker — must not break the partition with an
@@ -159,8 +173,12 @@ export function normalizeChapters(docs: readonly ChapterDoc[], opts: NormalizeOp
   let headingVerse: number | null = null;
   let buf = '';
 
+  const verseRows = new Map<string, VerseRow>();
   const startVerseText = (v: number) => {
+    const key = `${chapter}:${v}${segment}`;
+    if (verseRows.has(key)) throw new Error(`chapter ${chapter}: verse ${v}${segment} printed twice`);
     verseText = { chapter, verse: v, segment, text: '' };
+    verseRows.set(key, verseText);
     verses.push(verseText);
   };
 
@@ -290,6 +308,8 @@ export function normalizeChapters(docs: readonly ChapterDoc[], opts: NormalizeOp
           break; // \id line — metadata
         case 'chapter': {
           if (node !== first) throw new Error(`chapter ${doc.chapter} document holds a second \\c`);
+          if (node.altnumber !== undefined) stats.altChapterNumbers++;
+          if (node.pubnumber !== undefined) stats.altChapterNumbers++;
           chapter = doc.chapter;
           verse = null;
           segment = '';
@@ -322,8 +342,14 @@ export function normalizeChapters(docs: readonly ChapterDoc[], opts: NormalizeOp
           headingVerse = null; // a heading starts unversed — no inheritance
           if (marker === 'd' && verse === null && opts.titleChapters?.has(chapter)) {
             headingVerse = 0; // the scheme numbers this title as verse 0
-            wordIndexInVerse = 0;
-            startVerseText(0);
+            // A title printed as several \d paragraphs is one verse 0: later
+            // ones continue its text and its word indexes.
+            const title = verseRows.get(`${chapter}:0`);
+            if (title) verseText = title;
+            else {
+              wordIndexInVerse = 0;
+              startVerseText(0);
+            }
           }
           walkInline(node.content ?? []);
           flushText();
@@ -339,10 +365,13 @@ export function normalizeChapters(docs: readonly ChapterDoc[], opts: NormalizeOp
   }
   flushText();
 
-  return {
-    blocks,
-    tokens,
-    verses: verses.map((v) => ({ ...v, text: v.text.replace(/\s+/g, ' ').trim() })),
-    stats,
-  };
+  const kept: VerseText[] = [];
+  const droppedVerses: { chapter: number; verse: number }[] = [];
+  for (const row of verses) {
+    const v = { ...row, text: row.text.replace(/\s+/g, ' ').trim() };
+    if (v.text === '' && v.verse !== 0 && opts.hasVerse && !opts.hasVerse(v.chapter, v.verse)) {
+      droppedVerses.push({ chapter: v.chapter, verse: v.verse });
+    } else kept.push(v);
+  }
+  return { blocks, tokens, verses: kept, droppedVerses, stats };
 }

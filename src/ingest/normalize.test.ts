@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import type { Block, Token } from '../model/corpus';
-import { normalizeUsj, type UsjDoc } from './normalize';
+import { blockGenre, normalizeUsj, splitChapters, type UsjDoc } from './normalize';
 
 /**
  * GOLDEN FIXTURE (ADR-0001/ADR-0004): committed USJ in → expected Token
@@ -218,6 +218,7 @@ describe('stats bag — what the documents hold beyond the tokens is counted', (
       preVerseWordTokens: 15, // mt1(3) + s1(3) + s1(3) + d(5) + qa(1)
       sectionRefs: 1, // \r
       altVerseNumbers: 0,
+      altChapterNumbers: 0,
       verseBridges: 1, // \v 5-6
       metadataParas: { h: 1, toc1: 1 },
     });
@@ -325,5 +326,72 @@ describe('normalize guards', () => {
     );
     expect(r.stats.verseBridges).toBe(1);
     expect(r.tokens[0].verse).toBe(17);
+  });
+});
+
+describe('chapter and verse keys (PR #6 review)', () => {
+  const doc = (content: UsjDoc['content']): UsjDoc => ({ type: 'USJ', version: '3.1', content });
+  const c = (number: string) => ({ type: 'chapter', marker: 'c', number });
+  const v = (number: string) => ({ type: 'verse', marker: 'v', number });
+
+  it('rejects a chapter with no number, chapter 0, and a chapter printed twice', () => {
+    expect(() => splitChapters(doc([c('')]))).toThrow(/unparseable chapter number ""/);
+    expect(() => splitChapters(doc([c('0')]))).toThrow(/unparseable chapter number "0"/);
+    expect(() => splitChapters(doc([c('5'), c('5')]))).toThrow(/chapter 5 printed twice/);
+  });
+
+  it('names a verse printed twice instead of failing on the database key', () => {
+    expect(() =>
+      normalizeUsj(doc([c('1'), { type: 'para', marker: 'p', content: [v('5'), 'one', v('5'), 'two'] }])),
+    ).toThrow(/chapter 1: verse 5 printed twice/);
+  });
+
+  it('a title in two \\d paragraphs is one verse 0, and its word indexes run on', () => {
+    const r = normalizeUsj(
+      doc([
+        c('3'),
+        { type: 'para', marker: 'd', content: ['A Psalm of David,'] },
+        { type: 'para', marker: 'd', content: ['when he fled.'] },
+        { type: 'para', marker: 'q1', content: [v('1'), 'LORD, how many'] },
+      ]),
+      { titleChapters: new Set([3]) },
+    );
+    expect(r.verses.filter((x) => x.verse === 0)).toEqual([
+      { chapter: 3, verse: 0, segment: '', text: 'A Psalm of David, when he fled.' },
+    ]);
+    expect(r.tokens.filter((t) => t.verse === 0 && t.kind === 'word').map((t) => t.wordIndex)).toEqual([0, 1, 2, 3, 4, 5, 6]);
+  });
+
+  it('drops an empty verse marker the scheme lacks, and lists it, in the same derivation', () => {
+    const content = [
+      c('16'),
+      { type: 'para', marker: 'p', content: [v('24'), 'Amen.', v('25'), { type: 'note', marker: 'f', content: ['TR puts 16:25-27 here.'] }] },
+    ];
+    const r = normalizeUsj(doc(content), { hasVerse: (_ch, verse) => verse <= 24 });
+    expect(r.verses.map((x) => x.verse)).toEqual([24]);
+    expect(r.droppedVerses).toEqual([{ chapter: 16, verse: 25 }]);
+    // without the scheme, every marker keeps its row
+    expect(normalizeUsj(doc(content)).verses.map((x) => x.verse)).toEqual([24, 25]);
+  });
+
+  it('counts published and alternate chapter numbers', () => {
+    const r = normalizeUsj(doc([{ ...c('1'), pubnumber: 'A' }, { type: 'para', marker: 'p', content: [v('1'), 'x'] }]));
+    expect(r.stats.altChapterNumbers).toBe(1);
+  });
+});
+
+describe('the genre of every supported block marker (ADR-0001 table)', () => {
+  const genres = {
+    heading: ['mt', 'mt1', 'mt2', 'ms', 'ms1', 's', 's1', 's2', 's4', 'is', 'is1', 'd', 'qa', 'sp'],
+    prose: ['p', 'm', 'nb', 'mi', 'pc', 'pmo', 'pi', 'pi1', 'pi2', 'li', 'li1', 'li2', 'ip'],
+    poetry: ['q', 'q1', 'q2', 'q3', 'q4', 'qr'],
+  } as const;
+  for (const [genre, markers] of Object.entries(genres)) {
+    it(`${genre}: ${markers.join(' ')}`, () => {
+      for (const m of markers) expect(blockGenre(m), m).toBe(genre);
+    });
+  }
+  it('no genre for unsupported or out-of-range markers', () => {
+    for (const m of ['s5', 'q5', 'ipi', 'im', 'rem', 'cd', 'b']) expect(blockGenre(m), m).toBeNull();
   });
 });
