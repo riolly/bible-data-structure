@@ -134,6 +134,11 @@ export interface VerseText {
   readonly text: string;
 }
 
+/** Every number a verse unit resolves from: 20 and 21 for a bridge `\v 20-21` (ADR-0004 v1.5). */
+export function verseNumbers(u: { readonly verse: number; readonly lastVerse: number }): number[] {
+  return Array.from({ length: u.lastVerse - u.verse + 1 }, (_, i) => u.verse + i);
+}
+
 /**
  * The unit that holds `chapter:verse` (and `segment`), or undefined when the
  * edition has none: `\v 5-6` resolves from both 5 and 6 (ADR-0004 v1.5).

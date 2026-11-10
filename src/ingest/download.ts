@@ -7,7 +7,7 @@
  * A source zip passes when its unpacked text gives the pinned edition stamp
  * (ADR-0005 amendment, step 6), so a rebuilt zip with the same text passes.
  * When upstream gives another stamp or fails, the download tries our own copy
- * (`mirrorUrl` in sources.ts). When neither gives the pinned stamp, it stops:
+ * (`mirrorLabel` in sources.ts). When neither gives the pinned stamp, it stops:
  * a changed stamp is a new edition, never accepted here.
  *
  * Each verified zip is kept under sources/mirror/ under its mirror file name,
@@ -21,7 +21,7 @@ import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 
 import { sourceEdition } from './source-files';
-import { MIRROR, SOURCES, TVTMS, mirrorAsset, mirrorUrl, type SourceDef } from './sources';
+import { MIRROR, SOURCES, TVTMS, mirrorAsset, mirrorLabel, type SourceDef } from './sources';
 
 const SOURCES_ROOT = join(import.meta.dirname, 'sources');
 const STAGING = join(SOURCES_ROOT, '.staging');
@@ -46,7 +46,7 @@ async function fetchSource(src: SourceDef) {
   }
 
   const failures: string[] = [];
-  for (const [from, url] of [['upstream', src.url], ['mirror', mirrorUrl(src)]] as const) {
+  for (const [from, url] of [['upstream', src.url], ['mirror', mirrorLabel(src)]] as const) {
     console.log(`↓ ${name}: ${url}`);
     await rm(STAGING, { recursive: true, force: true });
     await mkdir(join(STAGING, src.dir), { recursive: true });
@@ -70,6 +70,9 @@ async function fetchSource(src: SourceDef) {
     await rename(zipPath, join(MIRROR_DIR, mirrorAsset(src)));
     await rm(STAGING, { recursive: true, force: true });
     console.log(`✓ ${name}: ${from} gives the pinned edition ${stamp}, unpacked to ${dest}`);
+    // A different stamp upstream means a new edition exists there. Say so even
+    // though our copy passed, or nobody learns of it.
+    for (const f of failures) console.warn(`⚠ ${name}: ${f}`);
     return;
   }
   await rm(STAGING, { recursive: true, force: true });

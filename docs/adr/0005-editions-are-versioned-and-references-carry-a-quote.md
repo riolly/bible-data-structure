@@ -24,7 +24,7 @@ Word addresses survive a re-ingest because they are coordinates, not row ids. Th
 
 The edition stamp hashes only the upstream files. Stored words also depend on the counted text fixes in `sources.ts`, the tokenizer (ADR-0004), the normalizer and the USFM parser version. Any of these can change what a word address holds while the edition stamp stays the same, so rule 3's reconciliation pass would never start. ADR-0004 v1.3 and v1.4 are such changes.
 
-- Each edition also gets a **words stamp**, `translation.words_stamp`: sha256 over every word address (book, chapter, verse, segment, word index) and the word text stored there, in book order (`wordsStamp` in `src/ingest/edition.ts`).
+- Each edition also gets a **words stamp**, `translation.words_stamp`: sha256 over every word address (book, chapter, verse, segment, word index) and the word text stored there, in book order (`wordsStamp` in `src/ingest/edition.ts`). A bridge's word address includes its last verse, `4MA 8:28-29!3` (ADR-0004 v1.5).
 - Punctuation is left out, for the reason ADR-0004 leaves it out of word indexes.
 - **Rule 3 keys on the words stamp.** A changed words stamp starts the reconciliation pass, whatever caused it. The edition stamp stays the name of the upstream text, and the README records both.
 

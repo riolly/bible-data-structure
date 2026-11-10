@@ -426,6 +426,17 @@ describe('chapter and verse keys (PR #6 review)', () => {
     expect(normalizeUsj(doc(content)).verses.map((x) => x.verse)).toEqual([24, 25]);
   });
 
+  it('cuts an empty bridge back to the numbers its scheme has', () => {
+    const bridge = (n: string) => [c('16'), { type: 'para', marker: 'p', content: [v('24'), 'Amen.', v(n), { type: 'note', marker: 'f', content: ['f'] }] }];
+    const cut = normalizeUsj(doc(bridge('25-27')), { hasVerse: (_ch, verse) => verse <= 26 });
+    expect(cut.verses.map((x) => [x.verse, x.lastVerse])).toEqual([[24, 24], [25, 26]]);
+    expect(cut.droppedVerses).toEqual([{ chapter: 16, verse: 27 }]);
+    // every number outside: the unit goes, and each number is reported
+    const gone = normalizeUsj(doc(bridge('25-27')), { hasVerse: (_ch, verse) => verse <= 24 });
+    expect(gone.verses.map((x) => x.verse)).toEqual([24]);
+    expect(gone.droppedVerses.map((x) => x.verse)).toEqual([25, 26, 27]);
+  });
+
   it('counts published and alternate chapter numbers', () => {
     const r = normalizeUsj(doc([{ ...c('1'), pubnumber: 'A' }, { type: 'para', marker: 'p', content: [v('1'), 'x'] }]));
     expect(r.stats.altChapterNumbers).toBe(1);
