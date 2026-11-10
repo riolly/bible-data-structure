@@ -82,3 +82,27 @@ export interface Token {
   /** Head Original Word id (Phase-3 seam) — null until aligned. */
   readonly owId: string | null;
 }
+
+/**
+ * Another reading of written words, kept beside the token stream so it never
+ * moves a word address (ADR-0007). Today only the Hebrew qere ("what is
+ * read") of a ketiv ("what is written").
+ *
+ * It covers the half-open word range [wordIndex, wordIndex + wordCount) of
+ * one verse segment. `wordCount` 0 is a reading with no written word, read
+ * before word `wordIndex` (equal to the verse's word count at its end).
+ * `text` '' is a written word with no reading.
+ */
+export interface Reading {
+  readonly book: string;
+  readonly chapter: number;
+  readonly verse: number;
+  readonly segment?: string;
+  readonly wordIndex: number;
+  readonly wordCount: number;
+  readonly kind: 'qere';
+  /** The reading's own text, pointed, NFC. */
+  readonly text: string;
+  /** The source's ids of the reading's words, in order: what an alignment points at (ADR-0003). */
+  readonly owIds: readonly string[];
+}

@@ -17,7 +17,7 @@ Started 2026-11-09 from the research in [bible-codex](https://github.com/riolly/
    Left open by this step, recorded in ADR-0006's amendments: the pivot home of the additions to Esther is undecided. TVTMS's text tests, also left open here, now run per edition (ADR-0006 amendment, text tests). Some libpalaso mapping lines name ESG verses missing from the same file's counts; `src/ingest/pivot.test.ts` reports them.
 3. **Test against texts that disagree.** Import KJV, BSB, a Bible with deuterocanonical books, OSHB Hebrew, a Greek New Testament and, if licensable, the Septuagint. Make the trouble-spot fixtures in research/README.md pass.
    1. Licensing verdicts per source in [research/licensing.md](research/licensing.md). Every text below is public domain except SBLGNT (CC BY 4.0). Done.
-   2. Each source lists the books it must have, and may carry counted text fixes. WLC (OSHB's Hebrew) and SBLGNT ingest under `org`. ADR-0004 v1.2 records that Hebrew and Greek tokenize under the v1.1 rules unchanged. Done.
+   2. Each source lists the books it must have, and may carry counted text fixes. WLC (OSHB's Hebrew, from upstream since ADR-0007) and SBLGNT ingest under `org`. ADR-0004 v1.2 records that Hebrew and Greek tokenize under the v1.1 rules unchanged. Done.
    3. Derived schemes (ADR-0002 amendment): `rp` for Robinson-Pierpont 2018, `web` for the World English Bible with deuterocanon, and `brenton` for Brenton's Greek Septuagint, and `bsb` for the BSB's order of Philippians 1:16-17 (ADR-0006 amendment, text tests). Done.
    4. Trouble-spot fixtures and `src/ingest/trouble-spots.test.ts`. Every spot but the Greek additions to Daniel and Esther passes. Done.
 
@@ -52,7 +52,7 @@ Every pin update in `src/ingest/sources.ts` is a new edition (ADR-0005). Record 
 |---|---|---|---|---|---|
 | KJV | `c7ba60db…621aaf` | `sha256:7ead3d28b2b34c9b` | `sha256:13f8787f02884340` | 2026-11-09 | July pin no longer matched. No July stamp exists, so a text change can't be confirmed |
 | BSB | `75ca91d5…f7fbc4` | `sha256:3b0004861fcf2481` | `sha256:f5dbe0632c8c21ad` | 2026-11-09 | Same as KJV. Scheme `bsb` since the TVTMS text tests (ADR-0006 amendment) |
-| WLC | `464225e1…bd1df7` | `sha256:a548fe69e09108f4` | `sha256:496bcbfec1bf8375` | 2026-11-09 | ebible `hboWLC`, scheme `org` |
+| WLC | `f56c1507…177b4c7` | `sha256:b15b041bc282f9b8` | `sha256:027a6cea9c1feb67` | 2026-11-10 | Upstream openscriptures/morphhb at `3d15126`, scheme `org`, with 1,260 qere readings (ADR-0007). Replaced ebible `hboWLC` (`464225e1…bd1df7`, stamps `sha256:a548fe69e09108f4` and `sha256:496bcbfec1bf8375`), which dropped the qere and leaked markup into 10 verses |
 | SBLGNT | `bcb9cfd8…3cbf56` | `sha256:33876ae1d14e3756` | `sha256:b029321cde54e6b7` | 2026-11-09 | Upstream LogosBible/SBLGNT at `d7f35ad`, scheme `org`. Replaced ebible `grcsbl` (`04c5c536…b10a73`, stamp `sha256:89a22750abd8cdbe`), whose text was damaged (research/licensing.md) |
 | RP | `33b208ee…874048` | `sha256:1defb25636d232d6` | `sha256:f991602ae5d26c3f` | 2026-11-09 | ebible `grcmt`, scheme `rp` |
 | WEB | `05b0440b…3589c8` | `sha256:5f722b4d8f3f4e8e` | `sha256:8fa638d577ba7d01` | 2026-11-09 | ebible `eng-web`, scheme `web` |
