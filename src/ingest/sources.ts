@@ -1,13 +1,12 @@
 /**
- * Pinned upstream USFM sources. Full corpora are NOT committed — the download
- * script fetches these zips into src/ingest/sources/ (gitignored) and
- * verifies the pinned sha256. If upstream re-publishes (ebible.org refreshes
- * zips when a text is revised), the checksum fails LOUDLY: updating the pin is
- * a conscious act that produces a new `translation.edition` (ADR-0005) and
- * triggers the quote-witness reconciliation story downstream.
+ * Pinned upstream sources. Full corpora are not committed: the download script
+ * fetches these zips into src/ingest/sources/ (gitignored) and checks that the
+ * unpacked text gives the pinned edition stamp (ADR-0005 amendment, step 6).
+ * A rebuilt zip with the same text passes. A changed stamp stops the download,
+ * and updating `edition` here is a new edition (README.md Editions).
  *
- * KJV and BSB pinned 2026-11-09 (README.md Editions), the others the same day
- * in step 3. Licensing verdicts: research/licensing.md.
+ * When upstream no longer gives the pinned stamp, the download falls back to
+ * our own copy, `mirrorLabel(src)`. Licensing verdicts: research/licensing.md.
  */
 
 import { PROTESTANT, canonBookCodes, sectionBookCodes } from '../model/canon';
@@ -29,7 +28,11 @@ export interface TextFix {
 export interface SourceDef {
   readonly meta: TranslationMeta & { edition: '' }; // edition computed at ingest (edition.ts)
   readonly url: string;
-  readonly sha256: string;
+  /**
+   * The pinned edition stamp (`computeEdition` in edition.ts over the listed
+   * books' upstream files). The download and the ingest stop on any other.
+   */
+  readonly edition: string;
   /** Directory under src/ingest/sources/ the zip unpacks into. */
   readonly dir: string;
   /**
@@ -66,7 +69,7 @@ export const SOURCES: readonly SourceDef[] = [
       edition: '',
     },
     url: 'https://ebible.org/Scriptures/eng-kjv_usfm.zip',
-    sha256: 'c7ba60db8ac93191192fb7cef05be13f174f756f08584c98cdfccdacfe621aaf',
+    edition: 'sha256:7ead3d28b2b34c9b',
     dir: 'kjv',
     books: canonBookCodes(PROTESTANT),
     rewriteVersifiedD: false,
@@ -82,7 +85,7 @@ export const SOURCES: readonly SourceDef[] = [
       edition: '',
     },
     url: 'https://ebible.org/Scriptures/engbsb_usfm.zip',
-    sha256: '75ca91d5a5c69ca4cbdeabdb03ea1a458db20cf3966abe15d86df086acf7fbc4',
+    edition: 'sha256:3b0004861fcf2481',
     dir: 'bsb',
     books: canonBookCodes(PROTESTANT),
     rewriteVersifiedD: true, // BSB Zech 12 versified \d (grammar gap, parse.ts)
@@ -101,7 +104,7 @@ export const SOURCES: readonly SourceDef[] = [
     // leaked markup into 11 words (ADR-0007). The converter keeps the text and
     // the qere words' ids, and drops OSHB's lemma and morphology (CC BY 4.0).
     url: 'https://github.com/openscriptures/morphhb/archive/3d15126fb1ef74867fc1434be1942e837932691f.zip',
-    sha256: 'f56c150708b5d74719ecb709c712c31eae9855bca7b111fd82ec91b5d177b4c7',
+    edition: 'sha256:b15b041bc282f9b8',
     dir: 'wlc-oshb',
     format: { kind: 'oshb-xml', path: 'morphhb-3d15126fb1ef74867fc1434be1942e837932691f/wlc' },
     books: sectionBookCodes(PROTESTANT, 'ot'),
@@ -122,7 +125,7 @@ export const SOURCES: readonly SourceDef[] = [
     // Upstream, not ebible's grcsbl: ebible's USFM lost words and punctuation in
     // 2,299 verses where it turned apparatus marks into footnotes (research/licensing.md).
     url: 'https://github.com/LogosBible/SBLGNT/archive/d7f35adca9ec410e1d1499c63b4dd989d76c8d4d.zip',
-    sha256: 'bcb9cfd8678a863be77c01641aab14c31515e7057852b5abfe0920aac73cbf56',
+    edition: 'sha256:33876ae1d14e3756',
     dir: 'sblgnt-logos',
     format: { kind: 'sblgnt-xml', path: 'SBLGNT-d7f35adca9ec410e1d1499c63b4dd989d76c8d4d/data/sblgnt/xml' },
     books: sectionBookCodes(PROTESTANT, 'nt'),
@@ -139,7 +142,7 @@ export const SOURCES: readonly SourceDef[] = [
       edition: '',
     },
     url: 'https://ebible.org/Scriptures/grcmt_usfm.zip',
-    sha256: '33b208ee58a1862696689dcd5db69ed0ae891cd08aea3c7c68a5055501874048',
+    edition: 'sha256:1defb25636d232d6',
     dir: 'rp',
     books: sectionBookCodes(PROTESTANT, 'nt'),
     rewriteVersifiedD: false,
@@ -155,7 +158,7 @@ export const SOURCES: readonly SourceDef[] = [
       edition: '',
     },
     url: 'https://ebible.org/Scriptures/eng-web_usfm.zip',
-    sha256: '05b0440bd8994dd4da7cc53dd8167a759ed7c09617e4a562c64eb9b3343589c8',
+    edition: 'sha256:5f722b4d8f3f4e8e',
     dir: 'web',
     // ebible's file order: the 39, the deuterocanon, the 27
     books: [
@@ -202,7 +205,7 @@ export const SOURCES: readonly SourceDef[] = [
       edition: '',
     },
     url: 'https://ebible.org/Scriptures/grcbrent_usfm.zip',
-    sha256: '9de434f4922f85a475276e4754f6d114dee0f3bf5323d90dcd559a1f8286e9a4',
+    edition: 'sha256:3db40d92c53c8d1d',
     dir: 'brenton',
     // ebible's file order. EZR is 2 Esdras (Ezra and Nehemiah), as in lxx;
     // Esther and Daniel are the Greek books ESG and DAG.
@@ -217,11 +220,33 @@ export const SOURCES: readonly SourceDef[] = [
   },
 ];
 
-/** The OSHB pin, for the data_source row of the qere word ids it supplies (ADR-0007). */
+/**
+ * Where we keep our own copy of each pinned source: a GitHub release on this
+ * repo, one zip per edition stamp. A person uploads them (README.md, steps
+ * only a person can do). TVTMS has no copy: STEPBible asks that the raw file
+ * not be re-posted.
+ */
+export const MIRROR = { repo: 'riolly/bible-data-structure', tag: 'sources' } as const;
+
+/** The file name of a source's copy in the mirror release. */
+export const mirrorAsset = (src: SourceDef) => `${src.dir}-${src.edition.replace('sha256:', '')}.zip`;
+
+/**
+ * Where the download finds a source's copy, for logs. The repo is private, so
+ * the asset's https URL fails without a login; this names the `gh` route.
+ */
+export const mirrorLabel = (src: SourceDef) =>
+  `gh release download ${MIRROR.tag} --repo ${MIRROR.repo} --pattern ${mirrorAsset(src)}`;
+
+/**
+ * The OSHB pin, for the data_source row of the qere word ids it supplies
+ * (ADR-0007). The commit in the URL pins it, and the source is checked by
+ * edition stamp, so there is no file hash.
+ */
 const wlc = SOURCES.find((s) => s.meta.abbrev === 'WLC')!;
 export const OSHB = {
   url: wlc.url,
-  sha256: wlc.sha256,
+  sha256: null,
   attribution: 'Original work of the Open Scriptures Hebrew Bible available at https://github.com/openscriptures/morphhb (CC BY 4.0)',
 } as const;
 
@@ -229,7 +254,9 @@ export const OSHB = {
  * STEPBible TVTMS, the primary scheme-mapping data (ADR-0006). CC BY 4.0 by
  * Tyndale House and STEPBible.org. STEPBible asks that the raw file not be
  * re-posted, so it is pinned here and downloaded to sources/tvtms/, never
- * committed. Updating the pin can change mapping rows; diff before and after.
+ * committed or mirrored. It is one file at a git commit, so its bytes can't
+ * change and it keeps a file hash. Updating the pin can change mapping rows;
+ * diff before and after.
  */
 export const TVTMS = {
   url:

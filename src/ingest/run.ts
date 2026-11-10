@@ -178,6 +178,9 @@ const seconds = (since: number) => `${((performance.now() - since) / 1000).toFix
  */
 function prepareSource(src: SourceDef, pool: ParsePool) {
   const { edition, files, readings } = readSource(src);
+  if (edition !== src.edition) {
+    throw new Error(`${src.meta.abbrev}: the files give edition ${edition}, not the pinned ${src.edition}; run bun run ingest:download`);
+  }
   const outcomes = files.map((f) => pool.parse(f.usfm, { rewriteVersifiedD: src.rewriteVersifiedD }));
   for (const o of outcomes) o.catch(() => {}); // awaited later; keep an early rejection from counting as unhandled
   return { edition, files, readings, outcomes };

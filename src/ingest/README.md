@@ -6,7 +6,7 @@ schema in `src/db/corpus-schema.ts`, shared by the writer here and the reader in
 `src/db/corpus-read.ts`.
 
 ```
-bun run ingest:download   # once: fetch pinned ebible.org zips, upstream SBLGNT and OSHB, and TVTMS, verify sha256 → sources/ (gitignored)
+bun run ingest:download   # once: fetch pinned ebible.org zips, upstream SBLGNT and OSHB, and TVTMS, check edition stamps → sources/ (gitignored)
 bun run ingest            # sources → build/corpus.db, build/mapping-diff.tsv, build/pivot.json (gitignored)
 ```
 

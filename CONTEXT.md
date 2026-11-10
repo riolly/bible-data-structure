@@ -36,7 +36,7 @@ A deterministic id for an edition's revision, computed as sha256 over its source
 A deterministic id for what an edition's word addresses hold: sha256 over every word address and the word stored there (`translation.words_stamp`). Unlike the edition stamp, it changes when a text fix, the tokenizer or the parser changes stored words. Reconciliation compares this one. (ADR-0005 amendment)
 
 **Source pin**:
-The upstream URL plus the sha256 of the downloaded file (`src/ingest/sources.ts`). A mismatch stops the download. Updating a pin is a new edition.
+The upstream URL plus the edition stamp its text must give (`src/ingest/sources.ts`). A zip rebuilt with the same text passes, and another stamp stops the download. Updating a pin is a new edition. TVTMS, which has no edition stamp, is pinned by the sha256 of its file. (ADR-0005 amendment)
 
 **Full edition**:
 An edition we hold as files, that passes the ingest checks, and whose every word that translates an original word has a Strong's number. Supplied words (`\add`) and words the tag source marks as having no original counterpart need none. Word taps, part-verse marks and whole-Bible offline use need it. Computed from the checks and the rights record, never set by hand. (ADR-0008)
