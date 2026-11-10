@@ -3,7 +3,7 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { readChapter, readChapterDoc, readReadings, readVerseText } from '../db/corpus-read';
+import { readChapter, readChapterDoc, readReadings, readVerseText, readVerseUnit } from '../db/corpus-read';
 import { nativeModuleLoads } from './native-probe';
 import { normalizeChapters, splitChapters, type UsjDoc } from './normalize';
 
@@ -81,6 +81,14 @@ describe.skipIf(!native)('corpus DB round-trip (write seam ↔ read seam)', () =
     expect(again.blocks).toEqual(blocks);
     expect(readChapterDoc(db, 'FIX', 'JHN', 3)).toBeNull();
     expect(readVerseText(db, 'FIX', 'JHN', 1)).toEqual(verses.filter((v) => v.chapter === 1));
+
+    // a bridge resolves from each of its numbers (ADR-0004 v1.5)
+    const bridge = verses.find((v) => v.chapter === 1 && v.verse === 5)!;
+    expect(bridge.lastVerse).toBe(6);
+    expect(readVerseUnit(db, 'FIX', 'JHN', 1, 5)).toEqual(bridge);
+    expect(readVerseUnit(db, 'FIX', 'JHN', 1, 6)).toEqual(bridge);
+    expect(readVerseUnit(db, 'FIX', 'JHN', 1, 4)).toMatchObject({ verse: 4, lastVerse: 4 });
+    expect(readVerseUnit(db, 'FIX', 'JHN', 1, 7)).toBeNull();
 
     // unknown coordinate reads empty, not throwing
     expect(readChapter(db, 'KJV', 'JHN', 1)).toEqual({ blocks: [], tokens: [] });

@@ -117,13 +117,32 @@ export interface ChapterDoc {
 }
 
 /**
- * One verse marker's surface text, derived from the chapter document: notes
- * left out, whitespace runs made one space, a space where the verse crosses a
- * block. Empty when the marker is printed with no words.
+ * One verse unit and its surface text, derived from the chapter document:
+ * notes left out, whitespace runs made one space, a space where the verse
+ * crosses a block. Empty when the marker is printed with no words.
+ *
+ * A unit is one verse marker. A bridge (`\v 20-21`) is one unit whose every
+ * number resolves to it; its tokens carry the first number (ADR-0004 v1.5).
  */
 export interface VerseText {
   readonly chapter: number;
+  /** The first verse; the number the unit's tokens carry. */
   readonly verse: number;
+  /** The last verse: above `verse` for a bridge, equal to it otherwise. */
+  readonly lastVerse: number;
   readonly segment: string;
   readonly text: string;
+}
+
+/**
+ * The unit that holds `chapter:verse` (and `segment`), or undefined when the
+ * edition has none: `\v 5-6` resolves from both 5 and 6 (ADR-0004 v1.5).
+ */
+export function verseUnitOf<U extends Omit<VerseText, 'text'>>(
+  units: readonly U[],
+  chapter: number,
+  verse: number,
+  segment = '',
+): U | undefined {
+  return units.find((u) => u.chapter === chapter && u.segment === segment && u.verse <= verse && verse <= u.lastVerse);
 }

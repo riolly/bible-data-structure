@@ -22,4 +22,14 @@ describe('wordsStamp (ADR-0005 amendment)', () => {
     expect(stamp(base)).not.toBe(stamp([tok(1, 0, 'In'), tok(1, 1, 'the'), tok(1, 3, 'beginning')]));
     expect(stamp(base)).not.toBe(stamp([...base.slice(0, 3), tok(1, 2, 'beginning', 'a')]));
   });
+
+  it('hashes a word in a bridge with its range, and other words as before (ADR-0004 v1.5)', () => {
+    const units = [{ chapter: 1, verse: 1, lastVerse: 2, segment: '' }];
+    const s = wordsStamp();
+    s.add('GEN', base, units);
+    expect(s.digest()).not.toBe(stamp(base));
+    const single = wordsStamp();
+    single.add('GEN', base, [{ chapter: 1, verse: 1, lastVerse: 1, segment: '' }]);
+    expect(single.digest()).toBe(stamp(base));
+  });
 });

@@ -179,9 +179,11 @@ export const chapterDoc = sqliteTable(
 );
 
 /**
- * One verse marker's surface text, derived from `chapter_doc`: notes left
+ * One verse unit and its surface text, derived from `chapter_doc`: notes left
  * out, whitespace runs made one space. Empty when the marker is printed with
- * no words; no row when the edition skips the verse.
+ * no words; no row when the edition skips the verse. A bridge (`\v 20-21`) is
+ * one row whose every number from `verse` to `last_verse` resolves to it
+ * (ADR-0004 v1.5).
  */
 export const verseText = sqliteTable(
   'verse_text',
@@ -193,7 +195,10 @@ export const verseText = sqliteTable(
       .notNull()
       .references(() => book.code),
     chapter: integer('chapter').notNull(),
+    /** The first verse: the number the unit's tokens carry. */
     verse: integer('verse').notNull(),
+    /** The last verse: above `verse` for a bridge, equal to it otherwise. */
+    lastVerse: integer('last_verse').notNull(),
     segment: text('segment').notNull().default(''),
     text: text('text').notNull(),
   },

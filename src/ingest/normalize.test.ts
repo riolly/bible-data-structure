@@ -3,7 +3,7 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import type { Block, Token } from '../model/corpus';
+import { verseUnitOf, type Block, type Token } from '../model/corpus';
 import { normalizeUsj, type UsjDoc } from './normalize';
 
 /**
@@ -17,7 +17,7 @@ const usj = JSON.parse(
   readFileSync(join(__dirname, 'fixtures', 'adversarial.usj.json'), 'utf8'),
 ) as UsjDoc;
 
-const { blocks, tokens, stats } = normalizeUsj(usj);
+const { blocks, tokens, verses, stats } = normalizeUsj(usj);
 
 const blockTokens = (b: Block) => tokens.filter((t) => t.blockId === b.id);
 const verseTokens = (chapter: number, verse: number) =>
@@ -124,12 +124,21 @@ describe('adversarial tokenization inside the pipeline (ADR-0004)', () => {
     expect(v4.find((t) => t.text === 'Quoted')!.verseStart).toBe(true);
   });
 
-  it('a verse BRIDGE (\\v 5-6) collapses to its first number — the bridge end mints no coordinate (ADR-0004)', () => {
-    expect(verseTokens(1, 5).map(brief)).toEqual([
+  it('a verse BRIDGE (\\v 5-6) is one unit: both numbers resolve to it, words count within it (ADR-0004 v1.5)', () => {
+    const bridge = verseTokens(1, 5);
+    expect(bridge.map(brief)).toEqual([
       '0:A', '1:bridged', '2:verse', '3:collapses', '4:to', '5:its', '6:first', '7:number', 'p:.',
     ]);
-    expect(verseTokens(1, 5)[0].verseStart).toBe(true);
-    expect(verseTokens(1, 6)).toEqual([]); // verse 6 is unanchorable by design
+    expect(bridge[0].verseStart).toBe(true);
+    // the tokens carry the first number; the unit holds the range
+    expect(verseTokens(1, 6)).toEqual([]);
+    const unit = { chapter: 1, verse: 5, lastVerse: 6, segment: '', text: 'A bridged verse collapses to its first number.' };
+    expect(verses.find((v) => v.chapter === 1 && v.verse === 5)).toEqual(unit);
+    expect(verseUnitOf(verses, 1, 5)).toEqual(unit);
+    expect(verseUnitOf(verses, 1, 6)).toEqual(unit);
+    expect(verseUnitOf(verses, 1, 7)).toBeUndefined();
+    // a single verse is a unit whose first and last verse are the same
+    expect(verseUnitOf(verses, 1, 4)).toMatchObject({ verse: 4, lastVerse: 4 });
   });
 
   it('a word split across a \\w char boundary is joined before tokenizing', () => {
@@ -312,7 +321,7 @@ describe('normalize guards', () => {
     ]);
   });
 
-  it('counts bridged verses and uses the first number', () => {
+  it('counts bridged verses; the tokens carry the first number and the unit the range', () => {
     const r = normalizeUsj(
       doc([
         { type: 'chapter', marker: 'c', number: '1' },
@@ -325,5 +334,48 @@ describe('normalize guards', () => {
     );
     expect(r.stats.verseBridges).toBe(1);
     expect(r.tokens[0].verse).toBe(17);
+    expect(r.verses).toEqual([{ chapter: 1, verse: 17, lastVerse: 18, segment: '', text: 'bridged' }]);
+  });
+
+  describe('each unit has one number or one unbroken range, rising within its chapter (ADR-0004 v1.5 rule 6a)', () => {
+    const chapter = (...numbers: string[]) =>
+      doc([
+        { type: 'chapter', marker: 'c', number: '1' },
+        { type: 'para', marker: 'p', content: numbers.flatMap((n) => [{ type: 'verse', marker: 'v', number: n }, 'word ']) },
+      ]);
+
+    it('accepts single verses, ranges and lettered segments in rising order', () => {
+      expect(normalizeUsj(chapter('1', '2-4', '5', '5a', '5b', '6-7')).verses.map((v) => [v.verse, v.lastVerse, v.segment])).toEqual([
+        [1, 1, ''], [2, 4, ''], [5, 5, ''], [5, 5, 'a'], [5, 5, 'b'], [6, 7, ''],
+      ]);
+    });
+
+    it('stops on a range that falls or holds one number', () => {
+      expect(() => normalizeUsj(chapter('6-5'))).toThrow(/range/);
+      expect(() => normalizeUsj(chapter('5-5'))).toThrow(/range/);
+    });
+
+    it('stops on a lettered range', () => {
+      expect(() => normalizeUsj(chapter('3a-4'))).toThrow(/verse number/);
+      expect(() => normalizeUsj(chapter('3-4a'))).toThrow(/verse number/);
+    });
+
+    it('stops on a unit that overlaps or does not rise', () => {
+      expect(() => normalizeUsj(chapter('4-6', '5'))).toThrow(/does not rise/);
+      expect(() => normalizeUsj(chapter('4', '3'))).toThrow(/does not rise/);
+      expect(() => normalizeUsj(chapter('4', '4'))).toThrow(/does not rise/);
+      expect(() => normalizeUsj(chapter('4a', '4'))).toThrow(/does not rise/);
+      expect(() => normalizeUsj(chapter('4-5', '5a'))).toThrow(/does not rise/);
+    });
+
+    it('starts again in each chapter', () => {
+      const two = doc([
+        { type: 'chapter', marker: 'c', number: '1' },
+        { type: 'para', marker: 'p', content: [{ type: 'verse', marker: 'v', number: '5' }, 'a'] },
+        { type: 'chapter', marker: 'c', number: '2' },
+        { type: 'para', marker: 'p', content: [{ type: 'verse', marker: 'v', number: '1' }, 'b'] },
+      ]);
+      expect(normalizeUsj(two).verses.map((v) => [v.chapter, v.verse])).toEqual([[1, 5], [2, 1]]);
+    });
   });
 });
