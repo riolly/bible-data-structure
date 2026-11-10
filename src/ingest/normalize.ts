@@ -30,7 +30,7 @@
  * chapter 0 — the reader fetches chapter 0 alongside chapter 1.
  */
 
-import type { Block, ChapterDoc, Genre, Token, UsjElement, UsjNode, VerseText } from '../model/corpus';
+import { verseNumbers, type Block, type ChapterDoc, type Genre, type Token, type UsjElement, type UsjNode, type VerseText } from '../model/corpus';
 import { tokenize } from './tokenize';
 
 export type { UsjElement, UsjNode } from '../model/corpus';
@@ -385,10 +385,18 @@ export function normalizeChapters(docs: readonly ChapterDoc[], opts: NormalizeOp
   const droppedVerses: { chapter: number; verse: number }[] = [];
   for (const row of verses) {
     const v = { ...row, text: row.text.replace(/\s+/g, ' ').trim() };
-    const outside = (n: number) => opts.hasVerse !== undefined && !opts.hasVerse(v.chapter, n);
-    if (v.text === '' && v.verse !== 0 && Array.from({ length: v.lastVerse - v.verse + 1 }, (_, i) => v.verse + i).some(outside)) {
-      droppedVerses.push({ chapter: v.chapter, verse: v.verse });
-    } else kept.push(v);
+    if (v.text !== '' || v.verse === 0 || opts.hasVerse === undefined) {
+      kept.push(v);
+      continue;
+    }
+    // an empty unit keeps only the numbers its scheme has: `\v 25-27` with 27 outside keeps 25-26
+    const inside = verseNumbers(v).filter((n) => opts.hasVerse!(v.chapter, n));
+    for (const n of verseNumbers(v)) if (!inside.includes(n)) droppedVerses.push({ chapter: v.chapter, verse: n });
+    if (inside.length === 0) continue;
+    if (inside.at(-1)! - inside[0] + 1 !== inside.length) {
+      throw new Error(`chapter ${v.chapter}: the scheme has verses ${inside.join(', ')} of the empty bridge ${v.verse}-${v.lastVerse}, not one run`);
+    }
+    kept.push({ ...v, verse: inside[0], lastVerse: inside.at(-1)! });
   }
   return { blocks, tokens, verses: kept, droppedVerses, stats };
 }

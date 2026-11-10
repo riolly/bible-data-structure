@@ -13,7 +13,7 @@
 import { existsSync, readFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import type { Block, Token, VerseText } from '../model/corpus';
+import { verseNumbers, type Block, type Token, type VerseText } from '../model/corpus';
 import type { IngestStats } from './normalize';
 import { PIVOT, checkCoverage } from '../model/mapping';
 import { checkVerses, hasVerse, titleChapters, type Scheme } from '../model/scheme';
@@ -271,9 +271,8 @@ function checkPivotGrowth(pivot: Scheme) {
   if (violations.length > 0) throw new Error(`the pivot shrank:\n  ${violations.slice(0, 10).join('\n  ')}`);
 }
 
-/** Every number a verse unit resolves from: 20 and 21 for a bridge `\v 20-21` (ADR-0004 v1.5). */
 function unitVerses(u: VerseText): { chapter: number; verse: number }[] {
-  return Array.from({ length: u.lastVerse - u.verse + 1 }, (_, i) => ({ chapter: u.chapter, verse: u.verse + i }));
+  return verseNumbers(u).map((verse) => ({ chapter: u.chapter, verse }));
 }
 
 /**
