@@ -121,12 +121,6 @@ describe('checkReadings', () => {
 
 const src = SOURCES.find((s) => s.meta.abbrev === 'WLC')!;
 const oshbDir = src.format?.kind === 'oshb-xml' ? join(SOURCES_ROOT, src.dir, src.format.path) : '';
-/** ebible's hboWLC, the WLC source before ADR-0007. No longer downloaded; the test runs where it is still unpacked. */
-const ebibleDir = join(SOURCES_ROOT, 'wlc');
-
-/** The words ebible's copy got wrong: it leaked OSHB markup as text around a large, small or suspended letter. */
-const LEAKED_MARKUP = ['DEU 6:4', 'ISA 44:14', 'JDG 18:30', 'JER 39:13', 'JOB 38:13', 'JOB 38:15', 'LEV 11:42', 'NUM 27:5', 'PRO 16:28', 'PSA 80:14'];
-
 describe.skipIf(!oshbDir || !existsSync(oshbDir))('the pinned OSHB', () => {
   it('has 1,260 qere notes in the shapes ADR-0007 counts', () => {
     const shapes = new Map<string, number>();
@@ -143,59 +137,5 @@ describe.skipIf(!oshbDir || !existsSync(oshbDir))('the pinned OSHB', () => {
     // written words : read words. 2KI 6:25 and JER 18:3 have two ketiv elements in one written word.
     expect(Object.fromEntries([...shapes].sort())).toEqual({ '0:1': 9, '1:0': 6, '1:1': 1214, '1:2': 16, '2:1': 7, '2:2': 8 });
     expect(ids).toBe(1278);
-  }, 60_000);
-});
-
-describe.skipIf(!oshbDir || !existsSync(oshbDir) || !existsSync(ebibleDir))('the pinned OSHB against ebible hboWLC', () => {
-  it('converts to the same verses and the same word addresses, except where ebible leaked markup', () => {
-    // A doubled pashta's first mark is U+05A8 in the pinned OSHB and U+0599 in ebible's copy (ADR-0007).
-    const words = (s: string) =>
-      tokenize(s.normalize('NFC').replaceAll('֨', '֙'), { paragraphMarks: true })
-        .filter((t) => t.kind === 'word')
-        .map((t) => t.text);
-    const verses = (usfm: string) => {
-      const out = new Map<string, string>();
-      let chapter = 0;
-      for (const line of usfm.split('\n')) {
-        const c = /^\\c (\d+)/.exec(line);
-        const v = /^\\v (\d+) (.*)$/.exec(line);
-        if (c) chapter = Number(c[1]);
-        else if (v) out.set(`${chapter}:${v[1]}`, v[2]);
-      }
-      return out;
-    };
-    const ebible = new Map<string, string>();
-    for (const name of readdirSync(ebibleDir).filter((n) => n.endsWith('.usfm'))) {
-      const usfm = readFileSync(join(ebibleDir, name), 'utf8');
-      ebible.set(/^\\id (\w+)/.exec(usfm)![1], usfm.replace(/\\w ([^|\\]*)\|[^\\]*\\w\*/g, '$1'));
-    }
-    let count = 0;
-    let readings = 0;
-    const moved: string[] = [];
-    const changed: string[] = [];
-    for (const name of readdirSync(oshbDir)) {
-      const code = OSHB_BOOKS[name.replace('.xml', '')];
-      if (!code) continue;
-      const converted = oshbXmlToUsfm(readFileSync(join(oshbDir, name), 'utf8'), code);
-      readings += converted.readings.length;
-      const ours = verses(converted.usfm);
-      const theirs = verses(ebible.get(code)!);
-      expect([...ours.keys()], code).toEqual([...theirs.keys()]);
-      for (const [k, text] of theirs) {
-        const [a, b] = [words(ours.get(k)!), words(text)];
-        if (a.length !== b.length) moved.push(`${code} ${k}`);
-        else for (const [i, w] of a.entries()) if (w !== b[i]) changed.push(`${code} ${k}!${i + 1}`);
-        count++;
-      }
-    }
-    expect(count).toBe(23213);
-    expect(readings).toBe(1260);
-    expect(moved.sort()).toEqual(LEAKED_MARKUP);
-    // Points and letters OSHB corrected after ebible copied it. Same address, new text.
-    // prettier-ignore
-    expect(changed.sort()).toEqual([
-      '2KI 21:26!1', '2SA 5:13!10', '2SA 9:13!12', 'DAN 2:39!5', 'DEU 1:31!9', 'ECC 2:22!8', 'ECC 2:23!11', 'EST 3:13!17',
-      'EXO 4:18!9', 'EZK 4:6!7', 'GEN 41:30!2', 'GEN 5:29!6', 'JDG 15:14!5', 'JDG 9:2!24', 'ZEP 2:15!1',
-    ]);
   }, 60_000);
 });

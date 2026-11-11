@@ -34,7 +34,8 @@ the `.vrs` files disagree.
 - Books, canons and English names live in `src/model/books.ts` and `src/model/canon.ts`; `write-db.ts` seeds them.
 - `schemes.ts`: the scheme registry, `kjv` plus six Paratext schemes from
   `vrs/libpalaso/` (MIT, pinned by commit and sha256), plus the derived
-  schemes `rp`, `web` and `brenton` (a base and listed changes, ADR-0002).
+  schemes `rp`, `web`, `brenton` and `bsb` (a base and listed changes,
+  ADR-0002).
 - `vrs.ts`: the Paratext `.vrs` parser (counts, excluded verses, segments,
   mappings, `#!` lines), read the way libpalaso reads them.
 - `pivot.ts`: the extend-only pivot (`fixtures/pivot.json` is the previous
@@ -47,11 +48,13 @@ the `.vrs` files disagree.
   `run.ts` checks against the stored tokens and writes to `reading` (ADR-0007).
 - `edition.ts` — deterministic `translation.edition` stamp (ADR-0005): sha256
   over the source text, immune to zip repackaging.
-- `sources.ts` / `download.ts`: pinned upstream zips and TVTMS, with checksums.
-  Each source lists the books it must have and any counted `textFixes`
-  (`text-fixes.ts`).
-  A checksum mismatch stops the download. Updating a text pin is a new edition;
-  updating the TVTMS pin changes mapping rows (see CLAUDE.md).
+- `sources.ts` / `download.ts`: each text source is pinned by its edition
+  stamp, and TVTMS by its sha256 (ADR-0005, step 6 amendment). Each source
+  lists the books it must have and any counted `textFixes` (`text-fixes.ts`).
+  When upstream gives another stamp, the download tries our copy in the
+  `sources` release, and stops when no copy gives the pinned stamp. Updating a
+  text pin is a new edition; updating the TVTMS pin changes mapping rows (see
+  CLAUDE.md).
 - `write-db.ts` / `run.ts` — Drizzle(better-sqlite3) writer + CLI with
   invariant validation and verse-coverage warnings. Blocks and tokens go in
   through prepared statements, and the indexes are built after the last
@@ -61,10 +64,10 @@ the `.vrs` files disagree.
 
 `fixtures/adversarial.usfm` and `fixtures/chapter-doc.usfm`, each with its
 committed USJ. Pure-TS suites
-(`tokenize.test.ts`, `normalize.test.ts`) always run — including in CI, which
-installs with `ignore-scripts` and has no native modules. `parse.test.ts`
+(`tokenize.test.ts`, `normalize.test.ts`) always run. `parse.test.ts`
 (USFM→USJ drift guard) and `roundtrip.test.ts` (write seam ↔ read seam)
-self-skip where the native tree-sitter / better-sqlite3 bindings are unbuilt.
+skip where the native tree-sitter / better-sqlite3 bindings are unbuilt, and
+the corpus tests skip until `bun run ingest` has run. There is no CI.
 
 After editing a fixture's USFM, regenerate its committed USJ (shown for
 `adversarial`):
@@ -74,6 +77,9 @@ node -e "const{readFileSync,writeFileSync}=require('node:fs');const{USFMParser}=
 ```
 
 ## Native build note
+
+Use Node 24, as `.node-version` says. Node 20 fails `bun install` inside
+node-gyp with an error that doesn't name the version.
 
 usfm-grammar needs `tree-sitter` / `tree-sitter-usfm3` (node-gyp). On Node 24
 the tree-sitter 0.25 build fails against the C++20 `cppgc` headers; build it

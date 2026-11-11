@@ -7,11 +7,11 @@ Phase: v0.0.x since 2026-11-09. Research and prototyping: no CI gates, no review
 ## Commands
 
 ```
-CXXFLAGS='-std=gnu++20' bun install   # the flag is needed for tree-sitter's native build on Node 24
+CXXFLAGS='-std=gnu++20' bun install   # Node 24 (.node-version): Node 20 fails in node-gyp. The flag is for tree-sitter's native build
 bun run test                          # vitest, runs under Node
 bun run typecheck
 bun run ingest:download               # fetch pinned ebible.org zips, upstream SBLGNT, OSHB and TVTMS, check edition stamps (mirror if upstream changed) → src/ingest/sources/
-bun run ingest                        # sources → build/corpus.db, mapping-diff.tsv, pivot.json (4 min; 2 min when build/usj-cache has the parses)
+bun run ingest                        # sources → build/corpus.db, mapping-diff.tsv, pivot.json (about 20 s; 13 s when build/usj-cache has the parses)
 ```
 
 ## Product principle

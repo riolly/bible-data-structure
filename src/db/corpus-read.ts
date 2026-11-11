@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, inArray, isNull, lte, max, or } from 'drizzle-orm';
+import { and, asc, eq, gte, inArray, isNull, lte, or } from 'drizzle-orm';
 import type { BaseSQLiteDatabase } from 'drizzle-orm/sqlite-core';
 
 import type { Block, ChapterDoc, Reading, Token, VerseText } from '../model/corpus';
@@ -64,22 +64,6 @@ export function canonBooks(db: SyncSqliteDb, canonId: string, lang: string): Can
   return rows.map((r) => ({ code: r.code, name: names.get(r.code)?.name ?? r.code, section: r.section }));
 }
 
-/**
- * The corpus edition stamp(s) currently bundled (ADR-0005). Recorded in the
- * backup envelope (#13) so an export names the edition its anchors were minted
- * against; P1 only records them (quote-witness reconciliation is P2). Usually a
- * single edition across the bundled translations, but returns all distinct
- * values so a mixed-edition bundle is faithfully recorded.
- */
-export function listEditions(db: SyncSqliteDb): string[] {
-  return db
-    .selectDistinct({ edition: schema.translation.edition })
-    .from(schema.translation)
-    .orderBy(asc(schema.translation.edition))
-    .all()
-    .map((r) => r.edition);
-}
-
 /** One edition's scheme and stamps (ADR-0002, ADR-0005), or null when the corpus has no such edition. */
 export function readEdition(
   db: SyncSqliteDb,
@@ -92,24 +76,6 @@ export function readEdition(
     .where(eq(t.abbrev, translationAbbrev))
     .all();
   return row ?? null;
-}
-
-/**
- * A book's highest chapter number in one translation. Chapter 0 front matter
- * never wins the MAX.
- */
-export function chapterCount(
-  db: SyncSqliteDb,
-  translationAbbrev: string,
-  bookCode: string,
-): number {
-  const rows = db
-    .select({ max: max(schema.block.chapter) })
-    .from(schema.block)
-    .innerJoin(schema.translation, eq(schema.block.translationId, schema.translation.id))
-    .where(and(eq(schema.translation.abbrev, translationAbbrev), eq(schema.block.book, bookCode)))
-    .all();
-  return rows[0]?.max ?? 1;
 }
 
 /**

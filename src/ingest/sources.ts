@@ -26,7 +26,8 @@ export interface TextFix {
 }
 
 export interface SourceDef {
-  readonly meta: TranslationMeta & { edition: '' }; // edition computed at ingest (edition.ts)
+  /** The license comes from the edition's rights record (src/contract/rights.ts), its one home. */
+  readonly meta: Omit<TranslationMeta, 'license'> & { edition: '' }; // edition computed at ingest (edition.ts)
   readonly url: string;
   /**
    * The pinned edition stamp (`computeEdition` in edition.ts over the listed
@@ -64,7 +65,6 @@ export const SOURCES: readonly SourceDef[] = [
       abbrev: 'KJV',
       language: 'english',
       year: 1769,
-      license: 'Public Domain',
       scheme: 'kjv',
       edition: '',
     },
@@ -80,7 +80,6 @@ export const SOURCES: readonly SourceDef[] = [
       abbrev: 'BSB',
       language: 'english',
       year: 2023,
-      license: 'Public Domain',
       scheme: 'bsb',
       edition: '',
     },
@@ -96,7 +95,6 @@ export const SOURCES: readonly SourceDef[] = [
       abbrev: 'WLC',
       language: 'hebrew',
       year: null,
-      license: 'Public Domain',
       scheme: 'org',
       edition: '',
     },
@@ -116,9 +114,6 @@ export const SOURCES: readonly SourceDef[] = [
       abbrev: 'SBLGNT',
       language: 'greek',
       year: 2010,
-      license:
-        'CC BY 4.0, © 2010 Society of Biblical Literature and Logos Bible Software; ' +
-        'changed: converted from the upstream XML to USFM, words and punctuation unchanged',
       scheme: 'org',
       edition: '',
     },
@@ -137,7 +132,6 @@ export const SOURCES: readonly SourceDef[] = [
       abbrev: 'RP',
       language: 'greek',
       year: 2018,
-      license: 'Public Domain',
       scheme: 'rp',
       edition: '',
     },
@@ -153,7 +147,6 @@ export const SOURCES: readonly SourceDef[] = [
       abbrev: 'WEB',
       language: 'english',
       year: 2020,
-      license: 'Public Domain',
       scheme: 'web',
       edition: '',
     },
@@ -200,7 +193,6 @@ export const SOURCES: readonly SourceDef[] = [
       abbrev: 'Brenton',
       language: 'greek',
       year: 1851,
-      license: 'Public Domain',
       scheme: 'brenton',
       edition: '',
     },

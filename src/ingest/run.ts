@@ -25,6 +25,7 @@ import { SOURCES, type SourceDef } from './sources';
 import { readSource } from './source-files';
 import { checkReadings } from './oshb-xml';
 import { wordsStamp } from './edition';
+import { RIGHTS } from '../contract/rights';
 import { checkExtendOnly, formatPivotSnapshot, pivotSnapshot, type PivotSnapshot } from './pivot';
 import {
   TVTMS_PATH,
@@ -93,7 +94,9 @@ async function main() {
       const { edition, files, readings, outcomes } = prepare(i);
       // A source that fails to prepare throws again when its turn comes, so errors keep source order.
       if (i + 1 < SOURCES.length) try { prepare(i + 1); } catch {}
-      const translationId = insertTranslation(db, { ...src.meta, edition });
+      const rights = RIGHTS.get(src.meta.abbrev);
+      if (!rights) throw new Error(`${src.meta.abbrev}: no rights record in src/contract/rights.ts`);
+      const translationId = insertTranslation(db, { ...src.meta, license: rights.license, edition });
       const words = wordsStamp();
       const text = editionText(src.meta.abbrev);
       texts.set(scheme.id, [...(texts.get(scheme.id) ?? []), text]);
