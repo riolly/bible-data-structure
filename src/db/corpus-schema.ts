@@ -76,6 +76,12 @@ export const translation = sqliteTable('translation', {
    * edition's books are written.
    */
   wordsStamp: text('words_stamp'),
+  /**
+   * TEXT stamp (ADR-0005 amendment, 2026-11-11): sha256 over the edition's
+   * chapter stamps. It changes when any stored document or verse text does,
+   * punctuation and notes included. Set after the edition's books are written.
+   */
+  textStamp: text('text_stamp'),
 });
 
 /**
@@ -172,8 +178,13 @@ export const chapterDoc = sqliteTable(
       .notNull()
       .references(() => book.code),
     chapter: integer('chapter').notNull(),
-    /** JSON array of the chapter's USJ nodes, unchanged. */
+    /** JSON array of the chapter's USJ nodes, with word attributes dropped (ADR-0001 amendment). */
     usj: text('usj').notNull(),
+    /**
+     * The chapter stamp (ADR-0005 amendment, 2026-11-11): sha256 over `usj`
+     * and the chapter's verse text. A caller stores it beside a quote.
+     */
+    stamp: text('stamp').notNull(),
   },
   (t) => [primaryKey({ columns: [t.translationId, t.book, t.chapter] })],
 );

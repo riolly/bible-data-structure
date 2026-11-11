@@ -222,7 +222,6 @@ describe('stats bag — what the documents hold beyond the tokens is counted', (
       xrefs: 1,
       wordsOfJesus: 1,
       selah: 1,
-      strongAttrs: 0,
       wWrapped: 1,
       preVerseWordTokens: 15, // mt1(3) + s1(3) + s1(3) + d(5) + qa(1)
       sectionRefs: 1, // \r

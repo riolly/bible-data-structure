@@ -24,7 +24,7 @@ import { createParsePool, type ParsePool } from './parse-pool';
 import { SOURCES, type SourceDef } from './sources';
 import { readSource } from './source-files';
 import { checkReadings } from './oshb-xml';
-import { wordsStamp } from './edition';
+import { textStamp, wordsStamp } from './edition';
 import { RIGHTS } from '../contract/rights';
 import { checkExtendOnly, formatPivotSnapshot, pivotSnapshot, type PivotSnapshot } from './pivot';
 import {
@@ -46,7 +46,7 @@ import {
   insertReadings,
   insertTranslation,
   insertMappings,
-  setWordsStamp,
+  setStamps,
   seedBooksAndCanons,
   seedSchemes,
 } from './write-db';
@@ -98,6 +98,7 @@ async function main() {
       if (!rights) throw new Error(`${src.meta.abbrev}: no rights record in src/contract/rights.ts`);
       const translationId = insertTranslation(db, { ...src.meta, license: rights.license, edition });
       const words = wordsStamp();
+      const chapters = textStamp();
       const text = editionText(src.meta.abbrev);
       texts.set(scheme.id, [...(texts.get(scheme.id) ?? []), text]);
       editions.push({ scheme: scheme.id, text });
@@ -130,17 +131,17 @@ async function main() {
             throw new Error(`${file.code}: USJ book code mismatch ("${usjCode}")`);
           }
           // The chapter documents are the stored truth; every other row is derived from them (ADR-0001 amendment).
-          const docs = splitChapters(usj);
+          const raw = splitChapters(usj);
           let normalized;
           try {
-            normalized = normalizeChapters(docs, {
+            normalized = normalizeChapters(raw, {
               titleChapters: titleChapters(scheme, file.code),
               hasVerse: (c, v) => hasVerse(scheme, file.code, c, v),
             });
           } catch (e) {
             throw new Error(`${file.code}: ${(e as Error).message}`, { cause: e });
           }
-          const { blocks, tokens, verses, droppedVerses, stats } = normalized;
+          const { docs, blocks, tokens, verses, droppedVerses, stats } = normalized;
           for (const v of droppedVerses) {
             console.warn(`  ⚠ ${file.code} ${v.chapter}:${v.verse}: printed with no words and not in scheme ${scheme.id}, no verse text`);
           }
@@ -148,7 +149,7 @@ async function main() {
           warnVerseGaps(file.code, tokens, verses);
           // Every token's verse has a verse-text row, so the rows alone cover the check.
           checkScheme(scheme, file.code, verses.flatMap(unitVerses));
-          insertBookRows(db, { translationId, book: file.code }, { docs, verses, blocks, tokens });
+          chapters.add(file.code, insertBookRows(db, { translationId, book: file.code }, { docs, verses, blocks, tokens }));
           const bookReadings = readings.filter((r) => r.book === file.code);
           checkReadings(file.code, bookReadings, tokens);
           insertReadings(db, translationId, 'oshb', bookReadings);
@@ -159,14 +160,14 @@ async function main() {
           tokenCount += tokens.length;
           chapterCount += docs.length;
         }
-        setWordsStamp(db, translationId, words.digest());
+        setStamps(db, translationId, { words: words.digest(), text: chapters.digest() });
         sqlite.exec('COMMIT');
         prepared.delete(i); // free this edition's parse results
       } catch (e) {
         sqlite.exec('ROLLBACK');
         throw e;
       }
-      console.log(`  ${blockCount} blocks, ${tokenCount} tokens, words stamp ${words.digest()}`);
+      console.log(`  ${blockCount} blocks, ${tokenCount} tokens, words stamp ${words.digest()}, text stamp ${chapters.digest()}`);
       if (readings.length > 0) console.log(`  ${readings.length} qere readings (ADR-0007)`);
       console.log(`  ${chapterCount} chapter documents; counted in them: ${JSON.stringify(totals)}`);
       console.log(`  ${seconds(started)}`);

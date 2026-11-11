@@ -68,10 +68,10 @@ export function canonBooks(db: SyncSqliteDb, canonId: string, lang: string): Can
 export function readEdition(
   db: SyncSqliteDb,
   translationAbbrev: string,
-): { abbrev: string; scheme: string; edition: string; wordsStamp: string | null } | null {
+): { abbrev: string; scheme: string; edition: string; wordsStamp: string | null; textStamp: string | null } | null {
   const t = schema.translation;
   const [row] = db
-    .select({ abbrev: t.abbrev, scheme: t.scheme, edition: t.edition, wordsStamp: t.wordsStamp })
+    .select({ abbrev: t.abbrev, scheme: t.scheme, edition: t.edition, wordsStamp: t.wordsStamp, textStamp: t.textStamp })
     .from(t)
     .where(eq(t.abbrev, translationAbbrev))
     .all();
@@ -135,23 +135,36 @@ export function readChapter(
 }
 
 /**
- * One chapter's stored document (ADR-0001 amendment, plan step 7), or null
- * when the edition has no such chapter. Chapter 0 is the front matter.
+ * One chapter's stored document (ADR-0001 amendment, plan step 7) and its
+ * chapter stamp (ADR-0005 amendment, 2026-11-11), or null when the edition has
+ * no such chapter. Chapter 0 is the front matter.
  */
 export function readChapterDoc(
   db: SyncSqliteDb,
   translationAbbrev: string,
   bookCode: string,
   chapter: number,
-): ChapterDoc | null {
+): (ChapterDoc & { stamp: string }) | null {
   const d = schema.chapterDoc;
   const [row] = db
-    .select({ usj: d.usj })
+    .select({ usj: d.usj, stamp: d.stamp })
     .from(d)
     .innerJoin(schema.translation, eq(d.translationId, schema.translation.id))
     .where(and(eq(schema.translation.abbrev, translationAbbrev), eq(d.book, bookCode), eq(d.chapter, chapter)))
     .all();
-  return row ? { chapter, content: JSON.parse(row.usj) } : null;
+  return row ? { chapter, content: JSON.parse(row.usj), stamp: row.stamp } : null;
+}
+
+/** One chapter's stamp, without its document, or null when the edition has no such chapter. */
+export function readChapterStamp(db: SyncSqliteDb, translationAbbrev: string, bookCode: string, chapter: number): string | null {
+  const d = schema.chapterDoc;
+  const [row] = db
+    .select({ stamp: d.stamp })
+    .from(d)
+    .innerJoin(schema.translation, eq(d.translationId, schema.translation.id))
+    .where(and(eq(schema.translation.abbrev, translationAbbrev), eq(d.book, bookCode), eq(d.chapter, chapter)))
+    .all();
+  return row?.stamp ?? null;
 }
 
 const verseUnitColumns = {

@@ -30,15 +30,48 @@
  * chapter 0 — the reader fetches chapter 0 alongside chapter 1.
  */
 
-import { verseNumbers, type Block, type ChapterDoc, type Genre, type Token, type UsjElement, type UsjNode, type VerseText } from '../model/corpus';
+import {
+  CHAR_STYLES,
+  METADATA_PARAS,
+  NOTE_PARTS,
+  NOTES,
+  REFERENCE_PARAS,
+  verseNumbers,
+  type Block,
+  type ChapterDoc,
+  type Genre,
+  type Token,
+  type VerseText,
+} from '../model/corpus';
 import { tokenize } from './tokenize';
 
-export type { UsjElement, UsjNode } from '../model/corpus';
+/**
+ * A USJ node as usfm-grammar writes it, before `normalizeChapters` checks it
+ * against the supported markers. Only that check makes a `UsjNode`.
+ */
+export type RawUsjNode = string | RawUsjElement;
+
+export interface RawUsjElement {
+  readonly type: string;
+  readonly marker?: string;
+  readonly number?: string;
+  readonly pubnumber?: string;
+  readonly altnumber?: string;
+  readonly code?: string;
+  readonly caller?: string;
+  readonly content?: readonly RawUsjNode[];
+}
 
 export interface UsjDoc {
   readonly type: 'USJ';
   readonly version: string;
-  readonly content: UsjNode[];
+  readonly content: RawUsjNode[];
+}
+
+/** One chapter's raw nodes, from `splitChapters`. */
+export interface RawChapterDoc {
+  readonly chapter: number;
+  readonly content: readonly RawUsjNode[];
 }
 
 //---- stats: what the documents hold beyond the tokens, counted ----
@@ -48,7 +81,6 @@ export interface IngestStats {
   xrefs: number; // \x notes (in the document, never tokens)
   wordsOfJesus: number; // \wj spans (text is tokens)
   selah: number; // \qs spans (text is tokens)
-  strongAttrs: number; // strong="..." attributes
   wWrapped: number; // \w-wrapped words
   preVerseWordTokens: number; // word tokens with verse=NULL (headings/titles)
   sectionRefs: number; // \r and \mr reference lines (no block)
@@ -59,6 +91,8 @@ export interface IngestStats {
 }
 
 export interface NormalizeResult {
+  /** The documents, checked against the supported markers: what the corpus stores. */
+  docs: readonly ChapterDoc[];
   blocks: Block[];
   tokens: Token[];
   verses: VerseText[];
@@ -69,15 +103,11 @@ export interface NormalizeResult {
 
 //---- the supported markers (ADR-0001 amendment, plan step 7) ----
 
-/** Paragraphs whose text is metadata, not scripture: kept in the document, no block. */
-const METADATA_PARAS = new Set(['h', 'toc1', 'toc2', 'toc3', 'ide', 'cl']);
-/** Reference lines under a heading (`\r`, `\mr`): kept in the document, no block. */
-const REFERENCE_PARAS = new Set(['r', 'mr']);
-/** Character styles whose text is scripture surface text. usfm-grammar writes `\+w` as `w`. */
-const CHAR_STYLES = new Set(['w', 'add', 'nd', 'sc', 'wj', 'qs', 'tl', 'it', 'bk']);
-const NOTES = new Set(['f', 'x']);
-/** Markers inside a note, besides the character styles. */
-const NOTE_PARTS = new Set(['fr', 'ft', 'fq', 'fqa', 'fl', 'xo', 'xt', 'wh']);
+const METADATA = new Set<string>(METADATA_PARAS);
+const REFERENCES = new Set<string>(REFERENCE_PARAS);
+const STYLES = new Set<string>(CHAR_STYLES);
+const NOTE_MARKERS = new Set<string>(NOTES);
+const PARTS = new Set<string>(NOTE_PARTS);
 
 /** The genre of a block marker, or null when the marker is not supported. */
 export function blockGenre(marker: string): Genre | null {
@@ -92,10 +122,12 @@ const unsupported = (what: string, marker: string | undefined) =>
 
 /**
  * Split a book's USJ into one document per chapter. Chapter 0 is everything
- * before the first `\c`. The nodes are not copied or changed.
+ * before the first `\c`. The only change is that character styles lose the
+ * source's word attributes (`strong`, `x-morph`): nothing checks them
+ * (ADR-0003), so no stored document carries them (ADR-0001 amendment).
  */
-export function splitChapters(usj: UsjDoc): ChapterDoc[] {
-  const docs: ChapterDoc[] = [{ chapter: 0, content: [] }];
+export function splitChapters(usj: UsjDoc): RawChapterDoc[] {
+  const docs: { chapter: number; content: RawUsjNode[] }[] = [{ chapter: 0, content: [] }];
   for (const node of usj.content) {
     if (typeof node !== 'string' && node.type === 'chapter') {
       const n = /^\d+$/.test(node.number ?? '') ? Number(node.number) : NaN;
@@ -103,9 +135,19 @@ export function splitChapters(usj: UsjDoc): ChapterDoc[] {
       if (docs.some((d) => d.chapter === n)) throw new Error(`chapter ${n} printed twice`);
       docs.push({ chapter: n, content: [] });
     }
-    docs[docs.length - 1].content.push(node);
+    docs[docs.length - 1].content.push(withoutWordAttributes(node));
   }
   return docs[0].content.length === 0 ? docs.slice(1) : docs;
+}
+
+/** A node with every character style's attributes dropped, at any depth. Text is unchanged. */
+function withoutWordAttributes(node: RawUsjNode): RawUsjNode {
+  if (typeof node === 'string') return node;
+  if (node.type === 'char') {
+    const { type, marker, content } = node;
+    return content ? { type, marker, content: content.map(withoutWordAttributes) } : { type, marker };
+  }
+  return node.content ? { ...node, content: node.content.map(withoutWordAttributes) } : node;
 }
 
 const newStats = (): IngestStats => ({
@@ -113,7 +155,6 @@ const newStats = (): IngestStats => ({
   xrefs: 0,
   wordsOfJesus: 0,
   selah: 0,
-  strongAttrs: 0,
   wWrapped: 0,
   preVerseWordTokens: 0,
   sectionRefs: 0,
@@ -146,7 +187,7 @@ export function normalizeUsj(usj: UsjDoc, opts: NormalizeOptions = {}): Normaliz
 }
 
 /** Derive one book's blocks, tokens, verse text and stats from its chapter documents, in order. */
-export function normalizeChapters(docs: readonly ChapterDoc[], opts: NormalizeOptions = {}): NormalizeResult {
+export function normalizeChapters(docs: readonly RawChapterDoc[], opts: NormalizeOptions = {}): NormalizeResult {
   const blocks: Block[] = [];
   const tokens: Token[] = [];
   const verses: VerseText[] = [];
@@ -246,10 +287,10 @@ export function normalizeChapters(docs: readonly ChapterDoc[], opts: NormalizeOp
   };
 
   /** Check a note's parts against the supported list. Note text is never surface text. */
-  const checkNote = (nodes: readonly UsjNode[]) => {
+  const checkNote = (nodes: readonly RawUsjNode[]) => {
     for (const node of nodes) {
       if (typeof node === 'string') continue;
-      if (node.type !== 'char' || !(NOTE_PARTS.has(node.marker ?? '') || CHAR_STYLES.has(node.marker ?? ''))) {
+      if (node.type !== 'char' || !(PARTS.has(node.marker ?? '') || STYLES.has(node.marker ?? ''))) {
         throw unsupported(`marker inside a note (${node.type})`, node.marker);
       }
       checkNote(node.content ?? []);
@@ -257,7 +298,7 @@ export function normalizeChapters(docs: readonly ChapterDoc[], opts: NormalizeOp
   };
 
   /** Walk inline content, appending scripture surface text to the buffer. */
-  const walkInline = (nodes: readonly UsjNode[]) => {
+  const walkInline = (nodes: readonly RawUsjNode[]) => {
     for (const node of nodes) {
       if (typeof node === 'string') {
         buf += node;
@@ -286,16 +327,15 @@ export function normalizeChapters(docs: readonly ChapterDoc[], opts: NormalizeOp
         }
         case 'char': {
           const marker = node.marker ?? '';
-          if (!CHAR_STYLES.has(marker)) throw unsupported('character style', node.marker);
+          if (!STYLES.has(marker)) throw unsupported('character style', node.marker);
           if (marker === 'w') stats.wWrapped++;
           if (marker === 'wj') stats.wordsOfJesus++;
           if (marker === 'qs') stats.selah++;
-          if (node.strong) stats.strongAttrs++;
           walkInline(node.content ?? []);
           break;
         }
         case 'note': {
-          if (!NOTES.has(node.marker ?? '')) throw unsupported('note', node.marker);
+          if (!NOTE_MARKERS.has(node.marker ?? '')) throw unsupported('note', node.marker);
           if (node.marker === 'f') stats.footnotes++;
           else stats.xrefs++;
           checkNote(node.content ?? []);
@@ -321,6 +361,7 @@ export function normalizeChapters(docs: readonly ChapterDoc[], opts: NormalizeOp
       }
       switch (node.type) {
         case 'book':
+          if (node.marker !== 'id' || typeof node.code !== 'string') throw unsupported('book line', node.marker);
           break; // \id line — metadata
         case 'chapter': {
           if (node !== first) throw new Error(`chapter ${doc.chapter} document holds a second \\c`);
@@ -343,11 +384,11 @@ export function normalizeChapters(docs: readonly ChapterDoc[], opts: NormalizeOp
           cur = null;
           buf = '';
           if (marker === 'b') break; // stanza break — never a block
-          if (REFERENCE_PARAS.has(marker)) {
+          if (REFERENCES.has(marker)) {
             stats.sectionRefs++;
             break;
           }
-          if (METADATA_PARAS.has(marker)) {
+          if (METADATA.has(marker)) {
             stats.metadataParas[marker] = (stats.metadataParas[marker] ?? 0) + 1;
             break;
           }
@@ -398,5 +439,6 @@ export function normalizeChapters(docs: readonly ChapterDoc[], opts: NormalizeOp
     }
     kept.push({ ...v, verse: inside[0], lastVerse: inside.at(-1)! });
   }
-  return { blocks, tokens, verses: kept, droppedVerses, stats };
+  // every node passed the checks above, so the documents have the stored type
+  return { docs: docs as readonly ChapterDoc[], blocks, tokens, verses: kept, droppedVerses, stats };
 }

@@ -3,8 +3,8 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import type { ChapterDoc, Token, UsjElement, UsjNode } from '../model/corpus';
-import { normalizeChapters, splitChapters, type UsjDoc } from './normalize';
+import type { ChapterDoc, Token } from '../model/corpus';
+import { normalizeChapters, splitChapters, type RawChapterDoc, type RawUsjElement, type RawUsjNode, type UsjDoc } from './normalize';
 
 /**
  * The stored truth is one USJ document per chapter (ADR-0001 amendment, plan
@@ -14,12 +14,11 @@ import { normalizeChapters, splitChapters, type UsjDoc } from './normalize';
  * fresh parse.
  */
 const usj = JSON.parse(readFileSync(join(__dirname, 'fixtures', 'chapter-doc.usj.json'), 'utf8')) as UsjDoc;
-const docs = splitChapters(usj);
-const { blocks, tokens, verses } = normalizeChapters(docs);
+const { docs, blocks, tokens, verses } = normalizeChapters(splitChapters(usj));
 
-const elements = (nodes: readonly UsjNode[]): UsjElement[] =>
+const elements = (nodes: readonly RawUsjNode[]): RawUsjElement[] =>
   nodes.flatMap((n) => (typeof n === 'string' ? [] : [n, ...elements(n.content ?? [])]));
-const strings = (nodes: readonly UsjNode[]): string[] =>
+const strings = (nodes: readonly RawUsjNode[]): string[] =>
   nodes.flatMap((n) => (typeof n === 'string' ? [n] : strings(n.content ?? [])));
 const doc = (chapter: number) => docs.find((d) => d.chapter === chapter)!;
 const words = (chapter: number, verse: number) =>
@@ -60,6 +59,12 @@ describe('splitChapters: one document per chapter, unchanged', () => {
       'd', 'q1', 'b', 'q2', 'li2', 's2', 'p',
     ]);
     expect(strings(doc(1).content)).toContain(' heard.\n');
+  });
+
+  it('drops the word attributes of the source, which nothing checks (ADR-0003), and keeps the text', () => {
+    const w = { type: 'char', marker: 'w', strong: 'H7225', 'x-morph': 'HNcfsa', content: ['beginning'] };
+    const [d] = splitChapters({ type: 'USJ', version: '3.1', content: [{ type: 'chapter', marker: 'c', number: '1' }, { type: 'para', marker: 'p', content: [w] }] });
+    expect(d.content[1]).toEqual({ type: 'para', marker: 'p', content: [{ type: 'char', marker: 'w', content: ['beginning'] }] });
   });
 
   it('a document that went through JSON derives the same rows', () => {
@@ -107,7 +112,7 @@ describe('derived rows', () => {
 });
 
 describe('only the supported markers (ADR-0001 amendment)', () => {
-  const verse = (...content: UsjNode[]): ChapterDoc[] => [
+  const verse = (...content: RawUsjNode[]): RawChapterDoc[] => [
     { chapter: 1, content: [{ type: 'chapter', marker: 'c', number: '1' }, { type: 'para', marker: 'p', content: [{ type: 'verse', marker: 'v', number: '1' }, ...content] }] },
   ];
 

@@ -57,3 +57,9 @@ The ingest stops on any marker or node type not listed here, at any depth. The l
 | Inside a note | `\fr`, `\ft`, `\fq`, `\fqa`, `\fl`, `\xo`, `\xt`, `\wh`, and the character styles | None |
 
 usfm-grammar writes a nested style (`\+w`) with the plain marker, so it needs no row of its own. Milestones, figures, tables and sidebars are not supported.
+
+The list has one home in code, `src/model/corpus.ts`: `UsjElement` is a union over these markers, and normalize.ts checks against the same lists. Only `normalizeChapters` makes a `ChapterDoc`, after its checks pass, so a renderer or a step 10 adapter that writes a marker outside the list fails to compile.
+
+### Word attributes are dropped (2026-11-11, steps 5 to 9 review)
+
+The sources' `\w` attributes (`strong=` in KJV, BSB and WEB, `x-morph=` in RP) are not stored. Nothing checks them, ADR-0003 found WEB's Strong's numbers shifted, and plan step 12 adds checked tags as their own data. `splitChapters` drops every character style's attributes and keeps its marker and text, so no word, words stamp or edition stamp changed.

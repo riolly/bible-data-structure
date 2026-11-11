@@ -29,8 +29,7 @@ describe.skipIf(!native)('corpus DB round-trip (write seam ↔ read seam)', () =
     const usj = JSON.parse(
       readFileSync(join(__dirname, 'fixtures', 'adversarial.usj.json'), 'utf8'),
     ) as UsjDoc;
-    const docs = splitChapters(usj);
-    const { blocks, tokens, verses } = normalizeChapters(docs);
+    const { docs, blocks, tokens, verses } = normalizeChapters(splitChapters(usj));
 
     const { db, sqlite } = createCorpusDb(':memory:');
     seedBooksAndCanons(db);
@@ -44,7 +43,7 @@ describe.skipIf(!native)('corpus DB round-trip (write seam ↔ read seam)', () =
       scheme: 'kjv',
       edition: 'sha256:0000000000000000',
     });
-    insertBookRows(db, { translationId, book: 'JHN' }, { docs, verses, blocks, tokens });
+    const stamps = insertBookRows(db, { translationId, book: 'JHN' }, { docs, verses, blocks, tokens });
 
     // chapter 1 read includes chapter-0 front matter (\mt book title)
     const ch1 = readChapter(db, 'FIX', 'JHN', 1);
@@ -75,7 +74,8 @@ describe.skipIf(!native)('corpus DB round-trip (write seam ↔ read seam)', () =
 
     // the stored chapter documents come back unchanged, and derive the same rows
     const stored = docs.map((d) => readChapterDoc(db, 'FIX', 'JHN', d.chapter)!);
-    expect(stored).toEqual(docs);
+    expect(stored.map(({ stamp: _, ...d }) => d)).toEqual(docs);
+    expect(stored.map((d) => ({ chapter: d.chapter, stamp: d.stamp }))).toEqual(stamps);
     const again = normalizeChapters(stored);
     expect(again.tokens).toEqual(tokens);
     expect(again.blocks).toEqual(blocks);

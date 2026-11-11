@@ -77,6 +77,7 @@ describe.skipIf(!native || !existsSync(CORPUS))('the app contract on the corpus 
     const kjv = await c.verseText('KJV', 'JHN 3:16');
     expect(kjv.asked).toBe('JHN 3:16/kjv');
     expect(kjv.edition).toMatchObject({ id: 'KJV', scheme: 'kjv', stamp: 'sha256:7ead3d28b2b34c9b', wordsStamp: 'sha256:13f8787f02884340' });
+    expect(kjv.edition.textStamp).toMatch(/^sha256:[0-9a-f]{16}$/);
     expect(kjv.found).toMatchObject({ kind: 'verse', address: 'JHN 3:16/kjv', verse: 16, lastVerse: 16 });
     expect(kjv.found.kind === 'verse' && kjv.found.text).toContain('For God so loved the world, that he gave his only begotten Son');
 
@@ -87,7 +88,7 @@ describe.skipIf(!native || !existsSync(CORPUS))('the app contract on the corpus 
 
     // a full address is allowed in the edition's own scheme only
     expect((await c.verseText('KJV', 'JHN 3:16/kjv')).found.address).toBe('JHN 3:16/kjv');
-    await expect(c.verseText('KJV', 'JHN 3:16/org')).rejects.toThrow(/Use map/);
+    await expect(c.verseText('KJV', 'JHN 3:16/org')).rejects.toThrow(/Use resolve/);
     await expect(c.verseText('KJV', 'JHN 3:16-17')).rejects.toThrow(/not one verse/);
     await expect(c.verseText('NIV', 'JHN 3:16')).rejects.toThrow(/unknown edition/);
     noRowIds(kjv);
@@ -173,6 +174,68 @@ describe.skipIf(!native || !existsSync(CORPUS))('the app contract on the corpus 
     expect([back.kind, back.verses.map((v) => v.address)]).toEqual(['several', ['REV 12:18/org', 'REV 13:1/org']]);
   });
 
+  it('a range that ends past the book stops at its last verse (#9)', async () => {
+    const cases: [string, string, number][] = [
+      ['Ps 150:5-151:2', 'PSA 150:5-6/kjv', 2],
+      ['Gen 50:25-51:3', 'GEN 50:25-26/kjv', 2],
+      ['Gen 49:30-60:5', 'GEN 49:30-50:26/kjv', 4 + 26],
+    ];
+    for (const [ref, address, n] of cases) {
+      const [part] = (await c.passage('KJV', ref)).parts;
+      expect([part.address, part.found.length, part.found.every((l) => l.kind === 'verse')]).toEqual([address, n, true]);
+    }
+  });
+
+  it('map gives several verses in text order (#10)', async () => {
+    const cases: [string, string[]][] = [
+      ['1CH 12:4', ['1CH 12:4/org', '1CH 12:5/org']],
+      ['1SA 20:42', ['1SA 20:42/org', '1SA 21:1/org']],
+      ['1KI 22:43', ['1KI 22:43/org', '1KI 22:44/org']],
+    ];
+    for (const [address, want] of cases) {
+      expect((await c.map('KJV', address, 'WLC')).verses.map((v) => v.address)).toEqual(want);
+    }
+  });
+
+  it('resolve reads back any address the contract returns (#11)', async () => {
+    const found = async (edition: string, address: string) => addresses((await c.resolve(edition, address)).found);
+    // a range, including books the English parser doesn't know by their USFM code
+    expect(await found('KJV', '1CO 13:4-7/kjv')).toEqual([4, 5, 6, 7].map((v) => `verse 1CO 13:${v}/kjv`));
+    expect(await found('KJV', 'JOL 2:1-3/kjv')).toEqual([1, 2, 3].map((v) => `verse JOL 2:${v}/kjv`));
+    expect(await found('KJV', 'JHN 3:16/kjv')).toEqual(['verse JHN 3:16/kjv']);
+    expect(await found('Brenton', 'SIR 6:2/brenton')).toEqual(['verse SIR 6:2a/brenton', 'verse SIR 6:2b/brenton']);
+    expect(await found('BSB', 'MAT 17:20-22/bsb')).toEqual(['verse MAT 17:20/bsb', 'absent MAT 17:21/bsb', 'verse MAT 17:22/bsb']);
+    // a bridge (WEB's only one with words)
+    const bridge = await c.verseText('WEB', '4MA 8:29');
+    expect(await found('WEB', bridge.found.address)).toEqual(['bridge 4MA 8:28-29/web']);
+
+    // a scheme the edition no longer uses: BSB numbered under kjv before step 3.3
+    expect(await found('BSB', 'PHP 1:16/kjv')).toEqual(['verse PHP 1:17/bsb']);
+    // a range under another scheme comes back in the edition's text order
+    expect(await found('BSB', 'PHP 1:15-17/kjv')).toEqual([15, 16, 17].map((v) => `verse PHP 1:${v}/bsb`));
+    expect(await found('BSB', 'ACT 8:37/kjv')).toEqual(['absent ACT 8:37/bsb']);
+    expect(await found('KJV', 'PSA 51:1-2/org')).toEqual(['verse PSA 51:0/kjv']);
+    const part = await c.resolve('KJV', 'REV 12:18/org');
+    expect(part.found).toMatchObject([{ kind: 'verse', address: 'REV 13:1/kjv', part: 'a' }]);
+    // a verse with no counterpart in the edition's scheme: absent, under the asked scheme
+    expect((await c.resolve('KJV', 'REV 12:18/kjv')).found).toEqual([{ kind: 'absent', address: 'REV 12:18/kjv', reason: 'scheme' }]);
+
+    await expect(c.resolve('KJV', 'JHN 3:16')).rejects.toThrow(/missing "\/scheme"/);
+    await expect(c.resolve('KJV', 'JHN 3:16!2/kjv')).rejects.toThrow(/word address/);
+    await expect(c.resolve('KJV', 'JHN 3:16/nope')).rejects.toThrow(/unknown scheme/);
+    noRowIds(part);
+  });
+
+  it('passage reads a reference under another numbering when asked: English numbers on WLC', async () => {
+    // under the edition's own scheme, the default, Ps 51:1 is the Hebrew title
+    expect(addresses((await c.passage('WLC', 'Ps 51:1')).parts[0].found)).toEqual(['verse PSA 51:1/org']);
+    const ps = await c.passage('WLC', 'Ps 51:1', { scheme: 'kjv' });
+    expect([ps.parts[0].address, addresses(ps.parts[0].found)]).toEqual(['PSA 51:1/kjv', ['verse PSA 51:3/org']]);
+    const mal = await c.passage('WLC', 'Mal 4:1', { scheme: 'kjv' });
+    expect(addresses(mal.parts[0].found)).toEqual(['verse MAL 3:19/org']);
+    expect(addresses((await c.passage('WLC', 'Mal 4:1')).parts[0].found)).toEqual(['absent MAL 4:1/org']);
+  });
+
   it('map throws for a verse the source scheme lacks', async () => {
     await expect(c.map('KJV', 'REV 12:18', 'BSB')).rejects.toThrow(/kjv has no REV 12:18\/kjv/);
   });
@@ -184,6 +247,13 @@ describe.skipIf(!native || !existsSync(CORPUS))('the app contract on the corpus 
     expect(jhn3.front).toBeNull();
     expect(jhn3.verses).toHaveLength(36);
     expect(jhn3.verses[15].address).toBe('JHN 3:16/kjv');
+    // the chapter stamp covers the document and every unit's text, and each unit carries it
+    expect(jhn3.stamp).toMatch(/^sha256:[0-9a-f]{16}$/);
+    expect(new Set(jhn3.verses.map((v) => v.chapterStamp))).toEqual(new Set([jhn3.stamp]));
+    expect((await c.verseText('KJV', 'JHN 3:16')).found).toMatchObject({ chapterStamp: jhn3.stamp });
+    expect((await c.chapter('KJV', 'JHN', 4)).kind === 'chapter' && (await c.chapter('KJV', 'JHN', 4))).not.toMatchObject({ stamp: jhn3.stamp });
+    // no word attributes reach a document: nothing checks the sources' Strong's numbers (ADR-0003)
+    expect(JSON.stringify(jhn3.content)).not.toMatch(/strong|x-morph/);
     const jhn1 = await c.chapter('BSB', 'JHN', 1);
     expect(jhn1.kind === 'chapter' && jhn1.front).not.toBeNull();
     // BSB skips MAT 17:21, so the chapter has one unit fewer than its scheme's 27 verses
@@ -214,8 +284,7 @@ describe.skipIf(!native)('the app contract on a verse bridge (fixtures/adversari
     const { loadSchemes } = await import('../ingest/schemes');
     const { corpusContract } = await import('./corpus-contract');
     const usj = JSON.parse(readFileSync(join(import.meta.dirname, '..', 'ingest', 'fixtures', 'adversarial.usj.json'), 'utf8'));
-    const docs = splitChapters(usj);
-    const { blocks, tokens, verses } = normalizeChapters(docs);
+    const { docs, blocks, tokens, verses } = normalizeChapters(splitChapters(usj));
     const { db } = w.createCorpusDb(':memory:');
     w.seedBooksAndCanons(db);
     w.seedSchemes(db, loadSchemes());
@@ -244,6 +313,7 @@ describe.skipIf(!native)('the app contract on a verse bridge (fixtures/adversari
         lastVerse: 6,
         segment: '',
         text: 'A bridged verse collapses to its first number.',
+        chapterStamp: expect.stringMatching(/^sha256:/),
       });
     }
   });
@@ -254,6 +324,11 @@ describe.skipIf(!native)('the app contract on a verse bridge (fixtures/adversari
     expect(addresses(p.parts[0].found)).toEqual(['verse JHN 1:4/kjv', 'bridge JHN 1:5-6/kjv', 'absent JHN 1:7/kjv']);
     const ch = await c.chapter('FIX', 'JHN', 1);
     expect(ch.kind === 'chapter' && ch.verses.map((v) => v.address)).toEqual([1, 2, 3, 4].map((v) => `JHN 1:${v}/kjv`).concat('JHN 1:5-6/kjv'));
+  });
+
+  it('resolve reads a stored bridge address back', async () => {
+    const r = await c.resolve('FIX', 'JHN 1:5-6/kjv');
+    expect(addresses(r.found)).toEqual(['bridge JHN 1:5-6/kjv']);
   });
 
   it('map to a bridge is one unit', async () => {
