@@ -33,7 +33,10 @@ _Avoid_: version (ambiguous between translation and revision)
 A deterministic id for an edition's revision, computed as sha256 over its source text (`src/ingest/edition.ts`). A text change gives a new stamp; repackaging the zip doesn't. (ADR-0005)
 
 **Words stamp**:
-A deterministic id for what an edition's word addresses hold: sha256 over every word address and the word stored there (`translation.words_stamp`). Unlike the edition stamp, it changes when a text fix, the tokenizer or the parser changes stored words. Reconciliation compares this one. (ADR-0005 amendment)
+A deterministic id for what an edition's word addresses hold: sha256 over every word address and the word stored there (`translation.words_stamp`). Unlike the edition stamp, it changes when a text fix, the tokenizer or the parser changes stored words. Word anchors reconcile on it. (ADR-0005 amendment)
+
+**Chapter stamp**:
+sha256 over one chapter's stored document and its verse text (`chapter_doc.stamp`). It changes whenever what a reader sees in the chapter changes, punctuation and notes included. A quote witness stores it, and reconciles when it changes. An edition's **text stamp** hashes its chapter stamps. (ADR-0005 amendment, 2026-11-11)
 
 **Source pin**:
 The upstream URL plus the edition stamp its text must give (`src/ingest/sources.ts`). A zip rebuilt with the same text passes, and another stamp stops the download. Updating a pin is a new edition. TVTMS, which has no edition stamp, is pinned by the sha256 of its file. (ADR-0005 amendment)
@@ -89,7 +92,7 @@ What one verse marker covers: one verse, or a range for a verse bridge. It has a
 A USFM verse marker covering several verses (`\v 17-18`): one verse unit with a range. Every number in the range resolves to the unit, so NLT's Numbers 1:20-21 is found from 20 and from 21. Its tokens carry the first number, and its word indexes count across the whole unit. (ADR-0004 v1.5)
 
 **Quote witness**:
-The surface text of the words an outside reference points at, plus the edition stamp it was made against. Stored beside the address as proof, used to detect and repair drift after a revision. (ADR-0005)
+The surface text of the words an outside reference points at, plus the chapter stamp it was made against. Stored beside the address as proof, used to detect and repair drift after a revision. (ADR-0005)
 
 ## Text units
 

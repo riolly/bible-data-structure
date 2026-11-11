@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { wordsStamp } from './edition';
+import { chapterStamp, textStamp, wordsStamp } from './edition';
 
 const tok = (verse: number, wordIndex: number | null, text: string, segment = '') => ({ chapter: 1, verse, segment, wordIndex, text });
 const stamp = (tokens: ReturnType<typeof tok>[]) => {
@@ -31,5 +31,38 @@ describe('wordsStamp (ADR-0005 amendment)', () => {
     const single = wordsStamp();
     single.add('GEN', base, [{ chapter: 1, verse: 1, lastVerse: 1, segment: '' }]);
     expect(single.digest()).toBe(stamp(base));
+  });
+});
+
+describe('chapterStamp and textStamp (ADR-0005 amendment, 2026-11-11)', () => {
+  const doc = (footnote: string) =>
+    JSON.stringify([{ type: 'para', marker: 'p', content: ['In the beginning', { type: 'note', marker: 'f', caller: '+', content: [footnote] }] }]);
+  const verse = (text: string) => [{ verse: 1, lastVerse: 1, segment: '', text }];
+  const base = chapterStamp(doc('Or at first'), verse('In the beginning,'));
+
+  it('is the same for the same document and verse text', () => {
+    expect(chapterStamp(doc('Or at first'), verse('In the beginning,'))).toBe(base);
+  });
+
+  it('changes with punctuation in the verse text, which the words stamp skips', () => {
+    expect(chapterStamp(doc('Or at first'), verse('In the beginning;'))).not.toBe(base);
+  });
+
+  it('changes with a note or anything else in the document', () => {
+    expect(chapterStamp(doc('Or first'), verse('In the beginning,'))).not.toBe(base);
+  });
+
+  it('changes when a number moves into a bridge', () => {
+    expect(chapterStamp(doc('Or at first'), [{ verse: 1, lastVerse: 2, segment: '', text: 'In the beginning,' }])).not.toBe(base);
+  });
+
+  it('the text stamp changes with any chapter stamp', () => {
+    const of = (stamps: string[]) => {
+      const t = textStamp();
+      t.add('GEN', stamps.map((stamp, i) => ({ chapter: i + 1, stamp })));
+      return t.digest();
+    };
+    expect(of(['a', 'b'])).toBe(of(['a', 'b']));
+    expect(of(['a', 'c'])).not.toBe(of(['a', 'b']));
   });
 });

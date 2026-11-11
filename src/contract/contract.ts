@@ -15,9 +15,10 @@
  * A book is its USFM code.
  *
  * Results never hold a row id, which a re-ingest rebuilds. A caller that
- * stores a reference stores the address with the edition stamps and the verse
- * text as its quote (ADR-0005 quote witness), all of which every result
- * carries, and reads it back with `resolve`.
+ * stores a reference stores the address, the verse text as its quote and the
+ * verse's chapter stamp (ADR-0005 quote witness and its 2026-11-11
+ * amendment), all of which every `Verse` carries, and reads it back with
+ * `resolve`. A changed chapter stamp means the quote must be checked again.
  *
  * The calls return promises and take no storage types, so `build/corpus.db`
  * (`corpus-contract.ts`), a pack (plan step 13) and a licensed provider
@@ -31,16 +32,22 @@ import type { RightsRecord } from './rights';
 
 export type { RightsRecord } from './rights';
 
-/** The stamps a caller stores beside a reference to an edition (ADR-0005). */
+/**
+ * An edition and its stamps (ADR-0005). An edition fetched a chapter at a
+ * time (plan step 10) has no source files and no whole text, so it has none
+ * of the three stamps, and only its chapter stamps say when its text changed.
+ */
 export interface EditionStamp {
   /** The edition's abbreviation: `KJV`. */
   readonly id: string;
   /** The edition's native scheme: every address it returns names this. */
   readonly scheme: string;
   /** The edition stamp: names the upstream text. */
-  readonly stamp: string;
-  /** The words stamp: changes whenever what a word address holds changes. Reconciliation keys on it. */
+  readonly stamp: string | null;
+  /** The words stamp: changes whenever what a word address holds changes. Word anchors reconcile on it. */
   readonly wordsStamp: string | null;
+  /** The text stamp: changes whenever any chapter stamp does. */
+  readonly textStamp: string | null;
 }
 
 /**
@@ -67,6 +74,8 @@ export interface Verse {
   readonly part?: string;
   /** Surface text without notes. `''` when the edition prints the number with no words (a footnote only). */
   readonly text: string;
+  /** The stamp of the unit's chapter: store it beside `text` when it is kept as a quote. */
+  readonly chapterStamp: string;
 }
 
 /**
@@ -112,9 +121,13 @@ export type ChapterResult =
       readonly edition: EditionStamp;
       readonly book: string;
       readonly chapter: number;
+      /** The chapter stamp: covers `content` and the text of `verses`. */
+      readonly stamp: string;
       /**
        * The chapter document: the source's USJ nodes from this `\c` up to the
-       * next, unchanged (ADR-0001 amendment). Render it, footnotes and all.
+       * next, without word attributes (ADR-0001 amendment). Every element is
+       * one of the supported markers (`UsjElement`). Render it, footnotes and
+       * all.
        */
       readonly content: readonly UsjNode[];
       /** Chapter 1 only: the book's front matter (`\mt` titles), rendered above the chapter. */

@@ -16,6 +16,7 @@ import { BOOKS, ENGLISH_NAMES, USFM_SPEC_URL } from '../model/books';
 import { CANONS } from '../model/canon';
 import type { Block, ChapterDoc, Reading, Token, VerseText } from '../model/corpus';
 import { PIVOT, type MappingRow } from '../model/mapping';
+import { chapterStamp } from './edition';
 import { LIBPALASO_URL } from './schemes';
 import { OSHB, TVTMS } from './sources';
 import { WORD_TEST_MARGIN } from './tvtms';
@@ -63,7 +64,8 @@ CREATE TABLE translation (
   license TEXT,
   scheme TEXT NOT NULL REFERENCES scheme(id),
   edition TEXT NOT NULL,
-  words_stamp TEXT
+  words_stamp TEXT,
+  text_stamp TEXT
 );
 CREATE TABLE book (
   code TEXT PRIMARY KEY,
@@ -115,6 +117,7 @@ CREATE TABLE chapter_doc (
   book TEXT NOT NULL REFERENCES book(code),
   chapter INTEGER NOT NULL,
   usj TEXT NOT NULL,
+  stamp TEXT NOT NULL,
   PRIMARY KEY (translation_id, book, chapter)
 );
 CREATE TABLE verse_text (
@@ -249,9 +252,12 @@ export function insertTranslation(db: CorpusDb, meta: TranslationMeta): number {
   return row.id;
 }
 
-/** Record an edition's words stamp once its books are written (ADR-0005 amendment). */
-export function setWordsStamp(db: CorpusDb, translationId: number, stamp: string): void {
-  db.update(schema.translation).set({ wordsStamp: stamp }).where(eq(schema.translation.id, translationId)).run();
+/** Record an edition's words and text stamps once its books are written (ADR-0005 amendments). */
+export function setStamps(db: CorpusDb, translationId: number, stamps: { words: string; text: string }): void {
+  db.update(schema.translation)
+    .set({ wordsStamp: stamps.words, textStamp: stamps.text })
+    .where(eq(schema.translation.id, translationId))
+    .run();
 }
 
 /** Write the data sources, every USFM book, every canon and the default English names (ADR-0002). */
@@ -348,7 +354,7 @@ const bookStatements = new WeakMap<
 
 /**
  * Insert one book's chapter documents and the rows derived from them; maps
- * local block ordinals → rowids. The statements follow the column order of
+ * local block ordinals → rowids. Returns each chapter's stamp, in order. The statements follow the column order of
  * src/db/corpus-schema.ts, and roundtrip.test.ts reads the rows back through
  * that schema.
  */
@@ -356,12 +362,12 @@ export function insertBookRows(
   db: CorpusDb,
   ids: { translationId: number; book: string },
   rows: { docs: readonly ChapterDoc[]; verses: readonly VerseText[]; blocks: Block[]; tokens: Token[] },
-): void {
+): { chapter: number; stamp: string }[] {
   const sqlite = (db as unknown as { $client: Database.Database }).$client;
   let stmts = bookStatements.get(sqlite);
   if (!stmts) {
     stmts = {
-      doc: sqlite.prepare('INSERT INTO chapter_doc (translation_id, book, chapter, usj) VALUES (?, ?, ?, ?)'),
+      doc: sqlite.prepare('INSERT INTO chapter_doc (translation_id, book, chapter, usj, stamp) VALUES (?, ?, ?, ?, ?)'),
       verse: sqlite.prepare(
         'INSERT INTO verse_text (translation_id, book, chapter, verse, last_verse, segment, text) VALUES (?, ?, ?, ?, ?, ?, ?)',
       ),
@@ -374,7 +380,12 @@ export function insertBookRows(
     bookStatements.set(sqlite, stmts);
   }
   const { doc, verse, block, token, tokens } = stmts;
-  for (const d of rows.docs) doc.run(ids.translationId, ids.book, d.chapter, JSON.stringify(d.content));
+  const stamps = rows.docs.map((d) => {
+    const usj = JSON.stringify(d.content);
+    const stamp = chapterStamp(usj, rows.verses.filter((v) => v.chapter === d.chapter));
+    doc.run(ids.translationId, ids.book, d.chapter, usj, stamp);
+    return { chapter: d.chapter, stamp };
+  });
   for (const v of rows.verses) verse.run(ids.translationId, ids.book, v.chapter, v.verse, v.lastVerse, v.segment, v.text);
   const blockRowId = new Map<number, number>();
   for (const b of rows.blocks) {
@@ -393,6 +404,7 @@ export function insertBookRows(
     tokens.run(rows.tokens.slice(i, i + TOKENS_PER_INSERT).flatMap(values));
   }
   for (; i < rows.tokens.length; i++) token.run(values(rows.tokens[i]));
+  return stamps;
 }
 
 /** Write an edition's readings (ADR-0007). run.ts checks them against the stored tokens first. */
