@@ -29,6 +29,7 @@ import type {
   Parts,
   PassagePart,
   PassageResult,
+  ResolveResult,
   Verse,
   VerseTextResult,
 } from './contract';
@@ -56,7 +57,7 @@ export function corpusContract(db: SyncSqliteDb): BibleContract {
   function verseRef(e: EditionStamp, text: string, call: string): VerseRef {
     const a = parseAddress(text.includes('/') ? text : `${text}/${e.scheme}`);
     if (a.scheme !== e.scheme) {
-      throw new Error(`${call}: "${text}" names scheme ${a.scheme}, but ${e.id} uses ${e.scheme}. Use map to move between schemes`);
+      throw new Error(`${call}: "${text}" names scheme ${a.scheme}, but ${e.id} uses ${e.scheme}. Use resolve for an address under another scheme`);
     }
     if (a.end || a.start.wordIndex !== undefined) throw new Error(`${call}: "${text}" is not one verse`);
     return a.start;
@@ -109,50 +110,142 @@ export function corpusContract(db: SyncSqliteDb): BibleContract {
     return byVerse;
   }
 
-  /** Walk a range verse by verse under the edition's scheme, one read per chapter. A bridge appears once. */
-  function resolveRange(e: EditionStamp, range: BookRange): PassagePart {
-    const s = schemeOf(e);
+  /** A verse of a walked range, and whether its scheme has it. */
+  interface Step {
+    readonly r: Ref;
+    readonly exists: boolean;
+  }
+
+  /**
+   * Walk a range verse by verse under one scheme, and give its address under
+   * that scheme. A chapter the scheme lacks is one step, its first verse.
+   */
+  function walk(s: Scheme, range: BookRange): { address: string; steps: Step[] } {
     const { book } = range;
     const chapters = s.verseCounts.get(book)?.length ?? range.start.chapter;
     const endChapter = Math.min(range.end.chapter, Math.max(chapters, range.start.chapter));
-    const found: Lookup[] = [];
-    const seen = new Set<string>();
+    const steps: Step[] = [];
     let first: VerseRef | undefined;
     let last: VerseRef | undefined;
     for (let c = range.start.chapter; c <= endChapter; c++) {
       const from =
         c === range.start.chapter && range.start.verse !== null ? range.start.verse : s.titles.has(`${book} ${c}`) ? 0 : 1;
       const lv = lastVerse(s, book, c);
-      const to = lv === undefined ? from - 1 : c === endChapter && range.end.verse !== null ? Math.min(range.end.verse, lv) : lv;
+      // the end verse belongs to the end chapter, which may lie past the book's last (#9)
+      const to = lv === undefined ? from - 1 : c === range.end.chapter && range.end.verse !== null ? Math.min(range.end.verse, lv) : lv;
       first ??= { book, chapter: c, verse: from, segment: '' };
       if (to < from) {
         // the scheme lacks the chapter, or the range starts past its end
-        found.push(absent(point(e, { book, chapter: c, verse: from, segment: '' }), 'scheme'));
+        steps.push({ r: { book, chapter: c, verse: from, segment: '' }, exists: false });
         last = { book, chapter: c, verse: from, segment: '' };
         continue;
       }
-      const units = unitsByVerse(e, book, c);
       for (let v = from; v <= to; v++) {
         const r = { book, chapter: c, verse: v, segment: '' };
-        const held = units.get(v);
-        if (!refExists(s, r)) found.push(absent(point(e, r), 'scheme'));
-        else if (!held) found.push(absent(point(e, r), 'text'));
-        else {
-          for (const u of held) {
-            const l = toVerse(e, book, u);
-            if (seen.has(l.address)) continue;
-            seen.add(l.address);
-            found.push(l);
-          }
-        }
+        steps.push({ r, exists: refExists(s, r) });
       }
       last = { book, chapter: c, verse: to, segment: '' };
     }
     const a: Address =
       first!.chapter === last!.chapter && first!.verse === last!.verse
-        ? { scheme: e.scheme, start: first! }
-        : { scheme: e.scheme, start: first!, end: last };
-    return { address: formatAddress(a), found };
+        ? { scheme: s.id, start: first! }
+        : { scheme: s.id, start: first!, end: last };
+    return { address: formatAddress(a), steps };
+  }
+
+  /** The edition's units for steps under its own scheme, one read per chapter. A bridge appears once. */
+  function ownSteps(e: EditionStamp, steps: readonly Step[]): Lookup[] {
+    const chapters = new Map<number, Map<number, VerseText[]>>();
+    const found: Lookup[] = [];
+    const seen = new Set<string>();
+    for (const { r, exists } of steps) {
+      if (!exists) {
+        found.push(absent(point(e, r), 'scheme'));
+        continue;
+      }
+      let units = chapters.get(r.chapter);
+      if (!units) chapters.set(r.chapter, (units = unitsByVerse(e, r.book, r.chapter)));
+      const held = units.get(r.verse);
+      if (!held) {
+        found.push(absent(point(e, r), 'text'));
+        continue;
+      }
+      for (const u of held) {
+        const l = toVerse(e, r.book, u);
+        if (seen.has(l.address)) continue;
+        seen.add(l.address);
+        found.push(l);
+      }
+    }
+    return found;
+  }
+
+  /** A lookup and the reference it sorts by. `at` is null for an address under another scheme. */
+  interface Placed {
+    readonly at: Ref | null;
+    readonly l: Lookup;
+  }
+
+  /** Add the edition's units for target refs under its scheme, merging the parts of one unit. */
+  function place(e: EditionStamp, targets: readonly Ref[], out: Placed[]) {
+    for (const t of targets) {
+      const l = lookup(e, t);
+      if (l.kind === 'absent') {
+        if (!out.some((p) => p.l.address === l.address)) out.push({ at: t, l });
+        continue;
+      }
+      for (const u of l.kind === 'parts' ? l.parts : [l]) {
+        const i = out.findIndex((p) => p.l.kind !== 'absent' && p.l.address === u.address);
+        if (i < 0) out.push({ at: u, l: u });
+        else if (out[i].l.kind !== 'absent' && (out[i].l as Verse).part !== u.part) {
+          // two parts of one unit, or a part and the whole: the whole unit matches
+          const { part: _, ...whole } = out[i].l as Verse;
+          out[i] = { at: out[i].at, l: whole };
+        }
+      }
+    }
+  }
+
+  /**
+   * Text order (#10): books in the order they first appear, then chapter,
+   * verse and part. An entry with no reference keeps its place after the
+   * entry before it.
+   */
+  function inOrder(placed: readonly Placed[]): Placed[] {
+    const rank = new Map<string, number>();
+    let prev: Ref | null = null;
+    const keyed = placed.map((p, i) => {
+      const at = p.at ?? prev;
+      if (p.at) prev = p.at;
+      if (at && !rank.has(at.book)) rank.set(at.book, rank.size);
+      return { p, i, at };
+    });
+    const cmp = (a: Ref | null, b: Ref | null): number =>
+      !a || !b
+        ? (a ? 1 : 0) - (b ? 1 : 0)
+        : rank.get(a.book)! - rank.get(b.book)! ||
+          a.chapter - b.chapter ||
+          a.verse - b.verse ||
+          (a.segment < b.segment ? -1 : a.segment > b.segment ? 1 : 0);
+    return keyed.sort((a, b) => cmp(a.at, b.at) || a.i - b.i).map((k) => k.p);
+  }
+
+  /** The edition's units for steps under another scheme, each verse moved through the pivot. */
+  function otherSteps(e: EditionStamp, scheme: string, steps: readonly Step[]): Lookup[] {
+    mappings ??= loadMappings(db, schemes);
+    const placed: Placed[] = [];
+    for (const { r, exists } of steps) {
+      const targets = exists ? mappings.map(scheme, e.scheme, r) : [];
+      if (targets.length > 0) place(e, targets, placed);
+      else placed.push({ at: null, l: absent(formatAddress({ scheme, start: r }), 'scheme') });
+    }
+    return inOrder(placed).map((p) => p.l);
+  }
+
+  function schemeById(id: string, call: string): Scheme {
+    const s = schemes.get(id);
+    if (!s) throw new Error(`${call}: unknown scheme "${id}"`);
+    return s;
   }
 
   return {
@@ -175,9 +268,15 @@ export function corpusContract(db: SyncSqliteDb): BibleContract {
       };
     },
 
-    async passage(id, reference): Promise<PassageResult> {
+    async passage(id, reference, options = {}): Promise<PassageResult> {
       const e = edition(id);
-      return { edition: e, reference, parts: parseReference(reference).map((r) => resolveRange(e, r)) };
+      const scheme = options.scheme ?? e.scheme;
+      const s = schemeById(scheme, 'passage');
+      const parts = parseReference(reference).map((range): PassagePart => {
+        const { address, steps } = walk(s, range);
+        return { address, found: scheme === e.scheme ? ownSteps(e, steps) : otherSteps(e, scheme, steps) };
+      });
+      return { edition: e, reference, parts };
     },
 
     async verseText(id, address): Promise<VerseTextResult> {
@@ -193,27 +292,37 @@ export function corpusContract(db: SyncSqliteDb): BibleContract {
       const asked = point(from, r);
       if (!refExists(schemeOf(from), r)) throw new Error(`map: ${from.scheme} has no ${asked}`);
       mappings ??= loadMappings(db, schemes);
-      const verses: Verse[] = [];
-      const missing: Absent[] = [];
-      for (const t of mappings.map(from.scheme, to.scheme, r)) {
-        const l = lookup(to, t);
-        if (l.kind === 'absent') {
-          missing.push(l);
-          continue;
-        }
-        for (const u of l.kind === 'parts' ? l.parts : [l]) {
-          const i = verses.findIndex((v) => v.address === u.address);
-          if (i < 0) verses.push(u);
-          else if (verses[i].part !== u.part) {
-            // two parts of one unit, or a part and the whole: the whole unit matches
-            const { part: _, ...whole } = verses[i];
-            verses[i] = whole;
-          }
-        }
-      }
+      const placed: Placed[] = [];
+      place(to, mappings.map(from.scheme, to.scheme, r), placed);
+      const ordered = inOrder(placed).map((p) => p.l);
+      const verses = ordered.filter((l): l is Verse => l.kind !== 'absent');
+      const missing = ordered.filter((l): l is Absent => l.kind === 'absent');
       const kind: MapKind =
         verses.length === 0 ? 'absent' : verses.length > 1 ? 'several' : verses[0].part ? 'part' : 'one';
       return { from, to, asked, kind, verses, missing };
+    },
+
+    async resolve(id, address): Promise<ResolveResult> {
+      const e = edition(id);
+      const a = parseAddress(address);
+      if (a.start.wordIndex !== undefined || a.end?.wordIndex !== undefined) {
+        throw new Error(`resolve: "${address}" is a word address`);
+      }
+      const s = schemeById(a.scheme, 'resolve');
+      const r: Ref = { book: a.start.book, chapter: a.start.chapter, verse: a.start.verse, segment: a.start.segment };
+      let found: Lookup[];
+      if (a.end) {
+        // a bridge or a range: whole verses, as passage reads them
+        const end = { chapter: a.end.chapter, verse: a.end.verse };
+        const { steps } = walk(s, { book: r.book, start: { chapter: r.chapter, verse: r.verse }, end });
+        found = a.scheme === e.scheme ? ownSteps(e, steps) : otherSteps(e, a.scheme, steps);
+      } else if (a.scheme === e.scheme) {
+        const l = lookup(e, r);
+        found = l.kind === 'parts' ? [...l.parts] : [l];
+      } else {
+        found = otherSteps(e, a.scheme, [{ r, exists: refExists(s, r) }]);
+      }
+      return { edition: e, asked: address, found };
     },
 
     async rights(id): Promise<RightsRecord> {

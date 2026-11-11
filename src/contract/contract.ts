@@ -1,11 +1,12 @@
 /**
- * The app contract (plan step 9): the five calls an app makes to read the
- * model, with the reading screen as the first consumer.
+ * The app contract (plan step 9): the calls an app makes to read the model,
+ * with the reading screen as the first consumer.
  *
  *     chapter(edition, book, chapter)    a chapter's document and verse units
  *     passage(edition, reference)        a human reference, "1 Cor 13:4-7"
  *     verseText(edition, address)        one verse unit, from `JHN 3:16`
  *     map(from, address, to)             one verse in another edition
+ *     resolve(edition, address)          a stored address, under any scheme
  *     rights(edition)                    what the edition's license allows
  *
  * An edition is named by its abbreviation (`KJV`, `BSB`). The edition
@@ -16,7 +17,7 @@
  * Results never hold a row id, which a re-ingest rebuilds. A caller that
  * stores a reference stores the address with the edition stamps and the verse
  * text as its quote (ADR-0005 quote witness), all of which every result
- * carries.
+ * carries, and reads it back with `resolve`.
  *
  * The calls return promises and take no storage types, so `build/corpus.db`
  * (`corpus-contract.ts`), a pack (plan step 13) and a licensed provider
@@ -132,9 +133,11 @@ export type ChapterResult =
 /** One range of a reference, resolved in the edition. */
 export interface PassagePart {
   /**
-   * The range under the edition's scheme: `1CO 13:4-7/kjv`, or `PSA 23:0-6/kjv`
-   * for a whole Psalm with a title. A chapter the scheme lacks gives its first
-   * verse, absent.
+   * The range under the reference's scheme, which is the edition's unless
+   * `PassageOptions.scheme` names another: `1CO 13:4-7/kjv`, or
+   * `PSA 23:0-6/kjv` for a whole Psalm with a title. A chapter the scheme
+   * lacks gives its first verse, absent. Under another scheme, `found` is what
+   * `resolve` gives for this address.
    */
   readonly address: string;
   /**
@@ -145,6 +148,15 @@ export interface PassagePart {
    * reader sees the gap (BSB's MAT 17:21).
    */
   readonly found: readonly Lookup[];
+}
+
+export interface PassageOptions {
+  /**
+   * The scheme the reference's numbers are written in. Default: the edition's
+   * own. An app passing an English reader's reference to WLC or SBLGNT, whose
+   * scheme is `org`, passes `kjv`, or "Ps 51:1" finds the Hebrew title.
+   */
+  readonly scheme?: string;
 }
 
 export interface PassageResult {
@@ -178,7 +190,7 @@ export interface MapResult {
   /** The source address with the source edition's scheme: `PSA 51:1/org`. */
   readonly asked: string;
   readonly kind: MapKind;
-  /** The matching units in the target, in order. Empty for `absent`. */
+  /** The matching units in the target, in text order. Empty for `absent`. */
   readonly verses: readonly Verse[];
   /**
    * Target verses the mapping names that the target edition lacks, each with
@@ -186,6 +198,19 @@ export interface MapResult {
    * counterpart at all (the pivot marks the verse absent).
    */
   readonly missing: readonly Absent[];
+}
+
+export interface ResolveResult {
+  readonly edition: EditionStamp;
+  /** The address as given: `PHP 1:16/kjv`. */
+  readonly asked: string;
+  /**
+   * The edition's units for the address, in text order, as `PassagePart.found`
+   * lists them. A unit with `part` set matches only in part (`MapKind` `part`).
+   * Under another scheme, a verse the edition's scheme has no counterpart for
+   * is an `absent` entry with the asked verse's address and reason `scheme`.
+   */
+  readonly found: readonly Lookup[];
 }
 
 export interface BibleContract {
@@ -203,14 +228,14 @@ export interface BibleContract {
    * part letter is ignored: "1 Kgs 2:35a" gives all of 2:35 with its parts.
    * Use `verseText` to ask for one part.
    */
-  passage(edition: string, reference: string): Promise<PassageResult>;
+  passage(edition: string, reference: string, options?: PassageOptions): Promise<PassageResult>;
 
   /**
    * One verse address: `JHN 3:16`, `PSA 51:0` (a title) or `REV 13:1a`. A
    * verse printed only in parts gives `parts`. The
    * edition supplies the scheme. A `/scheme` suffix is allowed only when it
-   * is the edition's own: use `map` to move between schemes. Throws on a
-   * range or a word address.
+   * is the edition's own: use `resolve` for an address under another scheme.
+   * Throws on a range or a word address.
    */
   verseText(edition: string, address: string): Promise<VerseTextResult>;
 
@@ -220,6 +245,18 @@ export interface BibleContract {
    * scheme has no such verse. See `MapKind` for the display rules.
    */
   map(from: string, address: string, to: string): Promise<MapResult>;
+
+  /**
+   * Any verse address the contract returned, read back in an edition: a
+   * verse, a part (`REV 13:1a/kjv`), a bridge or a range (`1CO 13:4-7/kjv`).
+   * The address must name its scheme. Under the edition's own scheme it reads
+   * like `passage`, except that a part letter is kept. Under another scheme
+   * it moves each verse through the pivot (ADR-0006), as `map` does, so an
+   * address stored before the edition changed scheme still reads (BSB's
+   * `PHP 1:16/kjv` is `PHP 1:17/bsb`). This is the read path for a stored
+   * reference. Throws on a word address or an unknown scheme.
+   */
+  resolve(edition: string, address: string): Promise<ResolveResult>;
 
   /** The edition's rights record. Throws for an edition with none. */
   rights(edition: string): Promise<RightsRecord>;
