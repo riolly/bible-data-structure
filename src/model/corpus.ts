@@ -92,19 +92,95 @@ export interface Reading {
 /** A USJ node: text, or an element as usfm-grammar 3.x writes it. */
 export type UsjNode = string | UsjElement;
 
-export interface UsjElement {
-  readonly type: string;
-  readonly marker?: string;
+/**
+ * An element of a stored chapter document. The markers are the supported
+ * list of ADR-0001's step 7 amendment, and nothing else: the ingest checks
+ * every node against it (normalize.ts) before it stores a document, and stops
+ * on any other. A step 10 adapter keeps an unsupported marker's text as a
+ * plain run, so its output fits this type too.
+ */
+export type UsjElement = UsjBook | UsjChapter | UsjVerse | UsjPara | UsjChar | UsjNote;
+
+/** A numbered marker's levels: the bare form and 1 to 4 (`\s`, `\s1` to `\s4`). */
+type Level = '' | '1' | '2' | '3' | '4';
+/** Paragraphs that make a block with genre `heading`. */
+export type HeadingMarker = `${'mt' | 'ms' | 's' | 'is'}${Level}` | 'd' | 'qa' | 'sp';
+/** Paragraphs that make a block with genre `prose`. */
+export type ProseMarker = `${'pi' | 'li'}${Level}` | 'p' | 'm' | 'nb' | 'mi' | 'pc' | 'pmo' | 'ip';
+/** Paragraphs that make a block with genre `poetry`. */
+export type PoetryMarker = `q${Level}` | 'qr';
+/** Paragraphs whose text is metadata, not scripture: kept in the document, no block. */
+export const METADATA_PARAS = ['h', 'toc1', 'toc2', 'toc3', 'ide', 'cl'] as const;
+/** Reference lines under a heading: kept in the document, no block. */
+export const REFERENCE_PARAS = ['r', 'mr'] as const;
+export type ParaMarker =
+  | HeadingMarker
+  | ProseMarker
+  | PoetryMarker
+  | (typeof METADATA_PARAS)[number]
+  | (typeof REFERENCE_PARAS)[number]
+  /** A stanza break. */
+  | 'b';
+/** Character styles whose text is scripture surface text. usfm-grammar writes `\+w` as `w`. */
+export const CHAR_STYLES = ['w', 'add', 'nd', 'sc', 'wj', 'qs', 'tl', 'it', 'bk'] as const;
+/** Markers inside a note, besides the character styles. */
+export const NOTE_PARTS = ['fr', 'ft', 'fq', 'fqa', 'fl', 'xo', 'xt', 'wh'] as const;
+export type CharMarker = (typeof CHAR_STYLES)[number] | (typeof NOTE_PARTS)[number];
+export const NOTES = ['f', 'x'] as const;
+
+/** The `\id` line. */
+export interface UsjBook {
+  readonly type: 'book';
+  readonly marker: 'id';
+  readonly code: string;
+  readonly content?: UsjNode[];
+}
+
+interface Numbered {
   /** Chapter and verse number (`5`, `35a`, `17-18`). */
-  readonly number?: string;
+  readonly number: string;
+  /** usfm-grammar's reference for the marker, `JHN 3:16`. */
+  readonly sid?: string;
   /** Published number (`\cp`, `\vp`). */
   readonly pubnumber?: string;
   /** Alternate number (`\ca`, `\va`). */
   readonly altnumber?: string;
-  readonly code?: string;
+}
+
+export interface UsjChapter extends Numbered {
+  readonly type: 'chapter';
+  readonly marker: 'c';
+}
+
+export interface UsjVerse extends Numbered {
+  readonly type: 'verse';
+  readonly marker: 'v';
+}
+
+export interface UsjPara {
+  readonly type: 'para';
+  readonly marker: ParaMarker;
+  readonly content?: UsjNode[];
+}
+
+/**
+ * A character style, with no attributes. The ingest drops the source's word
+ * attributes (`strong`, `x-morph`) because nothing checks them: ADR-0003 found
+ * WEB's Strong's numbers shifted, and plan step 12 adds checked tags as their
+ * own data (ADR-0001 amendment).
+ */
+export interface UsjChar {
+  readonly type: 'char';
+  readonly marker: CharMarker;
+  readonly content?: UsjNode[];
+}
+
+export interface UsjNote {
+  readonly type: 'note';
+  readonly marker: (typeof NOTES)[number];
+  /** `+`, `-` or the caller the source prints. */
   readonly caller?: string;
   readonly content?: UsjNode[];
-  readonly strong?: string;
 }
 
 /**

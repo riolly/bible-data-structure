@@ -77,8 +77,7 @@ describe.skipIf(!native || !hasTvtms)('trouble spots (research/README.md)', () =
         const { usj, parseErrors } = usfmToUsj(usfm);
         expect(parseErrors, `${e.dir}/${name}`).toEqual([]);
         const book = name.slice(0, 3);
-        const docs = splitChapters(usj);
-        const { blocks, tokens, verses: texts } = normalizeChapters(docs, {
+        const { docs, blocks, tokens, verses: texts } = normalizeChapters(splitChapters(usj), {
           titleChapters: titleChapters(schemes.get(e.scheme)!, book),
         });
         const verses = tokens.flatMap((t) => (t.verse == null ? [] : [{ chapter: t.chapter, verse: t.verse }]));

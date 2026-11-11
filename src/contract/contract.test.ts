@@ -77,6 +77,7 @@ describe.skipIf(!native || !existsSync(CORPUS))('the app contract on the corpus 
     const kjv = await c.verseText('KJV', 'JHN 3:16');
     expect(kjv.asked).toBe('JHN 3:16/kjv');
     expect(kjv.edition).toMatchObject({ id: 'KJV', scheme: 'kjv', stamp: 'sha256:7ead3d28b2b34c9b', wordsStamp: 'sha256:13f8787f02884340' });
+    expect(kjv.edition.textStamp).toMatch(/^sha256:[0-9a-f]{16}$/);
     expect(kjv.found).toMatchObject({ kind: 'verse', address: 'JHN 3:16/kjv', verse: 16, lastVerse: 16 });
     expect(kjv.found.kind === 'verse' && kjv.found.text).toContain('For God so loved the world, that he gave his only begotten Son');
 
@@ -246,6 +247,13 @@ describe.skipIf(!native || !existsSync(CORPUS))('the app contract on the corpus 
     expect(jhn3.front).toBeNull();
     expect(jhn3.verses).toHaveLength(36);
     expect(jhn3.verses[15].address).toBe('JHN 3:16/kjv');
+    // the chapter stamp covers the document and every unit's text, and each unit carries it
+    expect(jhn3.stamp).toMatch(/^sha256:[0-9a-f]{16}$/);
+    expect(new Set(jhn3.verses.map((v) => v.chapterStamp))).toEqual(new Set([jhn3.stamp]));
+    expect((await c.verseText('KJV', 'JHN 3:16')).found).toMatchObject({ chapterStamp: jhn3.stamp });
+    expect((await c.chapter('KJV', 'JHN', 4)).kind === 'chapter' && (await c.chapter('KJV', 'JHN', 4))).not.toMatchObject({ stamp: jhn3.stamp });
+    // no word attributes reach a document: nothing checks the sources' Strong's numbers (ADR-0003)
+    expect(JSON.stringify(jhn3.content)).not.toMatch(/strong|x-morph/);
     const jhn1 = await c.chapter('BSB', 'JHN', 1);
     expect(jhn1.kind === 'chapter' && jhn1.front).not.toBeNull();
     // BSB skips MAT 17:21, so the chapter has one unit fewer than its scheme's 27 verses
@@ -276,8 +284,7 @@ describe.skipIf(!native)('the app contract on a verse bridge (fixtures/adversari
     const { loadSchemes } = await import('../ingest/schemes');
     const { corpusContract } = await import('./corpus-contract');
     const usj = JSON.parse(readFileSync(join(import.meta.dirname, '..', 'ingest', 'fixtures', 'adversarial.usj.json'), 'utf8'));
-    const docs = splitChapters(usj);
-    const { blocks, tokens, verses } = normalizeChapters(docs);
+    const { docs, blocks, tokens, verses } = normalizeChapters(splitChapters(usj));
     const { db } = w.createCorpusDb(':memory:');
     w.seedBooksAndCanons(db);
     w.seedSchemes(db, loadSchemes());
@@ -306,6 +313,7 @@ describe.skipIf(!native)('the app contract on a verse bridge (fixtures/adversari
         lastVerse: 6,
         segment: '',
         text: 'A bridged verse collapses to its first number.',
+        chapterStamp: expect.stringMatching(/^sha256:/),
       });
     }
   });

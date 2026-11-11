@@ -7,6 +7,7 @@
 import {
   loadMappings,
   readChapterDoc,
+  readChapterStamp,
   readEdition,
   readSchemes,
   readVerseText,
@@ -46,7 +47,13 @@ export function corpusContract(db: SyncSqliteDb): BibleContract {
     if (cached) return cached;
     const row = readEdition(db, id);
     if (!row) throw new Error(`unknown edition "${id}"`);
-    const e: EditionStamp = { id: row.abbrev, scheme: row.scheme, stamp: row.edition, wordsStamp: row.wordsStamp };
+    const e: EditionStamp = {
+      id: row.abbrev,
+      scheme: row.scheme,
+      stamp: row.edition,
+      wordsStamp: row.wordsStamp,
+      textStamp: row.textStamp,
+    };
     editions.set(id, e);
     return e;
   }
@@ -68,6 +75,17 @@ export function corpusContract(db: SyncSqliteDb): BibleContract {
 
   const absent = (address: string, reason: AbsentReason): Absent => ({ kind: 'absent', address, reason });
 
+  const chapterStamps = new Map<string, string>();
+  function chapterStamp(e: EditionStamp, book: string, chapter: number): string {
+    const key = `${e.id} ${book} ${chapter}`;
+    const cached = chapterStamps.get(key);
+    if (cached !== undefined) return cached;
+    const stamp = readChapterStamp(db, e.id, book, chapter);
+    if (stamp === null) throw new Error(`${e.id} has verse text in ${book} ${chapter} but no chapter document`);
+    chapterStamps.set(key, stamp);
+    return stamp;
+  }
+
   function toVerse(e: EditionStamp, book: string, u: VerseText, part?: string): Verse {
     const start = { book, chapter: u.chapter, verse: u.verse, segment: u.segment };
     const bridge = u.lastVerse > u.verse;
@@ -76,7 +94,14 @@ export function corpusContract(db: SyncSqliteDb): BibleContract {
       start,
       end: bridge ? { ...start, verse: u.lastVerse, segment: '' } : undefined,
     });
-    const v: Verse = { kind: bridge ? 'bridge' : 'verse', address, ...start, lastVerse: u.lastVerse, text: u.text };
+    const v: Verse = {
+      kind: bridge ? 'bridge' : 'verse',
+      address,
+      ...start,
+      lastVerse: u.lastVerse,
+      text: u.text,
+      chapterStamp: chapterStamp(e, book, u.chapter),
+    };
     return part ? { ...v, part } : v;
   }
 
@@ -262,6 +287,7 @@ export function corpusContract(db: SyncSqliteDb): BibleContract {
         edition: e,
         book,
         chapter,
+        stamp: doc.stamp,
         content: doc.content,
         front: chapter === 1 ? (readChapterDoc(db, e.id, book, 0)?.content ?? null) : null,
         verses: readVerseText(db, e.id, book, chapter).map((u) => toVerse(e, book, u)),
