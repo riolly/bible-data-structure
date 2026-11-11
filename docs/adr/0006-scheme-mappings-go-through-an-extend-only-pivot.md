@@ -53,9 +53,9 @@ A review asked whether Philippians 1:16-17 belongs in schemes at all, since KJV 
 - **The 20% margin (`WORD_TEST_MARGIN`) is registered policy, like the tokenizer rules (ADR-0004).** Changing it can change which rows a scheme takes and which editions conflict. A change needs an amendment here, and `build/mapping-diff.tsv` and the conflicts compared before and after. `tvtms.test.ts` pins the value.
 - **An ingested edition keeps its scheme.** When a new edition's text conflicts with its scheme's rows, the ingest stops (`stops BSB from sharing the kjv scheme`), and the new edition gets a derived scheme. Adding an edition never moves an existing edition's addresses. The ingest can't tell which edition is new, so `schemes.test.ts` pins each source's scheme: moving an ingested edition fails that test, and a new edition needs a new entry.
 
-## Proposed amendment: a Psalm title inside verse 1 (2026-11-11, issue #12)
+## Amendment: a Psalm title inside verse 1 (2026-11-11, issue #12)
 
-Status: proposed, not built. Findings in [research/psalm-titles-in-hebrew-verse-1.md](../../research/psalm-titles-in-hebrew-verse-1.md).
+Status: accepted 2026-11-11, not built yet. Findings in [research/psalm-titles-in-hebrew-verse-1.md](../../research/psalm-titles-in-hebrew-verse-1.md).
 
 For 53 Psalms, English numbers a short title as verse 0 and Hebrew prints the same words at the start of verse 1. TVTMS's expanded rows give no relation, so the pivot title has no `org` counterpart and `map` reports it absent.
 
