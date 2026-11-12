@@ -29,13 +29,34 @@ import {
   type RawUsjNode,
 } from '../ingest/normalize';
 
+export interface ApiBibleEdition {
+  readonly bibleId: string;
+  /** The edition's scheme (src/ingest/schemes.ts): every address it returns names it. */
+  readonly scheme: string;
+  /** The edition's test for a Psalm title paragraph, when it isn't `\d` (`NormalizeOptions.isTitle`). */
+  readonly isTitle?: (para: RawUsjElement) => boolean;
+}
+
+const plainText = (nodes: readonly RawUsjNode[]): string =>
+  nodes.map((n) => (typeof n === 'string' ? n : plainText(n.content ?? []))).join('');
+
+/**
+ * NASB 1995 prints a Psalm's title as `\ms` under its `\ms PSALM 3` line, with
+ * `\ms BOOK 2` above Psalm 42 (research/api-bible.md). Its 116 titles fall on
+ * the Psalms where KJV prints one.
+ */
+const nasbTitle = (para: RawUsjElement) =>
+  para.marker === 'ms' && !/^(PSALM|BOOK) \d+$/.test(plainText(para.content ?? []).trim());
+
 /**
  * The licensed editions read through API.Bible, keyed by our abbreviation,
  * with API.Bible's id for each. research/api-bible.md lists what the key
- * reaches. NLT and NIV join when it reaches them.
+ * reaches.
  */
-export const API_BIBLE_EDITIONS: ReadonlyMap<string, { readonly bibleId: string }> = new Map([
-  ['NASB95', { bibleId: 'b8ee27bcd1cae43a-01' }],
+export const API_BIBLE_EDITIONS: ReadonlyMap<string, ApiBibleEdition> = new Map<string, ApiBibleEdition>([
+  ['NASB95', { bibleId: 'b8ee27bcd1cae43a-01', scheme: 'nasb95', isTitle: nasbTitle }],
+  ['NLT', { bibleId: 'd6e14a625393b4da-01', scheme: 'nlt' }],
+  ['NIV', { bibleId: '78a9f6124f344018-01', scheme: 'niv' }],
 ]);
 
 /** The query for a chapter as JSON, with everything our chapter document keeps. */
@@ -64,6 +85,8 @@ export interface ApiBibleChapter {
   readonly number: string;
   readonly reference: string;
   readonly copyright: string;
+  /** The verses in the response. A passage holds at most 200. */
+  readonly verseCount?: number;
   readonly content: readonly ApiBibleNode[];
 }
 
@@ -83,12 +106,27 @@ const NOTE_CHARS = new Set<string>([...NOTE_PARTS, ...CHAR_STYLES]);
 const NOTE_MARKERS = new Set<string>(NOTES);
 const OTHER_PARAS = new Set<string>(['b', ...METADATA_PARAS, ...REFERENCE_PARAS]);
 
+const INLINE = new Set(['verse', 'verse-span', 'char', 'note']);
+
 const supportedPara = (marker: string) => blockGenre(marker) !== null || OTHER_PARAS.has(marker);
 
 /** Convert one fetched chapter. Throws only when the response isn't a chapter. */
 export function adaptApiBibleChapter(data: ApiBibleChapter): AdaptedChapter {
   const chapter = Number(data.number);
   if (!/^\d+$/.test(data.number) || chapter < 1) throw new Error(`${data.id}: not a numbered chapter`);
+  const { content, unsupported } = adaptApiBibleContent(data.id, data.content);
+  return { doc: { chapter, content }, unsupported };
+}
+
+/**
+ * Convert any run of API.Bible content: a chapter, or the passages of a book
+ * joined in order, which `splitChapters` then cuts at each `\c`. `id` names
+ * the request in errors.
+ */
+export function adaptApiBibleContent(
+  id: string,
+  nodes: readonly ApiBibleNode[],
+): { content: RawUsjNode[]; unsupported: Record<string, number> } {
   const unsupported: Record<string, number> = {};
   const count = (key: string) => (unsupported[key] = (unsupported[key] ?? 0) + 1);
 
@@ -100,7 +138,7 @@ export function adaptApiBibleChapter(data: ApiBibleChapter): AdaptedChapter {
 
   const numbered = (n: ApiBibleNode, type: 'chapter' | 'verse'): RawUsjElement => {
     const number = attr(n, 'number');
-    if (number === undefined) throw new Error(`${data.id}: a ${type} with no number`);
+    if (number === undefined) throw new Error(`${id}: a ${type} with no number`);
     const sid = attr(n, 'sid');
     // the tag's items repeat the number as text, which USJ leaves out
     return { type, marker: type === 'chapter' ? 'c' : 'v', number, ...(sid === undefined ? {} : { sid }) };
@@ -146,7 +184,7 @@ export function adaptApiBibleChapter(data: ApiBibleChapter): AdaptedChapter {
     });
 
   const content: RawUsjNode[] = [];
-  for (const n of data.content) {
+  for (const n of nodes) {
     if (n.type === 'tag' && n.name === 'chapter') {
       content.push(numbered(n, 'chapter'));
     } else if (n.type === 'tag' && n.name === 'para') {
@@ -156,12 +194,13 @@ export function adaptApiBibleChapter(data: ApiBibleChapter): AdaptedChapter {
     } else if (n.type === 'text' && !(n.text ?? '').trim()) {
       content.push(n.text ?? '');
     } else {
-      // text or an inline element outside a paragraph: wrapped in a `\p`
-      count(`top:${n.type === 'text' ? 'text' : n.name}`);
+      // text or an inline element outside a paragraph: wrapped in a `\p`. Any
+      // other element is counted once, by `inline`.
+      if (n.type === 'text' || INLINE.has(n.name ?? '')) count(`top:${n.type === 'text' ? 'text' : n.name}`);
       content.push(element('para', 'p', inline([n])));
     }
   }
-  return { doc: { chapter, content }, unsupported };
+  return { content, unsupported };
 }
 
 export interface ReadChapter extends AdaptedChapter {

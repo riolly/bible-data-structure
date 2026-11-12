@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "ingest:download": "tsx src/ingest/download.ts",
     "ingest": "tsx src/ingest/run.ts",
-    "api-bible:chapter": "tsx src/provider/chapter-cli.ts"
+    "api-bible:chapter": "tsx src/provider/chapter-cli.ts",
+    "api-bible:facts": "tsx src/provider/facts-cli.ts"
   },
   "dependencies": {
     "better-sqlite3": "12.11.1",
