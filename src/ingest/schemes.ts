@@ -161,6 +161,35 @@ export const DERIVED_SCHEMES: readonly DerivedSchemeDef[] = [
       'order of Philippians 1:16-17, which KJV does not, so its mapping rows differ (ADR-0006 amendment, text tests).',
     lastVerses: [],
   },
+  // The licensed editions (plan step 10). Their counts come from the committed
+  // facts in src/provider/facts/, which schemes.test.ts checks against these.
+  {
+    id: 'nasb95',
+    name: 'New American Standard Bible 1995',
+    base: 'kjv',
+    sourceUrl: 'https://www.lockman.org/new-american-standard-bible-nasb/',
+    note: 'kjv with 3 John ending at 15, as NASB 1995 on API.Bible prints it (research/api-bible.md).',
+    lastVerses: [['3JN', 1, 15]],
+  },
+  {
+    id: 'niv',
+    name: 'New International Version 2011',
+    base: 'kjv',
+    sourceUrl: 'https://www.biblica.com/bible/niv/',
+    note: 'kjv with 3 John ending at 15, as NIV 2011 on API.Bible prints it (research/api-bible.md).',
+    lastVerses: [['3JN', 1, 15]],
+  },
+  {
+    id: 'nlt',
+    name: 'New Living Translation',
+    base: 'kjv',
+    sourceUrl: 'https://www.tyndale.com/nlt',
+    note: "kjv with 3 John ending at 15 and Revelation 12 at 18, which is eng's numbering of the 66 books, as NLT on API.Bible prints it (research/api-bible.md).",
+    lastVerses: [
+      ['3JN', 1, 15],
+      ['REV', 12, 18],
+    ],
+  },
 ];
 
 export const SCHEME_IDS: readonly string[] = ['kjv', ...PARATEXT_SCHEMES.map((s) => s.id), ...DERIVED_SCHEMES.map((s) => s.id)];
