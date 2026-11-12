@@ -18,7 +18,7 @@ import type { Block, ChapterDoc, OriginalWord, Reading, Token, VerseText } from 
 import { PIVOT, type MappingRow } from '../model/mapping';
 import { chapterStamp } from './edition';
 import { LIBPALASO_URL } from './schemes';
-import { MACULA_GREEK, OSHB, TVTMS } from './sources';
+import { MACULA_GREEK, MACULA_HEBREW, OSHB, TVTMS } from './sources';
 import { WORD_TEST_MARGIN } from './tvtms';
 import type { Scheme } from '../model/scheme';
 import * as schema from '../db/corpus-schema';
@@ -483,8 +483,20 @@ export const DATA_SOURCES = [
     license: 'CC BY 4.0',
     attribution: OSHB.attribution,
     changes:
-      'Only the word ids of qere readings are kept (reading.ow_ids); lemma, morphology and notes are dropped. ' +
-      'The WLC text itself is public domain.',
+      'Each word\'s id, lemma and morphology are kept in original_word, the qere words\' ids also in ' +
+      'reading.ow_ids; the word text drops the / morpheme breaks; notes other than qere are dropped; the main ' +
+      'Strong\'s number is the lemma\'s last number. The WLC text itself is public domain.',
+  },
+  {
+    id: MACULA_HEBREW.id,
+    url: MACULA_HEBREW.url,
+    sha256: MACULA_HEBREW.sha256,
+    license: MACULA_HEBREW.license,
+    attribution: MACULA_HEBREW.attribution,
+    changes:
+      'Only the glosses are kept, in original_word.gloss for OSHB\'s words: each morpheme\'s gloss column, ' +
+      'else its english column, with dots read as spaces, joined per word. The numbers MACULA gives OSHB\'s ' +
+      'prefix letters b, i, k, l and m are the Strong\'s numbers of words whose lemma has no other number.',
   },
   {
     id: MACULA_GREEK.id,

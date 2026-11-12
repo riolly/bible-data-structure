@@ -5,7 +5,8 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import type { Token } from '../model/corpus';
-import { checkExceptionsUsed, greekWords, maculaGloss, readMacula, strongKey } from './original-words';
+import { checkExceptionsUsed, greekWords, hebrewWords, maculaGloss, oshbStrong, readMacula, strongKey } from './original-words';
+import type { OshbReading, OshbVerse } from './oshb-xml';
 
 const nfc = (s: string) => s.normalize('NFC');
 const tokens = (book: string, chapter: number, verse: number, texts: readonly string[]) =>
@@ -26,6 +27,15 @@ describe('Strong\'s numbers', () => {
     expect(strongKey('H', '2416c')).toBe('H2416');
     expect(strongKey('H', '')).toBeNull();
     expect(strongKey('G', '0')).toBeNull();
+  });
+
+  it("are an OSHB lemma's last number, else its last prefix letter's", () => {
+    expect(oshbStrong('c/d/1004 b')).toBe('H1004');
+    expect(oshbStrong('834 a')).toBe('H834');
+    expect(oshbStrong('1004+')).toBe('H1004');
+    expect(oshbStrong('c/l')).toBe('H3807');
+    expect(oshbStrong('m')).toBe('H4480');
+    expect(oshbStrong('c')).toBeNull();
   });
 });
 
@@ -86,5 +96,63 @@ describe('greekWords', () => {
     expect(() => greekWords('JHN', tokens('JHN', 3, 16, ['Οὕτως', 'γάρ', 'ἠγάπησε']), macula, ex, used)).not.toThrow();
     expect(() => checkExceptionsUsed(ex, used)).not.toThrow();
     expect(() => checkExceptionsUsed(ex, new Set())).toThrow(/matched no word/);
+  });
+});
+
+describe('hebrewWords', () => {
+  // GEN 8:17 cut down: הוצא is written, read הַיְצֵא. MACULA skips the ketiv's number.
+  const written = ['הָאָ֖רֶץ', 'הוצא', 'אִתָּ֑ךְ'];
+  const verse: OshbVerse = {
+    book: 'GEN',
+    chapter: 8,
+    verse: 17,
+    words: [
+      { id: '01a', lemma: 'd/776', morph: 'HTd/Ncbsa', text: nfc(written[0]), wordIndex: 0 },
+      { id: '01b', lemma: '3318', morph: 'HVhv2ms', text: nfc(written[1]), wordIndex: 1 },
+      { id: '01c', lemma: '854', morph: 'HR/Sp2ms', text: nfc(written[2]), wordIndex: 2 },
+    ],
+  };
+  const qere: OshbReading = {
+    book: 'GEN', chapter: 8, verse: 17, wordIndex: 1, wordCount: 1, kind: 'qere', text: nfc('הַיְצֵ֣א'), owIds: ['01q'],
+    qere: [{ id: '01q', lemma: '3318', morph: 'HVhv2ms', text: nfc('הַיְצֵ֣א') }], ketiv: [nfc('הוצא')], verseWords: written.map(nfc),
+  };
+  const macula = readMacula(
+    tsv([
+      ['o1', 'GEN 8:17!13', 'הָ', '', '', '', 'the', ''],
+      ['o2', 'GEN 8:17!13', 'אָ֖רֶץ', '', '', '', 'earth', ''],
+      ['o3', 'GEN 8:17!15', 'הַיְצֵ֣א', '', '', '', 'bring.out', ''],
+      ['o4', 'GEN 8:17!16', 'אִתָּ֑', '', '', '', 'with', ''],
+      ['o5', 'GEN 8:17!16', 'ךְ', '', '', '', 'you', ''],
+    ]),
+  );
+
+  it('gives the written words and each qere after its ketiv, glossed through the read text', () => {
+    const { words, stats } = hebrewWords('GEN', tokens('GEN', 8, 17, written), [verse], [qere], macula);
+    expect(words.map((w) => [w.seq, w.kind, w.owId, w.wordIndex, w.strongs.join(), w.gloss])).toEqual([
+      [0, 'word', '01a', 0, 'H776', 'the earth'],
+      [1, 'ketiv', '01b', 1, 'H3318', null],
+      [2, 'qere', '01q', null, 'H3318', 'bring out'],
+      [3, 'word', '01c', 2, 'H854', 'with you'],
+    ]);
+    expect(stats.noGloss).toBe(0);
+  });
+
+  it('puts a qere with no written word before the word it is read before', () => {
+    const readOnly: OshbReading = { ...qere, wordIndex: 2, wordCount: 0, ketiv: [] };
+    const m = readMacula(
+      tsv([
+        ['o1', 'GEN 8:17!1', 'הָאָ֖רֶץ', '', '', '', 'the.earth', ''],
+        ['o2', 'GEN 8:17!2', 'הוצא', '', '', '', 'x', ''],
+        ['o3', 'GEN 8:17!3', 'הַיְצֵ֣א', '', '', '', 'bring.out', ''],
+        ['o4', 'GEN 8:17!4', 'אִתָּ֑ךְ', '', '', '', 'with.you', ''],
+      ]),
+    );
+    const { words } = hebrewWords('GEN', tokens('GEN', 8, 17, written), [verse], [readOnly], m);
+    expect(words.map((w) => `${w.kind}:${w.owId}`)).toEqual(['word:01a', 'word:01b', 'qere:01q', 'word:01c']);
+  });
+
+  it("stops when the tokens aren't OSHB's words, or MACULA's words aren't the read text", () => {
+    expect(() => hebrewWords('GEN', tokens('GEN', 8, 17, ['הָאָ֖רֶץ', 'הוצא', 'אִתָּ']), [verse], [qere], macula)).toThrow(/not OSHB's words/);
+    expect(() => hebrewWords('GEN', tokens('GEN', 8, 17, written), [verse], [], macula)).toThrow(/3 words, the read text 3|OSHB has "הוצא"/);
   });
 });

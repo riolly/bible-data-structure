@@ -234,7 +234,7 @@ describe.each(SOURCE_DEFS.map((s) => [s.meta.abbrev, s] as const))('%s source te
       expect(usfm, code).not.toMatch(/[\p{L}\p{M}](?:\\w\*)?\\[fx] [^\\]*(?:\\(?![fx]\*)[^\\]*)*\\[fx]\*(?:\\w )?\p{L}/u);
       expect(checkVerses(scheme, code, versesWithText(usfm)).unknown, code).toEqual([]);
     }
-  });
+  }, 60_000); // converting the 39 OSHB books takes seconds
 });
 
 const native = nativeModuleLoads(

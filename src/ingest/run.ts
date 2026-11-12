@@ -21,13 +21,14 @@ import { loadSchemes } from './schemes';
 import { normalizeChapters, splitChapters } from './normalize';
 import { usjBookCode, type ParseOutcome } from './parse';
 import { createParsePool, type ParsePool } from './parse-pool';
-import { MACULA_GREEK, SOURCES, type PinnedFile, type SourceDef } from './sources';
+import { MACULA_GREEK, MACULA_HEBREW, SOURCES, type PinnedFile, type SourceDef } from './sources';
 import { SOURCES_ROOT, readSource } from './source-files';
 import { checkReadings } from './oshb-xml';
 import {
   GREEK_EXCEPTIONS,
   checkExceptionsUsed,
   greekWords,
+  hebrewWords,
   readMacula,
   type MaculaWord,
 } from './original-words';
@@ -100,11 +101,11 @@ async function main() {
       const started = performance.now();
       const scheme = schemes.get(src.meta.scheme);
       if (!scheme) throw new Error(`${src.meta.abbrev}: unknown scheme "${src.meta.scheme}"`);
-      const { edition, files, readings, outcomes } = prepare(i);
+      const { edition, files, readings, oshbVerses, outcomes } = prepare(i);
       // A source that fails to prepare throws again when its turn comes, so errors keep source order.
       if (i + 1 < SOURCES.length) try { prepare(i + 1); } catch {}
-      // The hub texts get their original words (plan step 11): MACULA's for SBLGNT.
-      const hub = src.format?.kind === 'sblgnt-xml' ? MACULA_GREEK : null;
+      // The hub texts get their original words (plan step 11): OSHB's own for WLC, MACULA's for SBLGNT.
+      const hub = src.format?.kind === 'oshb-xml' ? MACULA_HEBREW : src.format?.kind === 'sblgnt-xml' ? MACULA_GREEK : null;
       const macula = hub ? readMaculaOrExplain(hub) : null;
       const owTotals = { words: 0, noGloss: 0 };
       const greekUsed = new Set<string>();
@@ -168,8 +169,11 @@ async function main() {
           checkReadings(file.code, bookReadings, tokens);
           insertReadings(db, translationId, 'oshb', bookReadings);
           if (macula) {
-            const { words: ow, stats } = greekWords(file.code, tokens, macula, GREEK_EXCEPTIONS, greekUsed);
-            insertOriginalWords(db, translationId, MACULA_GREEK.id, ow);
+            const { words: ow, stats } =
+              hub === MACULA_HEBREW
+                ? hebrewWords(file.code, tokens, oshbVerses.filter((v) => v.book === file.code), bookReadings, macula)
+                : greekWords(file.code, tokens, macula, GREEK_EXCEPTIONS, greekUsed);
+            insertOriginalWords(db, translationId, hub === MACULA_HEBREW ? 'oshb' : MACULA_GREEK.id, ow);
             owTotals.words += ow.length;
             owTotals.noGloss += stats.noGloss;
           }
@@ -231,13 +235,13 @@ const seconds = (since: number) => `${((performance.now() - since) / 1000).toFix
  * still stop the ingest in book order.
  */
 function prepareSource(src: SourceDef, pool: ParsePool) {
-  const { edition, files, readings } = readSource(src);
+  const { edition, files, readings, oshbVerses } = readSource(src);
   if (edition !== src.edition) {
     throw new Error(`${src.meta.abbrev}: the files give edition ${edition}, not the pinned ${src.edition}; run bun run ingest:download`);
   }
   const outcomes = files.map((f) => pool.parse(f.usfm, { rewriteVersifiedD: src.rewriteVersifiedD }));
   for (const o of outcomes) o.catch(() => {}); // awaited later; keep an early rejection from counting as unhandled
-  return { edition, files, readings, outcomes };
+  return { edition, files, readings, oshbVerses, outcomes };
 }
 
 /**

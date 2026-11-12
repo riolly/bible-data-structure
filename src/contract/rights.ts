@@ -7,7 +7,7 @@
  * No Node-only import here.
  */
 
-import { MACULA_GREEK } from '../ingest/sources';
+import { MACULA_GREEK, MACULA_HEBREW } from '../ingest/sources';
 
 /** Where an app gets the edition's text at read time. */
 export type Route =
@@ -77,10 +77,11 @@ export const RIGHTS: ReadonlyMap<string, RightsRecord> = new Map(
     publicDomain('BSB', 'https://berean.bible/licensing.htm'),
     {
       ...publicDomain('WLC', 'https://github.com/openscriptures/morphhb/blob/3d15126fb1ef74867fc1434be1942e837932691f/LICENSE.md'),
-      license: 'Public Domain (text), CC BY 4.0 (OSHB word ids)',
-      // the corpus keeps the qere words' OSHB ids (ADR-0007), which need the credit
+      license: 'Public Domain (text), CC BY 4.0 (OSHB word ids, lemmas and morphology)',
+      // the corpus keeps OSHB's word ids, lemmas and morphology (ADR-0003, ADR-0007), which need the credit
       attribution:
         'Original work of the Open Scriptures Hebrew Bible available at https://github.com/openscriptures/morphhb',
+      conditions: [`Glosses from \`words\` need the credit "${MACULA_HEBREW.attribution}".`],
     },
     {
       ...publicDomain('SBLGNT', 'https://github.com/LogosBible/SBLGNT/blob/d7f35adca9ec410e1d1499c63b4dd989d76c8d4d/LICENSE'),

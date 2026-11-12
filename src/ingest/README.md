@@ -8,7 +8,7 @@ schema in `src/db/corpus-schema.ts`, shared by the writer here and the reader in
 `src/db/corpus-read.ts`.
 
 ```
-bun run ingest:download   # once: fetch pinned ebible.org zips, upstream SBLGNT and OSHB, TVTMS and the MACULA Greek word table, check edition stamps and hashes → sources/ (gitignored)
+bun run ingest:download   # once: fetch pinned ebible.org zips, upstream SBLGNT and OSHB, TVTMS and the MACULA word tables, check edition stamps and hashes → sources/ (gitignored)
 bun run ingest            # sources → build/corpus.db, build/mapping-diff.tsv, build/pivot.json (gitignored)
 ```
 
@@ -45,10 +45,11 @@ the `.vrs` files disagree.
   says why the raw file is downloaded, not committed.
 - `sblgnt-xml.ts`, `oshb-xml.ts`: upstream SBLGNT and OSHB XML to USFM, read
   by `source-files.ts`. `oshb-xml.ts` also returns the qere readings, which
-  `run.ts` checks against the stored tokens and writes to `reading` (ADR-0007).
-- `original-words.ts`: the original words of SBLGNT (ADR-0003 amendment, plan
-  step 11), from MACULA Greek, joined to the stored tokens. The ingest stops
-  on any verse whose words differ between the sources.
+  `run.ts` checks against the stored tokens and writes to `reading` (ADR-0007),
+  and each word's OSHB id, lemma and morphology.
+- `original-words.ts`: the original words of WLC and SBLGNT (ADR-0003
+  amendment, plan step 11), from OSHB and MACULA, joined to the stored tokens.
+  The ingest stops on any verse whose words differ between the sources.
 - `edition.ts` — deterministic `translation.edition` stamp (ADR-0005): sha256
   over the source text, immune to zip repackaging.
 - `sources.ts` / `download.ts`: each text source is pinned by its edition

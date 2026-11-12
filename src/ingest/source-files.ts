@@ -10,7 +10,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { computeEdition, type SourceFile } from './edition';
-import { OSHB_BOOKS, oshbXmlToUsfm, type OshbReading } from './oshb-xml';
+import { OSHB_BOOKS, oshbXmlToUsfm, type OshbReading, type OshbVerse } from './oshb-xml';
 import { SBLGNT_BOOKS, sblgntXmlToUsfm } from './sblgnt-xml';
 import type { SourceDef } from './sources';
 import { applyTextFixes } from './text-fixes';
@@ -46,25 +46,27 @@ function readUpstream(src: SourceDef, root: string): SourceFile[] {
 
 /**
  * A source's books as USFM, after conversion and its counted text fixes, its
- * edition stamp, and the readings its conversion found (ADR-0007), checked
- * against the stored tokens by run.ts.
+ * edition stamp, and the readings (ADR-0007) and OSHB words (ADR-0003) its
+ * conversion found, checked against the stored tokens by run.ts.
  */
 export function readSource(
   src: SourceDef,
   root = SOURCES_ROOT,
-): { edition: string; files: SourceFile[]; readings: OshbReading[] } {
+): { edition: string; files: SourceFile[]; readings: OshbReading[]; oshbVerses: OshbVerse[] } {
   const raw = readUpstream(src, root);
   const readings: OshbReading[] = [];
+  const oshbVerses: OshbVerse[] = [];
   const usfm = raw.map((f) => {
     if (src.format?.kind === 'sblgnt-xml') return { code: f.code, usfm: sblgntXmlToUsfm(f.usfm, f.code) };
     if (src.format?.kind === 'oshb-xml') {
       const converted = oshbXmlToUsfm(f.usfm, f.code);
       readings.push(...converted.readings);
+      oshbVerses.push(...converted.verses);
       return { code: f.code, usfm: converted.usfm };
     }
     return f;
   });
-  return { edition: computeEdition(raw), files: applyTextFixes(usfm, src.textFixes), readings };
+  return { edition: computeEdition(raw), files: applyTextFixes(usfm, src.textFixes), readings, oshbVerses };
 }
 
 /** The edition stamp of a source's unpacked files under `root`, as the ingest computes it. */
