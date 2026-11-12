@@ -87,6 +87,49 @@ export interface Reading {
   readonly owIds: readonly string[];
 }
 
+/**
+ * What an original word is in its verse (ADR-0003 amendment, plan step 11):
+ *
+ * - `word`: a written word, read as written.
+ * - `ketiv`: a written word read as a qere (ADR-0007). Its gloss is null, since
+ *   the glosses gloss the read text: show the qere's.
+ * - `qere`: a word read and not written. It has no word index.
+ */
+export type OriginalWordKind = 'word' | 'ketiv' | 'qere';
+
+/**
+ * One word of an original-language edition, WLC or SBLGNT, with the lexical
+ * data the hub needs (ADR-0003, plan step 11). Word grain in both languages:
+ * a Hebrew word's morphemes are the `/`-separated parts of `lemma` and `morph`.
+ */
+export interface OriginalWord {
+  /** The source's id for the word: OSHB's (`09wci`) for Hebrew, MACULA's (`n43003016001`) for Greek. */
+  readonly owId: string;
+  readonly book: string;
+  readonly chapter: number;
+  readonly verse: number;
+  readonly segment: string;
+  /** The word token it is. Null for a qere. Two OSHB words can share one token (1CH 15:13). */
+  readonly wordIndex: number | null;
+  /** Read order within the verse: written words, each qere right after the ketiv it replaces. */
+  readonly seq: number;
+  readonly kind: OriginalWordKind;
+  /** The word as tokenized, NFC. */
+  readonly text: string;
+  /** The source's lemma: OSHB's Strong's form (`c/1961`, `834 a`), or a Greek dictionary form (`λόγος`). */
+  readonly lemma: string;
+  /**
+   * The word's Strong's numbers, `H1961` or `G3056`: join keys, never
+   * addresses. One main number, or several for a Greek compound MACULA writes
+   * `5228+1537+4053`. Empty for a word Strong's dictionary lacks (`Ἀρνί`).
+   */
+  readonly strongs: readonly string[];
+  /** The source's raw morphology code: OSHB's (`HC/Vqw3ms`) or MACULA's (`N-NSF`). */
+  readonly morph: string;
+  /** The editorial gloss. Null when the source has none, and on a ketiv. */
+  readonly gloss: string | null;
+}
+
 //---- the stored chapter document (ADR-0001 amendment, plan step 7) ----
 
 /** A USJ node: text, or an element as usfm-grammar 3.x writes it. */

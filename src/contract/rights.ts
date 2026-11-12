@@ -7,6 +7,8 @@
  * No Node-only import here.
  */
 
+import { MACULA_GREEK } from '../ingest/sources';
+
 /** Where an app gets the edition's text at read time. */
 export type Route =
   /** Our own files: `build/corpus.db` now, a pack from step 13. */
@@ -84,7 +86,10 @@ export const RIGHTS: ReadonlyMap<string, RightsRecord> = new Map(
       ...publicDomain('SBLGNT', 'https://github.com/LogosBible/SBLGNT/blob/d7f35adca9ec410e1d1499c63b4dd989d76c8d4d/LICENSE'),
       license: 'CC BY 4.0',
       attribution: 'SBL Greek New Testament, © 2010 Society of Biblical Literature and Logos Bible Software, CC BY 4.0',
-      conditions: ['Say that the text was converted from XML to USFM, with words and punctuation unchanged (CC BY 4.0, section 3(a)(1)(B)).'],
+      conditions: [
+        'Say that the text was converted from XML to USFM, with words and punctuation unchanged (CC BY 4.0, section 3(a)(1)(B)).',
+        `Strong's numbers, lemmas, morphology and glosses from \`words\` need the credit "${MACULA_GREEK.attribution}".`,
+      ],
     },
     publicDomain('RP', 'https://ebible.org/grcmt/copyright.htm'),
     publicDomain('WEB', 'https://ebible.org/eng-web/copyright.htm', [

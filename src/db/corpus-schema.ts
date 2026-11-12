@@ -314,6 +314,46 @@ export const reading = sqliteTable(
 );
 
 /**
+ * One word of an original-language edition, WLC or SBLGNT, with its lexical
+ * data (ADR-0003 and its step 11 amendment, `OriginalWord` in
+ * src/model/corpus.ts). A written word is the token at `word_index`; a qere has
+ * none. `seq` is read order within the verse.
+ */
+export const originalWord = sqliteTable(
+  'original_word',
+  {
+    /** A data_source id: whose id `ow_id` is (`oshb`, `macula-greek`). */
+    source: text('source')
+      .notNull()
+      .references(() => dataSource.id),
+    /** The source's id for the word: what an alignment and `reading.ow_ids` point at. */
+    owId: text('ow_id').notNull(),
+    translationId: integer('translation_id')
+      .notNull()
+      .references(() => translation.id),
+    book: text('book')
+      .notNull()
+      .references(() => book.code),
+    chapter: integer('chapter').notNull(),
+    verse: integer('verse').notNull(),
+    segment: text('segment').notNull().default(''),
+    seq: integer('seq').notNull(),
+    wordIndex: integer('word_index'),
+    kind: text('kind', { enum: ['word', 'ketiv', 'qere'] }).notNull(),
+    text: text('text').notNull(),
+    lemma: text('lemma').notNull(),
+    /** Space-separated Strong's numbers (`H1961`, `G5228 G1537 G4053`), `''` when none: join keys, never addresses. */
+    strongs: text('strongs').notNull(),
+    morph: text('morph').notNull(),
+    gloss: text('gloss'),
+  },
+  (t) => [
+    primaryKey({ columns: [t.source, t.owId] }),
+    uniqueIndex('original_word_verse').on(t.translationId, t.book, t.chapter, t.verse, t.segment, t.seq),
+  ],
+);
+
+/**
  * Where seeded data came from, with the attribution and note of changes each
  * licence asks for: the USFM spec's book names, TVTMS and OSHB's word ids
  * (CC BY 4.0), and the libpalaso `.vrs` files (MIT).

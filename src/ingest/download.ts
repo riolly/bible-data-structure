@@ -1,5 +1,5 @@
 /**
- * Fetch the pinned source zips and the TVTMS file into src/ingest/sources/
+ * Fetch the pinned source zips, the TVTMS file and the MACULA Greek word table into src/ingest/sources/
  * (gitignored). Run once before `bun run ingest`:
  *
  *   bun run ingest:download
@@ -21,7 +21,7 @@ import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 
 import { sourceEdition } from './source-files';
-import { MIRROR, SOURCES, TVTMS, mirrorAsset, mirrorLabel, type SourceDef } from './sources';
+import { MACULA_GREEK, MIRROR, SOURCES, TVTMS, mirrorAsset, mirrorLabel, type SourceDef } from './sources';
 
 const SOURCES_ROOT = join(import.meta.dirname, 'sources');
 const STAGING = join(SOURCES_ROOT, '.staging');
@@ -30,7 +30,7 @@ const MIRROR_DIR = join(SOURCES_ROOT, 'mirror');
 async function main() {
   await mkdir(MIRROR_DIR, { recursive: true });
   for (const src of SOURCES) await fetchSource(src);
-  await fetchTvtms();
+  for (const file of [{ id: 'TVTMS', ...TVTMS }, MACULA_GREEK]) await fetchPinnedFile(file);
 }
 
 async function fetchSource(src: SourceDef) {
@@ -96,23 +96,24 @@ function fetchMirror(src: SourceDef, path: string) {
   });
 }
 
-async function fetchTvtms() {
-  const tvtmsPath = join(SOURCES_ROOT, TVTMS.file);
-  if (existsSync(tvtmsPath)) {
-    console.log(`✓ TVTMS: ${tvtmsPath} exists, skipping (delete it to download again)`);
+/** A file pinned by its URL at a git commit and its sha256 (TVTMS, MACULA). Its bytes can't change. */
+async function fetchPinnedFile(pin: { id: string; url: string; sha256: string; file: string }) {
+  const path = join(SOURCES_ROOT, pin.file);
+  if (existsSync(path)) {
+    console.log(`✓ ${pin.id}: ${path} exists, skipping (delete it to download again)`);
     return;
   }
-  console.log(`↓ TVTMS: ${TVTMS.url}`);
-  const res = await fetch(TVTMS.url);
-  if (!res.ok) throw new Error(`${TVTMS.url} → HTTP ${res.status}`);
+  console.log(`↓ ${pin.id}: ${pin.url}`);
+  const res = await fetch(pin.url);
+  if (!res.ok) throw new Error(`${pin.url} → HTTP ${res.status}`);
   const buf = Buffer.from(await res.arrayBuffer());
   const digest = createHash('sha256').update(buf).digest('hex');
-  if (digest !== TVTMS.sha256) {
-    throw new Error(`TVTMS: sha256 mismatch.\n  pinned:   ${TVTMS.sha256}\n  fetched:  ${digest}`);
+  if (digest !== pin.sha256) {
+    throw new Error(`${pin.id}: sha256 mismatch.\n  pinned:   ${pin.sha256}\n  fetched:  ${digest}`);
   }
-  await mkdir(dirname(tvtmsPath), { recursive: true });
-  await writeFile(tvtmsPath, buf);
-  console.log(`✓ TVTMS: verified sha256, saved to ${tvtmsPath}`);
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, buf);
+  console.log(`✓ ${pin.id}: verified sha256, saved to ${path}`);
 }
 
 main().catch((e) => {

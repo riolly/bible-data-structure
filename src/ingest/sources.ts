@@ -260,3 +260,34 @@ export const TVTMS = {
   attribution:
     'Versification mappings from TVTMS by Tyndale House and STEPBible.org (CC BY 4.0), https://STEPBible.github.io/STEPBible-Data',
 } as const;
+
+/** A data file pinned by its URL at a git commit and its sha256, like TVTMS. */
+export interface PinnedFile {
+  readonly id: string;
+  readonly url: string;
+  readonly sha256: string;
+  /** Under src/ingest/sources/. */
+  readonly file: string;
+  readonly license: string;
+  readonly attribution: string;
+}
+
+/**
+ * MACULA Greek's SBLGNT word table (Clear Bible, CC BY 4.0): the Strong's
+ * number, lemma, morphology and gloss of each SBLGNT word (plan step 11). Its
+ * `gloss` column is the Berean Interlinear Bible's (public domain), and its
+ * `english` column Cherith's glosses (CC BY 4.0). The Louw-Nida domains (UBS
+ * MARBLE, used with permission) are never read (research/licensing.md).
+ */
+export const MACULA_GREEK: PinnedFile = {
+  id: 'macula-greek',
+  url: 'https://raw.githubusercontent.com/Clear-Bible/macula-greek/8423afe47b9e8f24b7772e808af45c7159a6fe7e/SBLGNT/tsv/macula-greek-SBLGNT.tsv',
+  sha256: '7f71504fdee8659bdd9f85342e4103d645864c2851b8205915bb298f0c004cc5',
+  file: 'macula/macula-greek-SBLGNT.tsv',
+  license: 'CC BY 4.0',
+  attribution:
+    'Strong\'s numbers, lemmas, morphology and word ids from MACULA Greek Linguistic Datasets, © 2022-2024 ' +
+    'Biblica, Inc., CC BY 4.0, https://github.com/Clear-Bible/macula-greek, with glosses from the Berean ' +
+    'Interlinear Bible (public domain) and Cherith Glosses for the Greek New Testament by Andi Wu, ' +
+    '© 2023 Cherith Analytics, CC BY 4.0',
+};

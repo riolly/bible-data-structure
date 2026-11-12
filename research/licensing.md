@@ -21,6 +21,7 @@ The ebible.org catalog with its `Redistributable` and `Copyright` columns is [tr
 | Septuaginta, ebible `grclxx` (Orthodox Media Network) | Labelled "Public Domain ℗ Orthodox Media Network", but the page asks anyone who shares it to "publish the present text" ([copyright.htm][grclxx]) | Unclear. The condition contradicts the public-domain label | The page's text, if used | No | No. Brenton covers the Septuagint without the condition |
 | Rahlfs-Hanhart Septuaginta | © Deutsche Bibelgesellschaft | No | n/a | No | No |
 | Douay-Rheims 1899, ebible `engDRA` | Public domain | Yes | None required | Yes | No. WEB covers the deuterocanon and fits `eng` more closely |
+| MACULA Greek, [Clear-Bible/macula-greek][macula-grc] at commit `8423afe`, `SBLGNT/tsv/macula-greek-SBLGNT.tsv` | CC BY 4.0, © 2022-2024 Biblica, Inc. ([LICENSE.md][macula-grc-license]). Its `gloss` column is the Berean Interlinear Bible's, public domain since 2023-04-30 ([terms][berean-terms]), and its `english` column Cherith's glosses, CC BY 4.0. Its Louw-Nida domains (UBS MARBLE) are "used with permission", not CC BY. Its text is SBLGNT, CC BY 4.0 | Yes for word ids, lemmas, Strong's numbers, morphology and glosses, with attribution. Not the `domain` and `ln` columns, which the ingest never reads | `MACULA_GREEK.attribution` in `src/ingest/sources.ts` | No. Downloaded by `ingest:download`, pinned by sha256 | Yes, since 2026-11-13: the SBLGNT words' ids, Strong's numbers, lemmas, morphology and glosses (plan step 11) |
 | STEPBible TVTMS | CC BY 4.0, raw file not to be re-posted (`src/ingest/sources.ts`) | Compiled rows yes, with attribution | `TVTMS.attribution` in sources.ts | No | Yes, pinned in step 2 |
 | libpalaso `.vrs` files | MIT (`src/ingest/vrs/libpalaso/LICENSE`) | Yes | MIT notice | Yes, committed | Yes, pinned in step 2 |
 
@@ -30,6 +31,7 @@ The ebible.org catalog with its `Redistributable` and `Copyright` columns is [tr
 - An earlier version of this file said the ebible SBLGNT differs from upstream only in the `‘p /’ ‘/book’` text after each book's last verse. That was wrong. Compared verse by verse with upstream's `data/sblgnt/text` at commit `d7f35ad` (2026-11-09), ebible's copy differs in 2,299 of 7,939 verses. Where ebible turned an apparatus mark into a footnote, it cut into words in 29 verses (HEB 7:4 `εωρεῖτε` for `Θεωρεῖτε`, EPH 4:7 `ἡ … ῶν` for `ἡμῶν`, which also adds a word), and dropped about 1,670 closing `⸃` signs and about 1,000 punctuation marks in 2,270 more. MRK 16:9 lost its opening `⟦`. The ingest therefore reads upstream's XML. The conversion only changes markup, and `sblgnt-xml.test.ts` checks every verse against upstream's plain-text edition. An app that ships it should still say it was converted (CC BY 4.0, section 3(a)(1)(B)).
 - The ebible WEB has two places where a footnote stands between two words with no space on either side (2ES 7:36 `hell\f …\f*will`, 2ES 12:32 `will\f …\f*heap`), so the words ran together. The ingest adds the space with two counted text fixes. That changes whitespace only, not a word, which we read as outside WEB's "if you CHANGE the actual text" condition ([copyright.htm][web]). Report both to ebible.org, which asks for typo reports.
 - OSHB data needs attribution. The corpus holds only the qere words' ids so far. Morphology could reach an app later, through ADR-0003's original-word layer, from the same pinned upstream, under CC BY 4.0.
+- For the Greek original words, MACULA Greek ships an SBLGNT edition whose words are ours, one for one, in all 7,939 verses (`src/ingest/original-words.ts`). TAGNT was not needed.
 
 [catalog]: https://ebible.org/Scriptures/translations.csv
 [kjv]: https://ebible.org/eng-kjv/copyright.htm
@@ -46,6 +48,9 @@ The ebible.org catalog with its `Redistributable` and `Copyright` columns is [tr
 [byz]: https://ebible.org/grcbyz/copyright.htm
 [brenton]: https://ebible.org/grcbrent/copyright.htm
 [grclxx]: https://ebible.org/grclxx/copyright.htm
+[macula-grc]: https://github.com/Clear-Bible/macula-greek/tree/8423afe47b9e8f24b7772e808af45c7159a6fe7e
+[macula-grc-license]: https://github.com/Clear-Bible/macula-greek/blob/8423afe47b9e8f24b7772e808af45c7159a6fe7e/LICENSE.md
+[berean-terms]: https://berean.bible/terms.htm
 
 ## Libraries an app ships
 

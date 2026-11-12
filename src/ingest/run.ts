@@ -21,9 +21,16 @@ import { loadSchemes } from './schemes';
 import { normalizeChapters, splitChapters } from './normalize';
 import { usjBookCode, type ParseOutcome } from './parse';
 import { createParsePool, type ParsePool } from './parse-pool';
-import { SOURCES, type SourceDef } from './sources';
-import { readSource } from './source-files';
+import { MACULA_GREEK, SOURCES, type PinnedFile, type SourceDef } from './sources';
+import { SOURCES_ROOT, readSource } from './source-files';
 import { checkReadings } from './oshb-xml';
+import {
+  GREEK_EXCEPTIONS,
+  checkExceptionsUsed,
+  greekWords,
+  readMacula,
+  type MaculaWord,
+} from './original-words';
 import { textStamp, wordsStamp } from './edition';
 import { RIGHTS } from '../contract/rights';
 import { factsText, loadEditionFacts } from '../provider/edition-facts';
@@ -44,6 +51,7 @@ import {
   createIndexes,
   type CorpusDb,
   insertBookRows,
+  insertOriginalWords,
   insertReadings,
   insertTranslation,
   insertMappings,
@@ -95,6 +103,11 @@ async function main() {
       const { edition, files, readings, outcomes } = prepare(i);
       // A source that fails to prepare throws again when its turn comes, so errors keep source order.
       if (i + 1 < SOURCES.length) try { prepare(i + 1); } catch {}
+      // The hub texts get their original words (plan step 11): MACULA's for SBLGNT.
+      const hub = src.format?.kind === 'sblgnt-xml' ? MACULA_GREEK : null;
+      const macula = hub ? readMaculaOrExplain(hub) : null;
+      const owTotals = { words: 0, noGloss: 0 };
+      const greekUsed = new Set<string>();
       const rights = RIGHTS.get(src.meta.abbrev);
       if (!rights) throw new Error(`${src.meta.abbrev}: no rights record in src/contract/rights.ts`);
       const translationId = insertTranslation(db, { ...src.meta, license: rights.license, edition });
@@ -154,6 +167,12 @@ async function main() {
           const bookReadings = readings.filter((r) => r.book === file.code);
           checkReadings(file.code, bookReadings, tokens);
           insertReadings(db, translationId, 'oshb', bookReadings);
+          if (macula) {
+            const { words: ow, stats } = greekWords(file.code, tokens, macula, GREEK_EXCEPTIONS, greekUsed);
+            insertOriginalWords(db, translationId, MACULA_GREEK.id, ow);
+            owTotals.words += ow.length;
+            owTotals.noGloss += stats.noGloss;
+          }
           addBookText(text, file.code, blocks, tokens, verses);
           words.add(file.code, tokens, verses);
           addStats(totals, stats);
@@ -161,6 +180,7 @@ async function main() {
           tokenCount += tokens.length;
           chapterCount += docs.length;
         }
+        if (hub === MACULA_GREEK) checkExceptionsUsed(GREEK_EXCEPTIONS, greekUsed);
         setStamps(db, translationId, { words: words.digest(), text: chapters.digest() });
         sqlite.exec('COMMIT');
         prepared.delete(i); // free this edition's parse results
@@ -170,6 +190,9 @@ async function main() {
       }
       console.log(`  ${blockCount} blocks, ${tokenCount} tokens, words stamp ${words.digest()}, text stamp ${chapters.digest()}`);
       if (readings.length > 0) console.log(`  ${readings.length} qere readings (ADR-0007)`);
+      if (hub) {
+        console.log(`  ${owTotals.words} original words, glosses from ${hub.id}: ${owTotals.noGloss} read words have none`);
+      }
       console.log(`  ${chapterCount} chapter documents; counted in them: ${JSON.stringify(totals)}`);
       console.log(`  ${seconds(started)}`);
     }
@@ -265,6 +288,12 @@ function writeEditionTextSnapshot(editions: readonly { scheme: string; text: Edi
   if (!existsSync(EDITION_TEXT_SNAPSHOT) || json !== readFileSync(EDITION_TEXT_SNAPSHOT, 'utf8')) {
     console.warn(`  ⚠ ${path} differs from ${EDITION_TEXT_SNAPSHOT}: copy it over to update the tests`);
   }
+}
+
+function readMaculaOrExplain(pin: PinnedFile): Map<string, MaculaWord[]> {
+  const path = join(SOURCES_ROOT, pin.file);
+  if (!existsSync(path)) throw new Error(`${path} is missing: run \`bun run ingest:download\` first`);
+  return readMacula(path);
 }
 
 function readTvtmsOrExplain(): TvtmsRow[] {
