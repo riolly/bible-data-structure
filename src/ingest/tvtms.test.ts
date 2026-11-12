@@ -17,6 +17,7 @@ import {
   editionText,
   editionTextsFromSnapshot,
   evaluateTests,
+  decidedTextTest,
   evaluateTextTest,
   parseStandardRefs,
   parseTvtms,
@@ -168,6 +169,16 @@ describe('text tests against an edition', () => {
   });
 });
 
+describe('decidedTextTest', () => {
+  const decisions = new Map([['Php.1:16<Php.1:17', true]]);
+  it('gives the decision for its test, the opposite for its mirror, and nothing for another test', () => {
+    expect(decidedTextTest('Php.1:16<Php.1:17', decisions)).toBe(true);
+    expect(decidedTextTest('Php.1:16>Php.1:17', decisions)).toBe(false);
+    expect(decidedTextTest('Php.1:17<Php.1:18', decisions)).toBeUndefined();
+    expect(decidedTextTest('Php.1:16<Php.1:17', undefined)).toBeUndefined();
+  });
+});
+
 describe('addBookText', () => {
   const block = (id: number, marker: string): Block => ({ id, chapter: 3, genre: 'heading', marker, seq: 0 });
   const token = (blockId: number, verse: number | null, seq: number, kind: Token['kind'] = 'word'): Token => ({
@@ -294,6 +305,25 @@ describe.skipIf(!hasTvtms)('the pinned TVTMS file', () => {
 
   it('maps the KJV numbering to itself', () => {
     expect(compiled.get('kjv')!.rows).toEqual([]);
+  });
+
+  it('gives NASB 1995, NIV and NLT the critical order of Philippians 1:16-17 too (#20)', () => {
+    for (const id of ['nasb95', 'niv', 'nlt']) {
+      expect(keys(m.map(id, 'kjv', ref('PHP', 1, 16))), id).toEqual(['PHP 1:17']);
+      expect(keys(m.map(id, 'kjv', ref('PHP', 1, 17))), id).toEqual(['PHP 1:16']);
+    }
+  });
+
+  it("keeps a scheme's text decisions only for tests its editions read as close (ADR-0006)", () => {
+    const tested = new Set(tvtms.flatMap((r) => r.tests.split('&').map((t) => t.trim())));
+    for (const s of schemes.values()) {
+      for (const test of s.textDecisions?.keys() ?? []) {
+        expect(tested.has(test), `${s.id} ${test} is a TVTMS test`).toBe(true);
+        const editions = texts.get(s.id) ?? [];
+        expect(editions.length, `${s.id} has editions`).toBeGreaterThan(0);
+        for (const text of editions) expect(evaluateTextTest(test, text), `${s.id} ${text.edition} ${test}`).toBe('close');
+      }
+    }
   });
 
   it('gives BSB the critical order of Philippians 1:16-17 and KJV its own', () => {

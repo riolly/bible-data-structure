@@ -21,6 +21,13 @@ export interface Scheme {
   readonly segments: ReadonlyMap<string, readonly string[]>;
   /** `BOOK C` of each chapter whose title the scheme numbers as verse 0. */
   readonly titles: ReadonlySet<string>;
+  /**
+   * TVTMS word tests a person decided for this scheme because its editions'
+   * counts are too close to (`Php.1:16<Php.1:17` → true). A decision also
+   * settles the mirror test, `Php.1:16>Php.1:17` → false (ADR-0006,
+   * licensed editions amendment). The reasons are in src/ingest/schemes.ts.
+   */
+  readonly textDecisions?: ReadonlyMap<string, boolean>;
 }
 
 export const verseKey = (book: string, chapter: number, verse: number): string =>

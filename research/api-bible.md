@@ -64,4 +64,4 @@ Collected 2026-11-12:
 
 Each edition's 116 Psalm titles fall on KJV's titled Psalms. NIV and NLT print them as `\d`. NASB 1995 prints `\ms PSALM 3`, an editor's `\s` heading, then the title as another `\ms` (`\ms BOOK 2` stands above Psalm 42), so its edition entry tests for that.
 
-Each edition has its own scheme derived from `kjv` (`nasb95`, `niv`, `nlt`, in `src/ingest/schemes.ts`), as BSB does, because the text tests give it its own rows. NIV and NLT take the critical order of Philippians 1:16-17, as BSB does. NASB 1995 prints that order too, but the test can't decide it (#20).
+Each edition has its own scheme derived from `kjv` (`nasb95`, `niv`, `nlt`, in `src/ingest/schemes.ts`), as BSB does, because the text tests give it its own rows. NIV and NLT take the critical order of Philippians 1:16-17, as BSB does. NASB 1995 prints that order too, but its counts (18 against 21) are too close for the test, so `nasb95` records the decision by hand (`textDecisions`, ADR-0006, #20).
