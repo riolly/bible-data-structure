@@ -72,6 +72,12 @@ export interface DerivedSchemeDef {
   readonly addBooks?: { readonly from: string; readonly books: readonly string[] };
   /** `[book, chapter, last verse]`. A chapter past the end is added; 0 leaves a chapter with no verses. */
   readonly lastVerses: readonly (readonly [string, number, number])[];
+  /**
+   * TVTMS word tests decided by a person who read the edition's text, for
+   * tests whose counts are too close to decide (`Scheme.textDecisions`).
+   * `test` is written as in TVTMS's Tests column.
+   */
+  readonly textDecisions?: readonly { readonly test: string; readonly holds: boolean; readonly why: string }[];
 }
 
 export const DERIVED_SCHEMES: readonly DerivedSchemeDef[] = [
@@ -170,6 +176,15 @@ export const DERIVED_SCHEMES: readonly DerivedSchemeDef[] = [
     sourceUrl: 'https://www.lockman.org/new-american-standard-bible-nasb/',
     note: 'kjv with 3 John ending at 15, as NASB 1995 on API.Bible prints it (research/api-bible.md).',
     lastVerses: [['3JN', 1, 15]],
+    textDecisions: [
+      {
+        test: 'Php.1:16<Php.1:17',
+        holds: true,
+        why:
+          'NASB 1995 prints 1:16 as "the latter do it out of love" and 1:17 as "the former proclaim Christ out of selfish ambition", ' +
+          'the critical order, as BSB, NIV and NLT do. Its counts, 18 against 21 words, are inside the 20% margin (#20).',
+      },
+    ],
   },
   {
     id: 'niv',
@@ -300,6 +315,9 @@ export function deriveScheme(def: DerivedSchemeDef, registry: ReadonlyMap<string
   };
   for (const k of [...excluded]) if (past(k)) excluded.delete(k);
   for (const k of [...segments.keys()]) if (past(k)) segments.delete(k);
+  for (const d of def.textDecisions ?? []) {
+    if (!/^[^<>]+[<>][^<>]+$/.test(d.test)) throw new Error(`${def.id}: "${d.test}" is not a word test`);
+  }
   return {
     id: def.id,
     name: def.name,
@@ -309,5 +327,6 @@ export function deriveScheme(def: DerivedSchemeDef, registry: ReadonlyMap<string
     excluded,
     segments,
     titles,
+    ...(def.textDecisions ? { textDecisions: new Map(def.textDecisions.map((d) => [d.test, d.holds])) } : {}),
   };
 }

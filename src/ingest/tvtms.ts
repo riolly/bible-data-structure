@@ -316,14 +316,33 @@ export function evaluateTextTest(test: string, text: EditionText): boolean | 'cl
 }
 
 /**
- * A row's text tests across a scheme's editions. An edition decides the row
- * when it has every book the tests name; every edition that decides it must
- * agree, and none may be close, or the row stays undecided.
+ * A person's decision for a word test (`Scheme.textDecisions`): the test
+ * itself, or its mirror with `<` and `>` swapped, which gets the opposite.
  */
-function textTestsResult(tests: readonly string[], texts: readonly EditionText[]): boolean | 'needs-text' {
+export function decidedTextTest(test: string, decisions: ReadonlyMap<string, boolean> | undefined): boolean | undefined {
+  if (!decisions) return undefined;
+  const own = decisions.get(test);
+  if (own !== undefined) return own;
+  const mirror = decisions.get(test.replace(/[<>]/, (op) => (op === '<' ? '>' : '<')));
+  return mirror === undefined ? undefined : !mirror;
+}
+
+/**
+ * A row's text tests across a scheme's editions. A test the scheme has a
+ * decision for takes it. An edition decides the row when it has every book
+ * the tests name; every edition that decides it must agree, and none may be
+ * close, or the row stays undecided.
+ */
+function textTestsResult(
+  tests: readonly string[],
+  texts: readonly EditionText[],
+  decisions?: ReadonlyMap<string, boolean>,
+): boolean | 'needs-text' {
+  const fixed = tests.map((t) => decidedTextTest(t, decisions));
+  if (fixed.every((r) => r !== undefined)) return !fixed.includes(false);
   let agreed: boolean | null = null;
   for (const text of texts) {
-    const results = tests.map((t) => evaluateTextTest(t, text));
+    const results = tests.map((t, i) => fixed[i] ?? evaluateTextTest(t, text));
     if (results.includes('no-book')) continue;
     if (!results.includes(false) && results.includes('close')) return 'needs-text';
     const result = !results.includes(false);
@@ -390,7 +409,7 @@ export function evaluateTests(
     }
     if (!result) return false;
   }
-  return textTests.length === 0 ? true : textTestsResult(textTests, texts);
+  return textTests.length === 0 ? true : textTestsResult(textTests, texts, s.textDecisions);
 }
 
 export interface Compiled {
