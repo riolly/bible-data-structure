@@ -1,7 +1,7 @@
 import { and, asc, eq, gte, inArray, isNull, lte, or } from 'drizzle-orm';
 import type { BaseSQLiteDatabase } from 'drizzle-orm/sqlite-core';
 
-import type { Block, ChapterDoc, Reading, Token, VerseText } from '../model/corpus';
+import type { Block, ChapterDoc, OriginalWord, Reading, Token, VerseText } from '../model/corpus';
 import { Mappings, type MappingRow } from '../model/mapping';
 import type { Scheme } from '../model/scheme';
 import * as schema from './corpus-schema';
@@ -240,6 +240,76 @@ export function readReadings(db: SyncSqliteDb, translationAbbrev: string, bookCo
     .orderBy(asc(r.verse), asc(r.segment), asc(r.wordIndex), asc(r.wordCount))
     .all()
     .map((row) => ({ ...row, owIds: row.owIds ? row.owIds.split(' ') : [] }));
+}
+
+/** The word tokens of one verse unit (the tokens of a bridge carry its first verse), in word order. */
+export function readUnitWords(
+  db: SyncSqliteDb,
+  translationAbbrev: string,
+  bookCode: string,
+  chapter: number,
+  verse: number,
+  segment: string,
+): { wordIndex: number; text: string }[] {
+  const t = schema.token;
+  return db
+    .select({ wordIndex: t.wordIndex, text: t.text })
+    .from(t)
+    .innerJoin(schema.translation, eq(t.translationId, schema.translation.id))
+    .where(
+      and(
+        eq(schema.translation.abbrev, translationAbbrev),
+        eq(t.book, bookCode),
+        eq(t.chapter, chapter),
+        eq(t.verse, verse),
+        eq(t.segment, segment),
+        eq(t.kind, 'word'),
+      ),
+    )
+    .orderBy(asc(t.wordIndex))
+    .all() as { wordIndex: number; text: string }[];
+}
+
+/** The original words of one verse unit of WLC or SBLGNT (plan step 11), in read order. Empty for other editions. */
+export function readOriginalWords(
+  db: SyncSqliteDb,
+  translationAbbrev: string,
+  bookCode: string,
+  chapter: number,
+  verse: number,
+  segment: string,
+): OriginalWord[] {
+  const w = schema.originalWord;
+  return db
+    .select({
+      owId: w.owId,
+      book: w.book,
+      chapter: w.chapter,
+      verse: w.verse,
+      segment: w.segment,
+      wordIndex: w.wordIndex,
+      seq: w.seq,
+      kind: w.kind,
+      text: w.text,
+      lemma: w.lemma,
+      strongs: w.strongs,
+      morph: w.morph,
+      gloss: w.gloss,
+    })
+    .from(w)
+    .innerJoin(schema.translation, eq(w.translationId, schema.translation.id))
+    .where(
+      and(
+        eq(schema.translation.abbrev, translationAbbrev),
+        eq(w.book, bookCode),
+        eq(w.chapter, chapter),
+        eq(w.verse, verse),
+        eq(w.segment, segment),
+      ),
+    )
+    .orderBy(asc(w.seq))
+    .all()
+    .map((row) => ({ ...row, strongs: row.strongs ? row.strongs.split(' ') : [] }));
 }
 
 /** Every scheme in the corpus, the pivot included, rebuilt from its tables. */

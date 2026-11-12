@@ -263,6 +263,100 @@ describe.skipIf(!native || !existsSync(CORPUS))('the app contract on the corpus 
     noRowIds(jhn3);
   });
 
+  it('words: map plus one read gives the Hebrew words of an English verse, each with a Strong\'s number and a gloss', async () => {
+    const m = await c.map('KJV', 'GEN 1:1', 'WLC');
+    const w = await c.words('WLC', m.verses[0].address);
+    expect(w.asked).toBe('GEN 1:1/org');
+    expect(w.words.map((x) => `${x.address} ${x.strongs.join()} ${x.original?.gloss}`)).toEqual([
+      'GEN 1:1!1/org H7225 in beginning',
+      'GEN 1:1!2/org H1254 he created',
+      'GEN 1:1!3/org H430 God',
+      'GEN 1:1!4/org H853 (et)',
+      'GEN 1:1!5/org H8064 the heavens',
+      'GEN 1:1!6/org H853 and (et)',
+      'GEN 1:1!7/org H776 the earth',
+    ]);
+    // OSHB's own word ids, lemma and morphology
+    expect(w.words[0]).toMatchObject({ kind: 'word', text: 'בְּרֵאשִׁ֖ית'.normalize('NFC'), original: { owId: '01xeN', lemma: 'b/7225', morph: 'HR/Ncfsa' } });
+    noRowIds(w);
+  });
+
+  it('words: the Greek words of an English verse, from MACULA Greek', async () => {
+    const m = await c.map('BSB', 'JHN 3:16', 'SBLGNT');
+    const w = await c.words('SBLGNT', m.verses[0].address);
+    expect(w.words).toHaveLength(25);
+    expect(w.words.slice(0, 3).map((x) => [x.address, x.text, x.strongs, x.original?.owId, x.original?.lemma])).toEqual([
+      ['JHN 3:16!1/org', 'Οὕτως', ['G3779'], 'n43003016001', 'οὕτω(ς)'],
+      ['JHN 3:16!2/org', 'γὰρ', ['G1063'], 'n43003016002', 'γάρ'],
+      ['JHN 3:16!3/org', 'ἠγάπησεν', ['G25'], 'n43003016003', 'ἀγαπάω'],
+    ]);
+    expect(w.words.every((x) => x.strongs.length === 1 && x.original?.gloss)).toBe(true);
+    // Strong's dictionary has no Ἀρνί (Luke 3:33)
+    expect((await c.words('SBLGNT', 'LUK 3:33!6')).words.map((x) => [x.text, x.strongs])).toEqual([['Ἀρνὶ', []]]);
+  });
+
+  it('words: a Psalm title maps to two Hebrew verses, each read once', async () => {
+    const m = await c.map('KJV', 'PSA 51:0', 'WLC');
+    const words = (await Promise.all(m.verses.map((v) => c.words('WLC', v.address)))).flatMap((r) => r.words);
+    expect(words.length).toBeGreaterThan(5);
+    expect(words.every((x) => /^H\d+$/.test(x.strongs[0]) && x.original?.gloss)).toBe(true);
+  });
+
+  it('words: a ketiv is followed by its qere, and a qere read with no written word sits in its place (ADR-0007)', async () => {
+    const gen = await c.words('WLC', 'GEN 8:17');
+    const at = gen.words.findIndex((x) => x.kind === 'ketiv');
+    expect(gen.words[at]).toMatchObject({ address: 'GEN 8:17!14/org', text: 'הוצא', strongs: ['H3318'], original: { gloss: null } });
+    expect(gen.words[at + 1]).toMatchObject({ kind: 'qere', address: null, text: 'הַיְצֵ֣א'.normalize('NFC'), strongs: ['H3318'], original: { gloss: 'bring out' } });
+    const rut = await c.words('WLC', 'RUT 3:5');
+    expect(rut.words.map((x) => `${x.kind} ${x.address ?? '-'}`)).toEqual([
+      ...[1, 2, 3, 4, 5].map((n) => `word RUT 3:5!${n}/org`),
+      'qere -',
+      'word RUT 3:5!6/org',
+    ]);
+  });
+
+  it('words: a word address gives that word, both halves where OSHB divides one (1CH 15:13)', async () => {
+    const one = await c.words('WLC', 'GEN 1:1!1');
+    expect(one.words.map((x) => x.strongs[0])).toEqual(['H7225']);
+    const two = await c.words('WLC', 'PSA 51:1/org');
+    expect(two.words.every((x) => x.original)).toBe(true);
+    const divided = await c.words('WLC', '1CH 15:13!2');
+    expect(divided.words.map((x) => [x.address, x.strongs[0], x.original?.owId])).toEqual([
+      ['1CH 15:13!2/org', 'H4100', '13Z5a'],
+      ['1CH 15:13!2/org', 'H7223', '1391p'],
+    ]);
+  });
+
+  it("words: a translation's words have addresses and no Strong's numbers yet", async () => {
+    const w = await c.words('KJV', 'JHN 3:16!1');
+    expect(w.words).toEqual([{ address: 'JHN 3:16!1/kjv', text: 'For', kind: 'word', strongs: [], original: null }]);
+    expect((await c.words('BSB', 'ACT 8:37')).words).toEqual([]);
+    await expect(c.words('KJV', 'JHN 3:16-17')).rejects.toThrow(/range/);
+    await expect(c.words('WLC', 'GEN 1:1/kjv')).rejects.toThrow(/Map it first/);
+    // Brenton prints SIR 6:2 only as 2a and 2b: a word needs the part's letter
+    await expect(c.words('Brenton', 'SIR 6:2!1')).rejects.toThrow(/SIR 6:2a!1/);
+    expect((await c.words('Brenton', 'SIR 6:2a!1')).words.map((x) => x.address)).toEqual(['SIR 6:2a!1/brenton']);
+  });
+
+  it('words: every original word but 2 has a Strong\'s number, and all but 219 read words a gloss', async () => {
+    const { default: Database } = await import('better-sqlite3');
+    const db = new Database(CORPUS, { readonly: true });
+    const rows = db
+      .prepare(
+        `SELECT t.abbrev, count(*) AS words, sum(o.strongs = '') AS none,
+           sum(o.strongs != '' AND o.strongs NOT GLOB '[HG][1-9]*') AS bad,
+           sum(o.gloss IS NULL AND o.kind != 'ketiv') AS unglossed, sum(o.kind = 'qere') AS qere
+         FROM original_word o JOIN translation t ON t.id = o.translation_id GROUP BY t.abbrev ORDER BY t.abbrev`,
+      )
+      .all();
+    db.close();
+    // WLC: 305,495 word tokens, 12 of them two OSHB words, and 1,278 qere words
+    expect(rows).toEqual([
+      { abbrev: 'SBLGNT', words: 137741, none: 2, bad: 0, unglossed: 69, qere: 0 },
+      { abbrev: 'WLC', words: 306785, none: 0, bad: 0, unglossed: 150, qere: 1278 },
+    ]);
+  });
+
   it('rights: a record for each of the seven editions in the corpus', async () => {
     for (const id of ['KJV', 'BSB', 'WLC', 'SBLGNT', 'RP', 'WEB', 'Brenton']) {
       const r = await c.rights(id);
@@ -299,6 +393,13 @@ describe.skipIf(!native)('the app contract on a verse bridge (fixtures/adversari
     });
     w.insertBookRows(db, { translationId, book: 'JHN' }, { docs, verses, blocks, tokens });
     c = corpusContract(db);
+  });
+
+  it('a word address in a bridge counts within the unit, and the bridge\'s own address reads', async () => {
+    const w = await c.words('FIX', 'JHN 1:6!2');
+    expect(w.words).toEqual([{ address: 'JHN 1:5!2/kjv', text: 'bridged', kind: 'word', strongs: [], original: null }]);
+    expect((await c.words('FIX', 'JHN 1:5-6/kjv')).words.map((x) => x.text).slice(0, 2)).toEqual(['A', 'bridged']);
+    await expect(c.words('FIX', 'JHN 1:4-6/kjv')).rejects.toThrow(/range/);
   });
 
   it('both numbers of the bridge find the one unit, with its range', async () => {

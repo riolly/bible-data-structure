@@ -9,7 +9,9 @@ import {
   readChapterDoc,
   readChapterStamp,
   readEdition,
+  readOriginalWords,
   readSchemes,
+  readUnitWords,
   readVerseText,
   readVerseUnit,
   type SyncSqliteDb,
@@ -33,6 +35,8 @@ import type {
   ResolveResult,
   Verse,
   VerseTextResult,
+  Word,
+  WordsResult,
 } from './contract';
 import { parseReference, type BookRange } from './reference';
 import { RIGHTS, type RightsRecord } from './rights';
@@ -267,6 +271,33 @@ export function corpusContract(db: SyncSqliteDb): BibleContract {
     return inOrder(placed).map((p) => p.l);
   }
 
+  /**
+   * A verse unit's words: its original words in WLC and SBLGNT, its word
+   * tokens elsewhere. With `only`, just the written word at that index.
+   */
+  function unitWords(e: EditionStamp, u: Verse, only?: number): Word[] {
+    const at = (wordIndex: number) =>
+      formatAddress({ scheme: e.scheme, start: { book: u.book, chapter: u.chapter, verse: u.verse, segment: u.segment, wordIndex } });
+    const original = readOriginalWords(db, e.id, u.book, u.chapter, u.verse, u.segment);
+    if (original.length > 0) {
+      return original.filter((w) => only === undefined || w.wordIndex === only).map((w) => ({
+        address: w.wordIndex === null ? null : at(w.wordIndex),
+        text: w.text,
+        kind: w.kind,
+        strongs: w.strongs,
+        original: { owId: w.owId, lemma: w.lemma, morph: w.morph, gloss: w.gloss },
+      }));
+    }
+    const tokens = readUnitWords(db, e.id, u.book, u.chapter, u.verse, u.segment);
+    return tokens.filter((t) => only === undefined || t.wordIndex === only).map((t) => ({
+      address: at(t.wordIndex),
+      text: t.text,
+      kind: 'word',
+      strongs: [],
+      original: null,
+    }));
+  }
+
   function schemeById(id: string, call: string): Scheme {
     const s = schemes.get(id);
     if (!s) throw new Error(`${call}: unknown scheme "${id}"`);
@@ -349,6 +380,28 @@ export function corpusContract(db: SyncSqliteDb): BibleContract {
         found = otherSteps(e, a.scheme, [{ r, exists: refExists(s, r) }]);
       }
       return { edition: e, asked: address, found };
+    },
+
+    async words(id, address): Promise<WordsResult> {
+      const e = edition(id);
+      const a = parseAddress(address.includes('/') ? address : `${address}/${e.scheme}`);
+      if (a.scheme !== e.scheme) {
+        throw new Error(`words: "${address}" names scheme ${a.scheme}, but ${e.id} uses ${e.scheme}. Map it first`);
+      }
+      const { wordIndex, ...r } = a.start;
+      const found = lookup(e, r);
+      // a range is allowed only as a bridge's own address, `JHN 1:5-6/kjv`
+      if (a.end && (found.kind !== 'bridge' || formatAddress(a) !== found.address)) {
+        throw new Error(`words: "${address}" is a range`);
+      }
+      // a word number counts within one part (ADR-0004), so a verse printed in parts needs its letter
+      if (wordIndex !== undefined && found.kind === 'parts') {
+        throw new Error(`words: ${found.address} is printed in parts; add the part's letter (${found.parts[0].address.replace(/\/.*/, '')}!${wordIndex + 1})`);
+      }
+      const units = found.kind === 'absent' ? [] : found.kind === 'parts' ? found.parts : [found];
+      // a word number counts within the unit, a bridge's too (ADR-0004 v1.5)
+      const words = units.flatMap((u) => unitWords(e, u, wordIndex));
+      return { edition: e, asked: formatAddress({ scheme: e.scheme, start: a.start }), found, words };
     },
 
     async rights(id): Promise<RightsRecord> {
