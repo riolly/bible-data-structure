@@ -273,6 +273,27 @@ export interface PinnedFile {
 }
 
 /**
+ * MACULA Hebrew's word table (Clear Bible, CC BY 4.0), for the glosses of the
+ * WLC words (plan step 11). One row per morpheme of the read text: a qere
+ * stands in place of its ketiv. Only its `ref`, `text`, `gloss` and `english`
+ * columns are read; the gloss columns are Cherith's glosses (CC BY 4.0). The
+ * SDBH domains, used by MACULA with permission, are never read
+ * (research/licensing.md). The file is in Git LFS, so the URL is GitHub's
+ * media host.
+ */
+export const MACULA_HEBREW: PinnedFile = {
+  id: 'macula-hebrew',
+  url: 'https://media.githubusercontent.com/media/Clear-Bible/macula-hebrew/47db250bd55d0d8577f2a94fba114ef16c35b23c/WLC/tsv/macula-hebrew.tsv',
+  sha256: '965cb0599beed2fe31283b615bcc369178141c0e718a66d97518d94309cfc124',
+  file: 'macula/macula-hebrew.tsv',
+  license: 'CC BY 4.0',
+  attribution:
+    'Glosses from MACULA Hebrew Linguistic Datasets, © 2022-2024 Biblica, Inc., CC BY 4.0, ' +
+    'https://github.com/Clear-Bible/macula-hebrew, with Cherith Glosses for the Hebrew Old Testament ' +
+    'by Andi Wu, © 2022 Cherith Analytics, CC BY 4.0',
+};
+
+/**
  * MACULA Greek's SBLGNT word table (Clear Bible, CC BY 4.0): the Strong's
  * number, lemma, morphology and gloss of each SBLGNT word (plan step 11). Its
  * `gloss` column is the Berean Interlinear Bible's (public domain), and its

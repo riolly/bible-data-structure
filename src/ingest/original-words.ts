@@ -1,7 +1,14 @@
 /**
- * The original words of SBLGNT (ADR-0003 and its step 11 amendment): each
- * word with its source id, lemma, Strong's numbers, morphology and gloss,
- * from MACULA Greek's SBLGNT edition, joined word by word.
+ * The original words of WLC and SBLGNT (ADR-0003 and its step 11 amendment):
+ * each written word, and each qere word, with its source id, lemma, Strong's
+ * number, morphology and gloss.
+ *
+ *   WLC     ids, lemma and morphology from OSHB (oshb-xml.ts), the edition's
+ *           own source. Glosses from MACULA Hebrew, joined verse by verse
+ *           through the read text: MACULA follows the qere, so its words are
+ *           ours with each ketiv replaced by its qere.
+ *   SBLGNT  ids, lemma, Strong's, morphology and glosses from MACULA Greek's
+ *           SBLGNT edition, joined word by word.
  *
  * A join holds only where the words are the same words: the ingest stops on
  * any verse whose word count differs, or any word whose letters differ,
@@ -11,6 +18,7 @@
 import { readFileSync } from 'node:fs';
 
 import type { OriginalWord, Token } from '../model/corpus';
+import type { OshbReading, OshbVerse, OshbWord } from './oshb-xml';
 
 /** A word MACULA's text has where ours differs, accepted as the same word. Each must occur once. */
 export interface MaculaException {
@@ -100,6 +108,24 @@ export function strongKey(lang: 'H' | 'G', raw: string): string | null {
   return m && Number(m[1]) > 0 ? `${lang}${Number(m[1])}` : null;
 }
 
+/**
+ * Strong's numbers for OSHB's prefix letters, for a lemma with no number: a
+ * preposition with a pronoun suffix (`l` in לוֹ, "to him"). The numbers are
+ * MACULA Hebrew's for the same prefixes.
+ */
+const PREFIX_STRONG: Readonly<Record<string, string>> = { b: 'H871', i: 'H1886', k: 'H3509', l: 'H3807', m: 'H4480' };
+
+/**
+ * The main Strong's number of an OSHB lemma: its last part with a number
+ * (`c/d/1004 b` → `H1004`), else its last prefix letter (`c/l` → `H3807`).
+ */
+export function oshbStrong(lemma: string): string | null {
+  const parts = lemma.split('/');
+  const numbered = parts.filter((p) => /^\d/.test(p));
+  if (numbered.length > 0) return strongKey('H', numbered[numbered.length - 1]);
+  return PREFIX_STRONG[parts[parts.length - 1]] ?? null;
+}
+
 /** A MACULA word's gloss: each morpheme's `gloss`, else its `english`, joined. MACULA Hebrew writes `he.created`. */
 export function maculaGloss(w: MaculaWord, lang: 'H' | 'G'): string | null {
   const parts = w.rows
@@ -123,7 +149,7 @@ function wordsByVerse(code: string, tokens: readonly Token[]): Map<string, strin
 }
 
 export interface JoinStats {
-  /** Words with no gloss. */
+  /** Words read as written, or qere words, with no gloss. A ketiv never has one and isn't counted. */
   readonly noGloss: number;
 }
 
@@ -184,6 +210,107 @@ export function greekWords(
 export function checkExceptionsUsed(exceptions: readonly MaculaException[], used: ReadonlySet<string>): void {
   const stale = exceptions.filter((e) => !used.has(e.at));
   if (stale.length > 0) throw new Error(`MACULA exceptions that matched no word: ${stale.map((e) => e.at).join(', ')}`);
+}
+
+/**
+ * WLC's original words for one book: OSHB's written words and qere words, in
+ * read order, with MACULA Hebrew's glosses. Stops when the stored tokens are
+ * not OSHB's words, or MACULA's words are not the read text.
+ */
+export function hebrewWords(
+  code: string,
+  tokens: readonly Token[],
+  verses: readonly OshbVerse[],
+  readings: readonly OshbReading[],
+  macula: ReadonlyMap<string, MaculaWord[]>,
+): { words: OriginalWord[]; stats: JoinStats } {
+  const stored = wordsByVerse(code, tokens);
+  const readingsByVerse = new Map<string, OshbReading[]>();
+  for (const r of readings) {
+    const key = `${code} ${r.chapter}:${r.verse}${r.segment ?? ''}`;
+    (readingsByVerse.get(key) ?? readingsByVerse.set(key, []).get(key)!).push(r);
+  }
+  const out: OriginalWord[] = [];
+  let noGloss = 0;
+  for (const v of verses) {
+    const key = `${code} ${v.chapter}:${v.verse}`;
+    const ours = stored.get(key) ?? [];
+    // the tokens hold OSHB's words: the same count of tokens and the same text
+    const byToken: OshbWord[][] = ours.map(() => []);
+    for (const w of v.words) byToken[w.wordIndex]?.push(w);
+    if (v.words.some((w) => w.wordIndex >= ours.length) || byToken.some((g, i) => g.map((w) => w.text).join('') !== ours[i])) {
+      throw new Error(`${key}: the stored words are not OSHB's words`);
+    }
+
+    // the read text: written words, each ketiv replaced by its qere
+    const rs = (readingsByVerse.get(key) ?? []).sort((a, b) => a.wordIndex - b.wordIndex || a.wordCount - b.wordCount);
+    const read: { w: OshbWord; kind: 'word' | 'qere'; wordIndex: number | null }[] = [];
+    const ketiv = new Set<number>();
+    let i = 0;
+    for (let at = 0; at <= ours.length; at++) {
+      while (i < rs.length && rs[i].wordIndex === at && rs[i].wordCount === 0) {
+        for (const w of rs[i++].qere) read.push({ w, kind: 'qere', wordIndex: null });
+      }
+      if (at === ours.length) break;
+      if (i < rs.length && rs[i].wordIndex === at) {
+        const r = rs[i++];
+        for (let k = at; k < at + r.wordCount; k++) ketiv.add(k);
+        for (const w of r.qere) read.push({ w, kind: 'qere', wordIndex: null });
+        at += r.wordCount - 1;
+        continue;
+      }
+      for (const w of byToken[at]) read.push({ w, kind: 'word', wordIndex: at });
+    }
+    if (i !== rs.length) throw new Error(`${key}: a qere reading falls outside the verse's words`);
+
+    const theirs = macula.get(key) ?? [];
+    if (theirs.length !== read.length) {
+      throw new Error(`${key}: MACULA Hebrew has ${theirs.length} words, the read text ${read.length}`);
+    }
+    const glossOf = new Map<string, string | null>();
+    read.forEach(({ w }, j) => {
+      const m = theirs[j];
+      if (letters(m.text) !== letters(w.text)) {
+        throw new Error(`${key}!${j + 1} (read text): OSHB has "${w.text}", MACULA Hebrew "${m.text}"`);
+      }
+      glossOf.set(w.id, maculaGloss(m, 'H'));
+    });
+
+    // store in read order: each ketiv word in its place, its qere right after it
+    let seq = 0;
+    const push = (w: OshbWord, kind: OriginalWord['kind'], wordIndex: number | null) => {
+      const strong = oshbStrong(w.lemma);
+      if (!strong) throw new Error(`${key}: OSHB word ${w.id} "${w.text}" (lemma ${w.lemma}) has no Strong's number`);
+      const gloss = kind === 'ketiv' ? null : (glossOf.get(w.id) ?? null);
+      if (gloss === null && kind !== 'ketiv') noGloss++;
+      out.push({
+        owId: w.id,
+        book: code,
+        chapter: v.chapter,
+        verse: v.verse,
+        segment: '',
+        wordIndex,
+        seq: seq++,
+        kind,
+        text: w.text,
+        lemma: w.lemma,
+        strongs: [strong],
+        morph: w.morph,
+        gloss,
+      });
+    };
+    let r = 0;
+    for (let at = 0; at <= ours.length; at++) {
+      while (r < rs.length && rs[r].wordIndex === at && rs[r].wordCount === 0) {
+        for (const w of rs[r++].qere) push(w, 'qere', null);
+      }
+      if (at === ours.length) break;
+      for (const w of byToken[at]) push(w, ketiv.has(at) ? 'ketiv' : 'word', at);
+      const ends = r < rs.length && rs[r].wordCount > 0 && rs[r].wordIndex + rs[r].wordCount - 1 === at;
+      if (ends) for (const w of rs[r++].qere) push(w, 'qere', null);
+    }
+  }
+  return { words: out, stats: { noGloss } };
 }
 
 function parseKey(key: string): { chapter: number; verse: number; segment: string } {

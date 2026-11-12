@@ -46,7 +46,7 @@ const XML = `<?xml version="1.0" encoding="UTF-8"?>
 `;
 
 describe('oshbXmlToUsfm', () => {
-  const { usfm, readings } = oshbXmlToUsfm(XML, '1SA');
+  const { usfm, readings, verses } = oshbXmlToUsfm(XML, '1SA');
 
   it('keeps the written text without morpheme breaks, notes or markup', () => {
     expect(usfm.split('\n')).toEqual([
@@ -70,7 +70,7 @@ describe('oshbXmlToUsfm', () => {
 
   it('keys each qere by the range of written words its note follows (ADR-0007)', () => {
     const nfc = (s: string) => s.normalize('NFC');
-    expect(readings.map(({ verseWords, ...r }) => r)).toEqual([
+    expect(readings.map(({ verseWords, qere, ...r }) => r)).toEqual([
       // two written words read as one
       { book: '1SA', chapter: 9, verse: 1, wordIndex: 2, wordCount: 2, kind: 'qere', text: nfc('מִבִּנְיָמִ֗ין'), owIds: ['09EC9'], ketiv: ['מבן', 'ימין'] },
       // read and not written, after the verse's last word
@@ -86,10 +86,45 @@ describe('oshbXmlToUsfm', () => {
     expect(readings[1].verseWords).toEqual(['בִּֽנְהַר'.normalize('NFC')]);
   });
 
+  it('keeps each written word with its OSHB id, lemma and morphology, the ketiv words too (plan step 11)', () => {
+    expect(verses.map((v) => `${v.chapter}:${v.verse} ${v.words.map((w) => `${w.id}=${w.lemma}`).join(' ')}`)).toEqual([
+      '9:1 09wci=c/1961 09MpA=376 09Una=m/1121 a 09jgC=3225 09Ati=c/8034',
+      '9:2 10BJi=b/5104',
+      '10:1 12gsX=5545 12yBx=4994 05WH5=8085 24PtS=d/5211 24Vrx=m/6440',
+    ]);
+    // the text is the word token's: no morpheme breaks, large letters kept
+    expect(verses[0].words[0]).toEqual({ id: '09wci', lemma: 'c/1961', morph: 'HC/Vqw3ms', text: 'וַֽיְהִי'.normalize('NFC'), wordIndex: 0 });
+    expect(verses[2].words[2].text).toBe('שְׁמַ֖ע'.normalize('NFC'));
+    expect(verses[0].words.map((w) => w.wordIndex)).toEqual([0, 1, 2, 3, 4]);
+  });
+
+  it('puts two <w> with nothing between them in one word token (1CH 15:13)', () => {
+    const xml = `<div type="book" osisID="1Chr"><chapter osisID="1Chr.15"><verse osisID="1Chr.15.13">
+      <w lemma="3588 a" morph="HC" id="13pus">כִּ֛י</w>
+      <w lemma="l/4100" morph="HR/Ti" id="13Z5a">לְ/מַ</w><w lemma="b/7223" morph="HRd/Aafsa" id="1391p">בָּ/רִ֥אשׁוֹנָ֖ה</w>
+      <note type="exegesis">A single word in the text has been divided for exegesis.</note>
+      <w lemma="3808" morph="HTn" id="13N2d">לֹ֣א</w></verse></chapter></div></osisText>`;
+    const { usfm, verses: [v] } = oshbXmlToUsfm(xml, '1CH');
+    expect(usfm).toContain('\\v 13 כִּ֛י לְמַבָּרִ֥אשׁוֹנָ֖ה לֹ֣א');
+    expect(v.words.map((w) => `${w.wordIndex}:${w.id}`)).toEqual(['0:13pus', '1:13Z5a', '1:1391p', '2:13N2d']);
+  });
+
+  it('keeps the words of each qere with their lemma and morphology', () => {
+    expect(readings.map((r) => r.qere.map((w) => `${w.id}=${w.lemma}:${w.morph}`))).toEqual([
+      ['09EC9=m/1144:HR/Np'],
+      ['10dp9=6578:HNp'],
+      [],
+      ['24Rwm=d/5127:HTd/Vqrmsa'],
+    ]);
+  });
+
   it('rejects a ketiv with no qere note, and markup it does not know', () => {
     const wrap = (verse: string) => `<div type="book" osisID="Gen"><chapter osisID="Gen.1"><verse osisID="Gen.1.1">${verse}</verse></chapter></div></osisText>`;
-    expect(() => oshbXmlToUsfm(wrap('<w type="x-ketiv" id="a">הוצא</w>'), 'GEN')).toThrow(/ketiv with no qere/);
-    expect(() => oshbXmlToUsfm(wrap('<w type="x-ketiv" id="a">הוצא</w> <w id="b">אִתָּ֑ךְ</w>'), 'GEN')).toThrow(/ketiv with no qere/);
+    const w = (id: string, text: string, ketiv = '') => `<w${ketiv} lemma="1" morph="HNp" id="${id}">${text}</w>`;
+    expect(() => oshbXmlToUsfm(wrap(w('a', 'הוצא', ' type="x-ketiv"')), 'GEN')).toThrow(/ketiv with no qere/);
+    expect(() => oshbXmlToUsfm(wrap(`${w('a', 'הוצא', ' type="x-ketiv"')} ${w('b', 'אִתָּ֑ךְ')}`), 'GEN')).toThrow(/ketiv with no qere/);
+    expect(() => oshbXmlToUsfm(wrap('<w id="a">הוצא</w>'), 'GEN')).toThrow(/without an id, lemma or morph/);
+    expect(() => oshbXmlToUsfm(wrap(w('a', 'אִתָּ ךְ')), 'GEN')).toThrow(/is not one word token/);
     expect(() => oshbXmlToUsfm(wrap('<seg type="x-new">*</seg>'), 'GEN')).toThrow(/unknown <seg/);
     expect(() => oshbXmlToUsfm(wrap('stray'), 'GEN')).toThrow(/outside an element/);
   });
@@ -102,7 +137,7 @@ describe('checkReadings', () => {
     texts.map((text, i) => ({ chapter: 8, verse: 17, segment: '', wordIndex: i, text, kind: 'word' }) as Token);
   const reading = (r: Partial<OshbReading>): OshbReading => ({
     book: 'GEN', chapter: 8, verse: 17, wordIndex: 2, wordCount: 1, kind: 'qere', text: 'הַיְצֵ֣א', owIds: ['01S7t'],
-    ketiv: ['הוצא'], verseWords: words, ...r,
+    ketiv: ['הוצא'], verseWords: words, qere: [], ...r,
   });
 
   it('passes a reading on the words it was converted from', () => {

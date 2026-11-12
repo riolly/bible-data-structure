@@ -15,8 +15,10 @@
  *   other <note>               → dropped (OSHB's textual and accent notes)
  *   <chapter>                  → \c, then one \p, as in ebible's copy
  *
- * Lemma and morphology attributes are dropped (OSHB data, CC BY 4.0). Only the
- * qere words' `id`s are kept, as the ids an alignment points at (ADR-0003).
+ * Each word's `id`, lemma and morphology (OSHB data, CC BY 4.0) are returned
+ * beside the text as `OshbWord`s, written words and qere words alike. They are
+ * the Hebrew original words (ADR-0003, plan step 11), and the ids are what an
+ * alignment points at.
  */
 
 import type { Reading, Token } from '../model/corpus';
@@ -28,8 +30,40 @@ export const OSHB_BOOKS: Readonly<Record<string, string>> = Object.fromEntries(
   OSIS_BOOKS.slice(0, OSIS_BOOKS.findIndex(([, usfm]) => usfm === 'MAL') + 1),
 );
 
+/** One OSHB `<w>`: a written word of a verse, or a word of a qere. */
+export interface OshbWord {
+  /** OSHB's word id (`09wci`): the Original Word's `ow_id` (ADR-0003). */
+  readonly id: string;
+  /** OSHB's lemma: Strong's numbers and prefix letters, `/` between morphemes (`c/1961`, `834 a`). */
+  readonly lemma: string;
+  /** OSHB's morphology code, `/` between morphemes (`HC/Vqw3ms`). */
+  readonly morph: string;
+  /** The word as tokenized: NFC, without morpheme breaks. */
+  readonly text: string;
+}
+
+/** A written OSHB word and the word token it is in. */
+export interface OshbWrittenWord extends OshbWord {
+  /**
+   * The index of the word token it is in. Two `<w>` with nothing between them
+   * are one written word that OSHB divides for exegesis (`לְ/מַ` + `בָּ/רִ֥אשׁוֹנָ֖ה`
+   * in 1CH 15:13), so they share an index.
+   */
+  readonly wordIndex: number;
+}
+
+/** A verse's written OSHB words, in order: each word token holds one or, rarely, two. */
+export interface OshbVerse {
+  readonly book: string;
+  readonly chapter: number;
+  readonly verse: number;
+  readonly words: readonly OshbWrittenWord[];
+}
+
 /** A qere reading as the converter finds it, before it is checked against the stored tokens. */
 export interface OshbReading extends Reading {
+  /** The reading's words with their lemma and morphology, in order. Their ids are `owIds`. */
+  readonly qere: readonly OshbWord[];
   /** The ketiv words the reading covers, tokenized as the verse is. Checked against the tokens, not stored. */
   readonly ketiv: readonly string[];
   /** Every written word of the reading's verse, as the converter tokenized it. Checked against the tokens, not stored. */
@@ -63,16 +97,53 @@ const words = (text: string) =>
     .filter((t) => t.kind === 'word')
     .map((t) => t.text);
 
-const ATTR = { type: /\btype="([^"]*)"/, id: /\bid="([^"]*)"/ } as const;
+const ATTR = {
+  type: /\btype="([^"]*)"/,
+  id: /\bid="([^"]*)"/,
+  lemma: /\blemma="([^"]*)"/,
+  morph: /\bmorph="([^"]*)"/,
+} as const;
 const attr = (attrs: string, name: keyof typeof ATTR) => ATTR[name].exec(attrs)?.[1];
 
+/** Letters and their marks only: one word token under ADR-0004 rule 1, without running the tokenizer. */
+const ONE_WORD = /^\p{L}[\p{L}\p{M}]*$/u;
+
+/** A `<w>` as an OshbWord. Its text must be one word token, or word indexes would drift from the tokens. */
+function oshbWord(attrs: string, text: string, where: string): OshbWord {
+  const [id, lemma, morph] = [attr(attrs, 'id'), attr(attrs, 'lemma'), attr(attrs, 'morph')];
+  if (!id || !lemma || !morph) throw new Error(`${where}: a word without an id, lemma or morph: ${text}`);
+  const nfc = text.normalize('NFC');
+  if (!ONE_WORD.test(nfc)) throw new Error(`${where}: word ${id} "${text}" is not one word token`);
+  return { id, lemma, morph, text: nfc };
+}
+
+/**
+ * Written words grouped by token, each group given its token's index. Checked
+ * against the verse's own tokenization when there is one (a verse with a
+ * qere); the ingest checks every verse against the stored tokens
+ * (original-words.ts).
+ */
+function placeWritten(groups: readonly OshbWord[][], verseWords: readonly string[] | null, where: string): OshbWrittenWord[] {
+  if (verseWords) {
+    const joined = groups.map((g) => (g.length === 1 ? g[0].text : g.map((w) => w.text).join('').normalize('NFC')));
+    if (joined.length !== verseWords.length || joined.some((w, i) => w !== verseWords[i])) {
+      throw new Error(`${where}: the verse's words are not its <w> elements`);
+    }
+  }
+  return groups.flatMap((g, wordIndex) => g.map((w) => ({ ...w, wordIndex })));
+}
+
 /** One book's OSIS XML → `\c`/`\p`/`\v` USFM and the readings of its ketiv/qere notes. */
-export function oshbXmlToUsfm(xml: string, code: string): { usfm: string; readings: OshbReading[] } {
+export function oshbXmlToUsfm(
+  xml: string,
+  code: string,
+): { usfm: string; readings: OshbReading[]; verses: OshbVerse[] } {
   const start = xml.indexOf('<div type="book"');
   const end = xml.lastIndexOf('</osisText>');
   if (start < 0 || end < 0) throw new Error(`${code}: no <div type="book"> in the OSIS file`);
   const out: string[] = [`\\id ${code} Westminster Leningrad Codex, from the upstream OSHB XML`];
   const readings: OshbReading[] = [];
+  const verses: OshbVerse[] = [];
   for (const m of xml.slice(start, end).matchAll(BOOK_ITEM)) {
     const [, chapter, c, v, body, stray] = m;
     if (stray) throw new Error(`${code}: text outside a verse near "${xml.slice(start + m.index, start + m.index + 40)}"`);
@@ -81,16 +152,21 @@ export function oshbXmlToUsfm(xml: string, code: string): { usfm: string; readin
       const verse = convertVerse(body, `${code} ${c}:${v}`);
       out.push(`\\v ${Number(v)} ${verse.text}`);
       for (const r of verse.readings) readings.push({ book: code, chapter: Number(c), verse: Number(v), ...r });
+      verses.push({ book: code, chapter: Number(c), verse: Number(v), words: verse.words });
     }
   }
-  return { usfm: out.join('\n') + '\n', readings };
+  return { usfm: out.join('\n') + '\n', readings, verses };
 }
 
 type VerseReading = Omit<OshbReading, 'book' | 'chapter' | 'verse'>;
 
-function convertVerse(body: string, where: string): { text: string; readings: VerseReading[] } {
+function convertVerse(body: string, where: string): { text: string; readings: VerseReading[]; words: OshbWrittenWord[] } {
   let text = '';
   const readings: VerseReading[] = [];
+  /** Written words, one group per word token. */
+  const written: OshbWord[][] = [];
+  /** Where the last `<w>` ended: a `<w>` that starts there joins its word. */
+  let wordEnd = -1;
   /** Word index where the open run of ketiv words starts. */
   let ketivStart: number | null = null;
   /** The words before each reading, to check against the whole verse's words at the end. */
@@ -104,6 +180,10 @@ function convertVerse(body: string, where: string): { text: string; readings: Ve
       if (ketivStart !== null) ketivText += ' ';
     } else if (w !== undefined) {
       const t = wordText(w, where);
+      const word = oshbWord(wAttrs, t, where);
+      if (m.index === wordEnd) written[written.length - 1].push(word);
+      else written.push([word]);
+      wordEnd = m.index + m[0].length;
       if (attr(wAttrs, 'type') === 'x-ketiv') {
         if (ketivStart === null) {
           before.push(words(text));
@@ -143,16 +223,23 @@ function convertVerse(body: string, where: string): { text: string; readings: Ve
     } // other notes are dropped, also between a ketiv and its qere (JER 48:44)
   }
   if (ketivStart !== null) throw new Error(`${where}: a ketiv with no qere note`);
-  if (readings.length === 0) return { text: text.replace(/\s+/g, ' ').trim(), readings };
+  if (readings.length === 0) {
+    return { text: text.replace(/\s+/g, ' ').trim(), readings, words: placeWritten(written, null, where) };
+  }
   // A word count taken mid-verse must agree with the whole verse's tokenization.
   const verseWords = words(text);
+  const placed = placeWritten(written, verseWords, where);
   for (const [i, r] of readings.entries()) {
     const covered = verseWords.slice(r.wordIndex, r.wordIndex + r.wordCount);
     if (before[i].join(' ') !== verseWords.slice(0, r.wordIndex).join(' ') || covered.join(' ') !== r.ketiv.join(' ')) {
       throw new Error(`${where}: reading ${i + 1} does not fall on word boundaries of the verse`);
     }
   }
-  return { text: text.replace(/\s+/g, ' ').trim(), readings: readings.map((r) => ({ ...r, verseWords })) };
+  return {
+    text: text.replace(/\s+/g, ' ').trim(),
+    readings: readings.map((r) => ({ ...r, verseWords })),
+    words: placed,
+  };
 }
 
 /**
@@ -189,8 +276,8 @@ export function checkReadings(code: string, readings: readonly OshbReading[], to
   }
 }
 
-/** The qere of a `<note type="variant">`: its pointed text and the ids of its words. */
-function qere(note: string, where: string): { text: string; owIds: readonly string[] } {
+/** The qere of a `<note type="variant">`: its pointed text, its words and their ids. */
+function qere(note: string, where: string): { text: string; owIds: readonly string[]; qere: readonly OshbWord[] } {
   const rdg = /<rdg type="x-qere"(?:\/>|>([\s\S]*?)<\/rdg>)/.exec(note);
   if (!rdg) throw new Error(`${where}: a variant note without a qere`);
   if (note.replace(/<catchWord>[^<]*<\/catchWord>/, '').replace(rdg[0], '').trim()) {
@@ -198,6 +285,7 @@ function qere(note: string, where: string): { text: string; owIds: readonly stri
   }
   let text = '';
   const owIds: string[] = [];
+  const qereWords: OshbWord[] = [];
   for (const m of (rdg[1] ?? '').matchAll(RDG_ITEM)) {
     const [, wAttrs, w, segType, seg, space, stray] = m;
     if (stray) throw new Error(`${where}: text outside an element in a qere near "${(rdg[1] ?? '').slice(m.index, m.index + 40)}"`);
@@ -206,9 +294,11 @@ function qere(note: string, where: string): { text: string; owIds: readonly stri
       const id = attr(wAttrs, 'id');
       if (!id) throw new Error(`${where}: a qere word without an id`);
       owIds.push(id);
-      text += wordText(w, where);
+      const t = wordText(w, where);
+      qereWords.push(oshbWord(wAttrs, t, where));
+      text += t;
     } else if (SEG_TEXT[segType] !== undefined && seg === SEG_TEXT[segType]) text += seg;
     else throw new Error(`${where}: unknown <seg type="${segType}"> in a qere`);
   }
-  return { text: text.replace(/\s+/g, ' ').trim().normalize('NFC'), owIds };
+  return { text: text.replace(/\s+/g, ' ').trim().normalize('NFC'), owIds, qere: qereWords };
 }
