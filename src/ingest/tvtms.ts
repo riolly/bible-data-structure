@@ -21,7 +21,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { BOOK_BY_CODE } from '../model/books';
-import type { Block, Token } from '../model/corpus';
+import type { Block, Token, VerseText } from '../model/corpus';
 import { PROTESTANT, canonBookCodes } from '../model/canon';
 import { Relation, parseRefKey, refKey, type MappingRow, type Ref } from '../model/mapping';
 import { lastVerse, type Scheme } from '../model/scheme';
@@ -188,10 +188,11 @@ export interface EditionText {
   readonly edition: string;
   readonly books: ReadonlySet<string>;
   /**
-   * Word tokens per verse, keyed `BOOK c:v`. A verse that isn't here has 0,
-   * and so does the second verse of a bridge, whose words carry its first
-   * number (ADR-0004 v1.5). No tested
-   * verse is in a bridge in the pinned editions (research/tvtms-text-tests.md).
+   * Word tokens per verse, keyed `BOOK c:v`. A verse that isn't here has 0.
+   * A bridge's words count under every number it holds (`\v 20-21` gives 20
+   * and 21 the same count), so a test of its later number sees its text. No
+   * tested verse is in a bridge in the pinned editions
+   * (research/tvtms-text-tests.md).
    */
   readonly words: ReadonlyMap<string, number>;
   /** Chapters with a psalm title before verse 1, keyed `BOOK c`. */
@@ -206,13 +207,15 @@ export function editionText(edition: string) {
 /**
  * Add one book's tokens to an edition's text facts. A psalm title counts as
  * text before verse 1 when its block comes before the chapter's first verse-1
- * token. Section headings are not canonical text and don't count.
+ * token. Section headings are not canonical text and don't count. `verses`
+ * gives each bridge, whose count is copied to its later numbers.
  */
 export function addBookText(
   into: ReturnType<typeof editionText>,
   book: string,
   blocks: readonly Block[],
   tokens: readonly Token[],
+  verses: readonly Omit<VerseText, 'text'>[],
 ): void {
   into.books.add(book);
   const firstVerse1 = new Map<number, number>();
@@ -224,10 +227,15 @@ export function addBookText(
     }
     if (t.verse === 1 && !firstVerse1.has(t.chapter)) firstVerse1.set(t.chapter, t.seq);
   }
+  for (const u of verses) {
+    const n = into.words.get(`${book} ${u.chapter}:${u.verse}`);
+    if (n === undefined || u.segment) continue;
+    for (let v = u.verse + 1; v <= u.lastVerse; v++) into.words.set(`${book} ${u.chapter}:${v}`, n);
+  }
   const marker = new Map(blocks.map((b) => [b.id, b.marker]));
   for (const t of tokens) {
-    // a title is unnumbered (NULL) or verse 0 where the scheme numbers it so
-    if ((t.verse !== null && t.verse !== 0) || marker.get(t.blockId) !== 'd') continue;
+    // a title is verse 0 where the scheme numbers it so, or else an unnumbered \d
+    if (t.verse !== 0 && (t.verse !== null || marker.get(t.blockId) !== 'd')) continue;
     if (t.seq < (firstVerse1.get(t.chapter) ?? Infinity)) into.titled.add(`${book} ${t.chapter}`);
   }
 }

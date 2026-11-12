@@ -153,7 +153,7 @@ async function main() {
           const bookReadings = readings.filter((r) => r.book === file.code);
           checkReadings(file.code, bookReadings, tokens);
           insertReadings(db, translationId, 'oshb', bookReadings);
-          addBookText(text, file.code, blocks, tokens);
+          addBookText(text, file.code, blocks, tokens, verses);
           words.add(file.code, tokens, verses);
           addStats(totals, stats);
           blockCount += blocks.length;

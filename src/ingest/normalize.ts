@@ -179,6 +179,12 @@ export interface NormalizeOptions {
    * option every verse marker gets a row.
    */
   readonly hasVerse?: (chapter: number, verse: number) => boolean;
+  /**
+   * Whether a paragraph is a Psalm title. Default: a `\d` paragraph. NASB 1995
+   * on API.Bible prints its titles as `\ms`, after an `\ms PSALM 3` line
+   * (research/api-bible.md), so its provider passes its own test.
+   */
+  readonly isTitle?: (para: RawUsjElement) => boolean;
 }
 
 /** Normalize one book's USJ: split it into chapter documents and derive from those. */
@@ -397,7 +403,7 @@ export function normalizeChapters(docs: readonly RawChapterDoc[], opts: Normaliz
           pendingMarker = { marker, genre };
           inHeading = genre === 'heading';
           headingVerse = null; // a heading starts unversed — no inheritance
-          if (marker === 'd' && verse === null && opts.titleChapters?.has(chapter)) {
+          if ((opts.isTitle ? opts.isTitle(node) : marker === 'd') && verse === null && opts.titleChapters?.has(chapter)) {
             headingVerse = 0; // the scheme numbers this title as verse 0
             // A title printed as several \d paragraphs is one verse 0: later
             // ones continue its text and its word indexes.

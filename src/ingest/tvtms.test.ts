@@ -178,7 +178,7 @@ describe('addBookText', () => {
     const into = editionText('E');
     addBookText(into, 'PSA', [block(0, 's1'), block(1, 'd'), block(2, 'p')], [
       token(0, null, 0), token(1, null, 1), token(2, 1, 2), token(2, 1, 3), token(2, 1, 4, 'punct'), token(2, 2, 5),
-    ]);
+    ], []);
     expect([...into.words]).toEqual([['PSA 3:1', 2], ['PSA 3:2', 1]]);
     expect([...into.titled]).toEqual(['PSA 3']);
     expect([...into.books]).toEqual(['PSA']);
@@ -186,8 +186,15 @@ describe('addBookText', () => {
 
   it('does not count a section heading, or a title numbered as verse 1', () => {
     const into = editionText('E');
-    addBookText(into, 'PSA', [block(0, 's1'), block(1, 'd')], [token(0, null, 0), token(1, 1, 1)]);
+    addBookText(into, 'PSA', [block(0, 's1'), block(1, 'd')], [token(0, null, 0), token(1, 1, 1)], []);
     expect(into.titled.size).toBe(0);
+  });
+
+  it("counts a bridge's words under every number it holds", () => {
+    const into = editionText('E');
+    const unit = (verse: number, lastVerse: number) => ({ chapter: 3, verse, lastVerse, segment: '' });
+    addBookText(into, 'NUM', [block(0, 'p')], [token(0, 20, 0), token(0, 20, 1), token(0, 22, 2)], [unit(20, 21), unit(22, 22)]);
+    expect([...into.words]).toEqual([['NUM 3:20', 2], ['NUM 3:22', 1], ['NUM 3:21', 2]]);
   });
 });
 
