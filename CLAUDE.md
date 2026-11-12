@@ -28,7 +28,7 @@ Model the Bible as it is, independent of any app. A model feature lands when a c
 - **A book's id is its USFM code** (ADR-0002). Names and slugs are display data.
 - **Outside references point at addresses or external `ow_id`s, never at row ids.** Row ids are rebuilt on every ingest.
 - **A failing tokenizer test is an address migration, not a test to update** (ADR-0004). Don't change `src/ingest/tokenize.ts` rules without an ADR amendment.
-- **A text source is pinned by its edition stamp, and changing the pin is a new edition** (ADR-0005 amendment, step 6). A rebuilt zip that gives the pinned stamp passes. A changed stamp stops `ingest:download`. Never update `edition` in `SOURCES` (`src/ingest/sources.ts`) to make the download pass without recording the new edition in README.md and uploading its zip to the mirror release. Updating the `TVTMS` pin can change mapping rows: compare `build/mapping-diff.tsv` before and after, and the pivot check must pass.
+- **A text source is pinned by its edition stamp, and changing the pin is a new edition** (ADR-0005 amendment, step 6). A rebuilt zip that gives the pinned stamp passes. A changed stamp stops `ingest:download`. Never update `edition` in `SOURCES` (`src/ingest/sources.ts`) to make the download pass without recording the new edition in README.md and uploading its zip to the mirror release. Updating the `TVTMS` pin can change mapping rows: compare `build/mapping-diff.tsv` before and after, and the pivot check must pass. It also needs `bun run api-bible:facts` for each licensed edition, or the ingest stops.
 - **Licensing before bundling.** Check that a source can be redistributed before any output that leaves this machine includes it.
 
 ## Where things go

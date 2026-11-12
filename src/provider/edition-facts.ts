@@ -12,13 +12,16 @@ import { join } from 'node:path';
 
 import { normalizeChapters, splitChapters, type NormalizeOptions } from '../ingest/normalize';
 import { addBookText, editionText, editionTextSnapshot, type EditionText, type TvtmsRow } from '../ingest/tvtms';
+import { TVTMS } from '../ingest/sources';
 import { API_BIBLE_EDITIONS, adaptApiBibleContent, type ApiBibleNode } from './api-bible';
 
 export interface EditionFacts {
   readonly edition: string;
   readonly bibleId: string;
-  /** The day the passages were fetched. */
+  /** The day the oldest passage was fetched. */
   readonly fetched: string;
+  /** The sha256 of the TVTMS file whose tests named the verses in `words` (`TVTMS.sha256`). */
+  readonly tvtms: string;
   /** Per book, the last verse number each chapter prints, chapter 1 first. */
   readonly lastVerses: Readonly<Record<string, readonly number[]>>;
   /** Verse units that hold several numbers: `NUM 1:20-21`. */
@@ -43,7 +46,7 @@ export interface BookContent {
 
 /** The facts of an edition from every book's content. `tvtms` names the verses whose words are kept. */
 export function editionFacts(
-  meta: { edition: string; bibleId: string; fetched: string },
+  meta: { edition: string; bibleId: string; fetched: string; tvtms: string },
   isTitle: NormalizeOptions['isTitle'],
   books: readonly BookContent[],
   tvtms: readonly TvtmsRow[],
@@ -88,20 +91,33 @@ export function editionFacts(
 
 /** The facts as TVTMS's text tests read an edition. */
 export function factsText(facts: EditionFacts): EditionText {
+  const unitOf = new Map<string, string>();
+  for (const b of facts.bridges) {
+    const [, book, c, first, last] = /^(\S+) (\d+):(\d+)-(\d+)$/.exec(b)!;
+    for (let v = Number(first) + 1; v <= Number(last); v++) unitOf.set(`${book} ${c}:${v}`, `${book} ${c}:${first}`);
+  }
   return {
     edition: facts.edition,
     books: new Set(Object.keys(facts.lastVerses)),
     words: new Map(Object.entries(facts.words)),
     titled: new Set(facts.titled),
+    unitOf,
   };
 }
 
 export const FACTS_DIR = join(import.meta.dirname, 'facts');
 
-/** The committed facts of every API.Bible edition, with its scheme. */
+/**
+ * The committed facts of every API.Bible edition, with its scheme. Stops when
+ * the facts name verses for another TVTMS than the pinned one: rerun
+ * `bun run api-bible:facts` after a TVTMS update.
+ */
 export function loadEditionFacts(): { scheme: string; facts: EditionFacts }[] {
-  return [...API_BIBLE_EDITIONS].map(([edition, e]) => ({
-    scheme: e.scheme,
-    facts: JSON.parse(readFileSync(join(FACTS_DIR, `${edition}.json`), 'utf8')) as EditionFacts,
-  }));
+  return [...API_BIBLE_EDITIONS].map(([edition, e]) => {
+    const facts = JSON.parse(readFileSync(join(FACTS_DIR, `${edition}.json`), 'utf8')) as EditionFacts;
+    if (facts.tvtms !== TVTMS.sha256) {
+      throw new Error(`${edition}: facts were collected for TVTMS ${facts.tvtms}, not the pinned ${TVTMS.sha256}: run \`bun run api-bible:facts ${edition}\``);
+    }
+    return { scheme: e.scheme, facts };
+  });
 }

@@ -2,6 +2,7 @@
  "edition": "NLT",
  "bibleId": "d6e14a625393b4da-01",
  "fetched": "2026-11-12",
+ "tvtms": "c42cdfec1ae82d3e0c7e2f6a89d73bbed28ede4cf3fe18d5582626881e8d5c78",
  "lastVerses": {
   "GEN": [
    31,
@@ -1579,7 +1580,6 @@
   "para:qm1": 24,
   "para:qm2": 28,
   "char:fv": 16,
-  "top:table": 17,
   "tag:table": 17,
   "tag:row": 176,
   "tag:cell": 368,

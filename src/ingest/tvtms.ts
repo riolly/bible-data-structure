@@ -197,11 +197,23 @@ export interface EditionText {
   readonly words: ReadonlyMap<string, number>;
   /** Chapters with a psalm title before verse 1, keyed `BOOK c`. */
   readonly titled: ReadonlySet<string>;
+  /**
+   * A bridge's later numbers, keyed `BOOK c:v`, each with the key of the
+   * bridge's first number. A test side that names two numbers of one bridge
+   * counts its words once.
+   */
+  readonly unitOf?: ReadonlyMap<string, string>;
 }
 
 /** An empty EditionText for addBookText to fill. */
 export function editionText(edition: string) {
-  return { edition, books: new Set<string>(), words: new Map<string, number>(), titled: new Set<string>() };
+  return {
+    edition,
+    books: new Set<string>(),
+    words: new Map<string, number>(),
+    titled: new Set<string>(),
+    unitOf: new Map<string, string>(),
+  };
 }
 
 /**
@@ -230,7 +242,10 @@ export function addBookText(
   for (const u of verses) {
     const n = into.words.get(`${book} ${u.chapter}:${u.verse}`);
     if (n === undefined || u.segment) continue;
-    for (let v = u.verse + 1; v <= u.lastVerse; v++) into.words.set(`${book} ${u.chapter}:${v}`, n);
+    for (let v = u.verse + 1; v <= u.lastVerse; v++) {
+      into.words.set(`${book} ${u.chapter}:${v}`, n);
+      into.unitOf.set(`${book} ${u.chapter}:${v}`, `${book} ${u.chapter}:${u.verse}`);
+    }
   }
   const marker = new Map(blocks.map((b) => [b.id, b.marker]));
   for (const t of tokens) {
@@ -262,12 +277,18 @@ function bookOrNull(abbr: string): string | null {
 /** A word test side such as `Mal.3:22+Mal.3:24` or `1Ki.10:21*2`; null when the edition lacks a book. */
 function wordSide(side: string, text: EditionText): number | null {
   let n = 0;
+  const units = new Set<string>();
   for (const term of side.split('+')) {
     const m = WORD_TERM_RE.exec(term.trim());
     if (!m) throw new Error(`TVTMS: unreadable word test side "${side}"`);
     const book = bookOrNull(m[1]);
     if (book === null || !text.books.has(book)) return null;
-    n += (text.words.get(`${book} ${m[2]}:${m[3]}`) ?? 0) * Number(m[4] ?? 1);
+    const key = `${book} ${m[2]}:${m[3]}`;
+    // a bridge's words count once per side, however many of its numbers the side names
+    const unit = text.unitOf?.get(key) ?? key;
+    if (units.has(unit)) continue;
+    units.add(unit);
+    n += (text.words.get(key) ?? 0) * Number(m[4] ?? 1);
   }
   return n;
 }

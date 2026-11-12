@@ -13,7 +13,7 @@ const para = (style: string, items: ApiBibleNode[]) => tag('para', { style }, it
 const tvtms = [
   { tests: 'Num.1:21>Psa.3:1 & Psa.3:TextBeforeV1=Exist' },
 ] as unknown as Parameters<typeof editionFacts>[3];
-const meta = { edition: 'T', bibleId: 'x', fetched: '2026-11-12' };
+const meta = { edition: 'T', bibleId: 'x', fetched: '2026-11-12', tvtms: 'sha' };
 
 describe('editionFacts: counts, never text', () => {
   // Numbers 1 arrives in two passages, the second starting mid-paragraph at verse 22.
@@ -55,6 +55,7 @@ describe('editionFacts: counts, never text', () => {
     const facts = editionFacts(meta, undefined, books, tvtms);
     expect(facts.words).toEqual({ 'NUM 1:21': 4, 'PSA 3:1': 2 });
     expect(factsText(facts).words.get('NUM 1:21')).toBe(4);
+    expect([...factsText(facts).unitOf!]).toEqual([['NUM 1:21', 'NUM 1:20']]);
   });
 
   it("finds a title only by the edition's own test: NASB's \\ms under its PSALM line", () => {

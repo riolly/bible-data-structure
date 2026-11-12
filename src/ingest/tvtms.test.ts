@@ -195,6 +195,8 @@ describe('addBookText', () => {
     const unit = (verse: number, lastVerse: number) => ({ chapter: 3, verse, lastVerse, segment: '' });
     addBookText(into, 'NUM', [block(0, 'p')], [token(0, 20, 0), token(0, 20, 1), token(0, 22, 2)], [unit(20, 21), unit(22, 22)]);
     expect([...into.words]).toEqual([['NUM 3:20', 2], ['NUM 3:22', 1], ['NUM 3:21', 2]]);
+    // a side naming both numbers of the bridge counts its 2 words once: 2 < 3, not 4 < 3
+    expect(evaluateTextTest('Num.3:20+Num.3:21<Num.3:22*3', into)).toBe(true);
   });
 });
 
