@@ -14,11 +14,11 @@ import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
 
 import { BOOKS, ENGLISH_NAMES, USFM_SPEC_URL } from '../model/books';
 import { CANONS } from '../model/canon';
-import type { Block, ChapterDoc, Reading, Token, VerseText } from '../model/corpus';
+import type { Block, ChapterDoc, OriginalWord, Reading, Token, VerseText } from '../model/corpus';
 import { PIVOT, type MappingRow } from '../model/mapping';
 import { chapterStamp } from './edition';
 import { LIBPALASO_URL } from './schemes';
-import { OSHB, TVTMS } from './sources';
+import { MACULA_GREEK, OSHB, TVTMS } from './sources';
 import { WORD_TEST_MARGIN } from './tvtms';
 import type { Scheme } from '../model/scheme';
 import * as schema from '../db/corpus-schema';
@@ -171,6 +171,25 @@ CREATE TABLE reading (
   source TEXT NOT NULL REFERENCES data_source(id),
   PRIMARY KEY (translation_id, book, chapter, verse, segment, word_index, word_count)
 );
+CREATE TABLE original_word (
+  source TEXT NOT NULL REFERENCES data_source(id),
+  ow_id TEXT NOT NULL,
+  translation_id INTEGER NOT NULL REFERENCES translation(id),
+  book TEXT NOT NULL REFERENCES book(code),
+  chapter INTEGER NOT NULL,
+  verse INTEGER NOT NULL,
+  segment TEXT NOT NULL DEFAULT '',
+  seq INTEGER NOT NULL,
+  word_index INTEGER,
+  kind TEXT NOT NULL,
+  text TEXT NOT NULL,
+  lemma TEXT NOT NULL,
+  strongs TEXT NOT NULL,
+  morph TEXT NOT NULL,
+  gloss TEXT,
+  PRIMARY KEY (source, ow_id)
+);
+CREATE UNIQUE INDEX original_word_verse ON original_word (translation_id, book, chapter, verse, segment, seq);
 CREATE TABLE scheme_segment (
   scheme TEXT NOT NULL REFERENCES scheme(id),
   book TEXT NOT NULL REFERENCES book(code),
@@ -420,6 +439,19 @@ export function insertReadings(db: CorpusDb, translationId: number, source: stri
   }
 }
 
+/** Write one book's original words (plan step 11), with `source` naming whose ids they are. */
+export function insertOriginalWords(db: CorpusDb, translationId: number, source: string, words: readonly OriginalWord[]): void {
+  const sqlite = (db as unknown as { $client: Database.Database }).$client;
+  const stmt = sqlite.prepare(
+    `INSERT INTO original_word (source, ow_id, translation_id, book, chapter, verse, segment, seq, word_index, kind,
+       text, lemma, strongs, morph, gloss) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  );
+  for (const w of words) {
+    stmt.run(source, w.owId, translationId, w.book, w.chapter, w.verse, w.segment, w.seq, w.wordIndex, w.kind, w.text,
+      w.lemma, w.strongs.join(' '), w.morph, w.gloss);
+  }
+}
+
 /** Where seeded data came from, with attribution and a note of changes. */
 export const DATA_SOURCES = [
   {
@@ -453,6 +485,17 @@ export const DATA_SOURCES = [
     changes:
       'Only the word ids of qere readings are kept (reading.ow_ids); lemma, morphology and notes are dropped. ' +
       'The WLC text itself is public domain.',
+  },
+  {
+    id: MACULA_GREEK.id,
+    url: MACULA_GREEK.url,
+    sha256: MACULA_GREEK.sha256,
+    license: MACULA_GREEK.license,
+    attribution: MACULA_GREEK.attribution,
+    changes:
+      'Only xml:id, lemma, strong, morph, gloss and english are kept, in original_word; the gloss is the gloss ' +
+      'column, else the english column. Strong\'s numbers are written G plus the number; a compound\'s ' +
+      '(5228+1537+4053) are kept as a list, and 0 (no Strong\'s entry) as none.',
   },
   {
     id: 'vrs',

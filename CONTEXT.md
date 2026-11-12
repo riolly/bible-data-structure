@@ -126,11 +126,8 @@ Any further grouping laid over the token stream: sections, pericopes, literary u
 ## Original language
 
 **Original Word**:
-One lexical segment occurrence in an original-language edition: a whole word in Greek, a **morpheme** in Hebrew. Identified by a stable external id (`ow_id`). It is the shared hub that translation Tokens align to. (ADR-0003)
-_Avoid_: lemma (dictionary form), Strong's (lexical id); assuming one written word is one Original Word
-
-**Original-word segment**:
-The grain of an Original Word. A Greek word is one Segment, a Hebrew word several. Ordered siblings rebuild the **Written Word**.
+One word occurrence in WLC or SBLGNT: an OSHB `<w>` element in Hebrew, ketiv and qere words included, or a MACULA Greek word. Identified by its source's id (`ow_id`). It carries its lemma, main Strong's number, morphology and gloss, and is the shared hub that translation Tokens align to. A Hebrew word's morphemes are the `/`-separated parts of its lemma and morphology. (ADR-0003 and its step 11 amendment)
+_Avoid_: lemma (dictionary form), Strong's (lexical id); assuming one written word is one Original Word (OSHB divides 12 written words in two)
 
 **Alignment**:
 The many-to-many mapping from an edition's Tokens to Original Words. Reverse-interlinear is derived from it, never stored.
