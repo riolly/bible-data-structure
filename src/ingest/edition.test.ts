@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { chapterStampAsync } from '../model/chapter-stamp';
 import { chapterStamp, textStamp, wordsStamp } from './edition';
 
 const tok = (verse: number, wordIndex: number | null, text: string, segment = '') => ({ chapter: 1, verse, segment, wordIndex, text });
@@ -39,6 +40,11 @@ describe('chapterStamp and textStamp (ADR-0005 amendment, 2026-11-11)', () => {
     JSON.stringify([{ type: 'para', marker: 'p', content: ['In the beginning', { type: 'note', marker: 'f', caller: '+', content: [footnote] }] }]);
   const verse = (text: string) => [{ verse: 1, lastVerse: 1, segment: '', text }];
   const base = chapterStamp(doc('Or at first'), verse('In the beginning,'));
+
+  it('keeps the value it had before its input moved to src/model/chapter-stamp.ts', async () => {
+    expect(base).toBe('sha256:5e516e7d234d8885');
+    expect(await chapterStampAsync(doc('Or at first'), verse('In the beginning,'))).toBe(base);
+  });
 
   it('is the same for the same document and verse text', () => {
     expect(chapterStamp(doc('Or at first'), verse('In the beginning,'))).toBe(base);
