@@ -10,12 +10,13 @@ import { nativeModuleLoads } from './native-probe';
 import { DERIVED_SCHEMES, KJV_TITLES, SCHEME_IDS, deriveScheme, loadSchemes } from './schemes';
 import { SOURCES as SOURCE_DEFS } from './sources';
 import { readSource } from './source-files';
+import { loadEditionFacts } from '../provider/edition-facts';
 
 const schemes = loadSchemes();
 
 describe('scheme registry', () => {
   it('holds kjv, the six Paratext schemes and the derived schemes', () => {
-    expect([...schemes.keys()].sort()).toEqual(['brenton', 'bsb', 'eng', 'kjv', 'lxx', 'org', 'rp', 'rsc', 'rso', 'vul', 'web']);
+    expect([...schemes.keys()].sort()).toEqual(['brenton', 'bsb', 'eng', 'kjv', 'lxx', 'nasb95', 'niv', 'nlt', 'org', 'rp', 'rsc', 'rso', 'vul', 'web']);
     expect([...SCHEME_IDS].sort()).toEqual([...schemes.keys()].sort());
   });
 
@@ -74,6 +75,29 @@ describe('the scheme of each ingested edition (ADR-0006 amendment)', () => {
       WEB: 'web',
       Brenton: 'brenton',
     });
+  });
+});
+
+describe.each(loadEditionFacts().map((e) => [e.facts.edition, e] as const))('%s facts (plan step 10)', (_, { scheme: id, facts }) => {
+  const scheme = schemes.get(id)!;
+
+  it('keeps its scheme', () => {
+    expect({ NASB95: 'nasb95', NLT: 'nlt', NIV: 'niv' }[facts.edition]).toBe(id);
+  });
+
+  it("prints every chapter of its scheme's 66 books to the scheme's last verse", () => {
+    expect(Object.keys(facts.lastVerses)).toEqual(canonBookCodes(PROTESTANT));
+    for (const [book, lasts] of Object.entries(facts.lastVerses)) expect(lasts, book).toEqual(scheme.verseCounts.get(book));
+  });
+
+  it("titles the Psalms its scheme numbers a title for, and holds no verse the scheme lacks", () => {
+    expect([...facts.titled].sort()).toEqual([...scheme.titles].sort());
+    const ref = (r: string) => /^(\S+) (\d+):(\d+)(?:-(\d+))?/.exec(r)!;
+    for (const r of [...facts.bridges, ...facts.missing]) {
+      const m = ref(r);
+      expect(hasVerse(scheme, m[1], Number(m[2]), Number(m[4] ?? m[3])), r).toBe(true);
+    }
+    expect(facts.parts).toEqual([]);
   });
 });
 
@@ -225,7 +249,7 @@ describe.skipIf(!native)('scheme tables', () => {
     seedSchemes(db, schemes);
 
     const ids = (sqlite.prepare('SELECT id FROM scheme ORDER BY id').all() as { id: string }[]).map((r) => r.id);
-    expect(ids).toEqual(['brenton', 'bsb', 'eng', 'kjv', 'lxx', 'org', 'rp', 'rsc', 'rso', 'vul', 'web']);
+    expect(ids).toEqual(['brenton', 'bsb', 'eng', 'kjv', 'lxx', 'nasb95', 'niv', 'nlt', 'org', 'rp', 'rsc', 'rso', 'vul', 'web']);
     const rev12 = sqlite
       .prepare("SELECT scheme, verse_count FROM scheme_verse_count WHERE book = 'REV' AND chapter = 12 ORDER BY scheme")
       .all();

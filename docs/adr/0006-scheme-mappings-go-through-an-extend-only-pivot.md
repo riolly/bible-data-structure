@@ -62,3 +62,12 @@ For 53 Psalms, English numbers a short title as verse 0 and Hebrew prints the sa
 - **The compiler reads one pattern from TVTMS's short tables.** Where a scheme's column says `Absent [=Psa.N:1]` for `Psa.N:Title`, and the scheme keeps verse 1 as the Standard's verse 1, it adds `PSA N:1a → pivot PSA N:0` and `PSA N:1b → pivot PSA N:1`. These are TVTMS rows with their own `kind`, so `build/mapping-diff.tsv` lists them.
 - The notes column (`Hebrew=23:1a`) says the same for 52 Psalms and is wrong for Psalm 37, so it is not read.
 - The pivot doesn't change. `org` gains about 106 rows. `map` gives `part` for the title and for English verse 1, and `several` for Hebrew verse 1.
+
+## Amendment: licensed editions (2026-11-12)
+
+Findings in [research/api-bible.md](../../research/api-bible.md).
+
+- **A licensed edition's text tests read its committed facts**, `src/provider/facts/<edition>.json`: verse counts, bridges, titled Psalms and the tested verses' word counts, collected from API.Bible. Its text can't be committed, so these counts stand in for it.
+- **A bridge's word count goes under every number it holds.** NLT's `\v 20-21` gives 1:20 and 1:21 the same count, so a test of 1:21 sees the text.
+- **`TextBeforeV1` also holds for an edition's own title paragraph.** NASB 1995 prints its titles as `\ms`, and its provider names that test (`NormalizeOptions.isTitle`). A title the scheme numbers as verse 0 counts whatever its marker.
+- **Known gap:** NASB 1995 follows the critical order of Philippians 1:16-17, but its counts (18 against 21) are inside the margin, so `nasb95` maps those verses by number (#20).

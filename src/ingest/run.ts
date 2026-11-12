@@ -26,6 +26,7 @@ import { readSource } from './source-files';
 import { checkReadings } from './oshb-xml';
 import { textStamp, wordsStamp } from './edition';
 import { RIGHTS } from '../contract/rights';
+import { factsText, loadEditionFacts } from '../provider/edition-facts';
 import { checkExtendOnly, formatPivotSnapshot, pivotSnapshot, type PivotSnapshot } from './pivot';
 import {
   TVTMS_PATH,
@@ -176,6 +177,15 @@ async function main() {
     await pool.close();
   }
   console.log(`\nparses: ${pool.counts.parsed} fresh, ${pool.counts.hits} from ${join(OUT_DIR, 'usj-cache')}`);
+
+  // The licensed editions have no text here, only their committed facts (plan
+  // step 10), which give TVTMS's text tests what they read.
+  for (const { scheme, facts } of loadEditionFacts()) {
+    if (!schemes.has(scheme)) throw new Error(`${facts.edition}: unknown scheme "${scheme}"`);
+    const text = factsText(facts);
+    texts.set(scheme, [...(texts.get(scheme) ?? []), text]);
+    editions.push({ scheme, text });
+  }
 
   // The snapshot first: when writeMappings stops on a conflict, it is what to look at.
   writeEditionTextSnapshot(editions, tvtms);
