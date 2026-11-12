@@ -18,8 +18,29 @@
  * No Node-only import here.
  */
 
-import { CHAR_STYLES, METADATA_PARAS, NOTE_PARTS, NOTES, REFERENCE_PARAS } from '../model/corpus';
-import { blockGenre, type RawChapterDoc, type RawUsjElement, type RawUsjNode } from '../ingest/normalize';
+import { chapterStampAsync } from '../model/chapter-stamp';
+import { CHAR_STYLES, METADATA_PARAS, NOTE_PARTS, NOTES, REFERENCE_PARAS, type ChapterDoc, type VerseText } from '../model/corpus';
+import {
+  blockGenre,
+  normalizeChapters,
+  type NormalizeOptions,
+  type RawChapterDoc,
+  type RawUsjElement,
+  type RawUsjNode,
+} from '../ingest/normalize';
+
+/**
+ * The licensed editions read through API.Bible, keyed by our abbreviation,
+ * with API.Bible's id for each. research/api-bible.md lists what the key
+ * reaches. NLT and NIV join when it reaches them.
+ */
+export const API_BIBLE_EDITIONS: ReadonlyMap<string, { readonly bibleId: string }> = new Map([
+  ['NASB95', { bibleId: 'b8ee27bcd1cae43a-01' }],
+]);
+
+/** The query for a chapter as JSON, with everything our chapter document keeps. */
+export const CHAPTER_QUERY =
+  'content-type=json&include-notes=true&include-titles=true&include-chapter-numbers=true&include-verse-numbers=true&include-verse-spans=false';
 
 /** One node of API.Bible's `content-type=json` chapter content. */
 export interface ApiBibleNode {
@@ -141,4 +162,24 @@ export function adaptApiBibleChapter(data: ApiBibleChapter): AdaptedChapter {
     }
   }
   return { doc: { chapter, content }, unsupported };
+}
+
+export interface ReadChapter extends AdaptedChapter {
+  /** The document after the ingest's checks: what a reader renders. */
+  readonly doc: ChapterDoc;
+  readonly verses: readonly VerseText[];
+  /** The chapter stamp, computed as for a local edition (ADR-0005 amendment, 2026-11-11). */
+  readonly stamp: string;
+}
+
+/**
+ * One fetched chapter as the contract needs it: the document, its verse units
+ * and its stamp, derived by the same code as a local edition's. `opts` takes
+ * the edition's scheme, as the ingest passes it.
+ */
+export async function readApiBibleChapter(data: ApiBibleChapter, opts: NormalizeOptions = {}): Promise<ReadChapter> {
+  const { doc: raw, unsupported } = adaptApiBibleChapter(data);
+  const { docs, verses } = normalizeChapters([raw], opts);
+  const doc = docs[0];
+  return { doc, unsupported, verses, stamp: await chapterStampAsync(JSON.stringify(doc.content), verses) };
 }

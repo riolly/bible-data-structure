@@ -12,9 +12,10 @@ bun run test                          # vitest, runs under Node
 bun run typecheck
 bun run ingest:download               # fetch pinned ebible.org zips, upstream SBLGNT, OSHB and TVTMS, check edition stamps (mirror if upstream changed) → src/ingest/sources/
 bun run ingest                        # sources → build/corpus.db, mapping-diff.tsv, pivot.json (about 20 s; 13 s when build/usj-cache has the parses)
+bun run api-bible:chapter NASB95 JHN 3   # fetch one licensed chapter into build/api-bible/, or read the kept copy (30 days)
 ```
 
-API.Bible calls read `API_BIBLE_KEY` from `.env`, which git ignores (research/api-bible.md). Starter allows 5,000 calls a month.
+API.Bible calls read `API_BIBLE_KEY` from `.env`, which git ignores (research/api-bible.md). Starter allows 5,000 calls a month, so fetch through `src/provider/api-bible-cache.ts`.
 
 ## Product principle
 

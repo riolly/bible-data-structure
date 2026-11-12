@@ -43,8 +43,9 @@ Not seen yet: published or alternate verse numbers (`\vp`, `\va`) and a verse br
 |---|---|---|
 | KJV `de4e12af7f28f599-02` | JHN 3 | `c p v wj add` |
 | KJV | PSA 3 | `c d q1 b v nd add f fr ft` |
-| NASB 1995 | JHN 3 | `c s p v wj it f ft`, plus `verse-span` |
+| NASB 1995 | JHN 3 | `c s p v wj it f ft`, plus `verse-span` when asked |
+| NASB 1995 | PSA 119 | 176 verse units, no unsupported marker |
 
 API.Bible's KJV prints the pilcrow (`¶ For God so loved`) and our ebible KJV doesn't, so they are two editions. The two KJV chapters are committed as fixtures (`src/provider/fixtures/`), because the KJV is public domain. The NASB sample stays off the repo.
 
-Every marker in the samples is on our supported list (ADR-0001, step 7 amendment). `src/provider/api-bible.ts` converts the JSON, and keeps the text of any marker outside the list.
+Every marker in the samples is on our supported list (ADR-0001, step 7 amendment). `src/provider/api-bible.ts` converts the JSON, and keeps the text of any marker outside the list. `bun run api-bible:chapter NASB95 PSA 119` prints a chapter's verse units, stamp and unsupported markers.

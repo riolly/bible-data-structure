@@ -3,8 +3,9 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
+import { chapterStamp } from '../ingest/edition';
 import { normalizeChapters, type RawUsjElement, type RawUsjNode } from '../ingest/normalize';
-import { adaptApiBibleChapter, type ApiBibleChapter, type ApiBibleNode } from './api-bible';
+import { adaptApiBibleChapter, readApiBibleChapter, type ApiBibleChapter, type ApiBibleNode } from './api-bible';
 
 /**
  * fixtures/api-bible-kjv-*.json are API.Bible's KJV (`de4e12af7f28f599-02`,
@@ -110,5 +111,20 @@ describe('adaptApiBibleChapter: API.Bible JSON to the step 7 chapter document', 
 
   it('refuses a response that is not a numbered chapter', () => {
     expect(() => adaptApiBibleChapter({ ...chapterOf([]), id: 'NUM.intro', number: 'intro' })).toThrow(/not a numbered chapter/);
+  });
+});
+
+describe('readApiBibleChapter: a fetched chapter as the contract reads it', () => {
+  it('stamps the chapter with the same bytes and hash as the ingest', async () => {
+    const read = await readApiBibleChapter(fixture('api-bible-kjv-JHN.3.json'));
+    expect(read.verses).toHaveLength(36);
+    expect(read.stamp).toMatch(/^sha256:[0-9a-f]{16}$/);
+    expect(read.stamp).toBe(chapterStamp(JSON.stringify(read.doc.content), read.verses));
+  });
+
+  it('changes the stamp when one character of the text changes', async () => {
+    const data = fixture('api-bible-kjv-JHN.3.json');
+    const edited = JSON.parse(JSON.stringify(data).replace('everlasting life', 'everlasting Life')) as ApiBibleChapter;
+    expect((await readApiBibleChapter(edited)).stamp).not.toBe((await readApiBibleChapter(data)).stamp);
   });
 });
