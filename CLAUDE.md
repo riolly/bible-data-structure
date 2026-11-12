@@ -14,6 +14,8 @@ bun run ingest:download               # fetch pinned ebible.org zips, upstream S
 bun run ingest                        # sources → build/corpus.db, mapping-diff.tsv, pivot.json (about 20 s; 13 s when build/usj-cache has the parses)
 ```
 
+API.Bible calls read `API_BIBLE_KEY` from `.env`, which git ignores (research/api-bible.md). Starter allows 5,000 calls a month.
+
 ## Product principle
 
 Model the Bible as it is, independent of any app. A model feature lands when a contract call or a fixture from a target edition needs it (ADR-0008). If a concept only exists because one app needs it, it belongs in that app's projection, not here.

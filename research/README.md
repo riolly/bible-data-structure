@@ -17,6 +17,7 @@ One file per topic, written from primary sources with links. A finding that chan
 | Markup in the pinned sources | `source-markup.md` | noted 2026-11-10 | Which USFM markers the sources use. Verse markers with no words, and verses with no marker. |
 | Notes and cross-references | `apparatus.md` | not started | USFM footnotes (`\f`), cross-references (`\x`), the Treasury of Scripture Knowledge, OpenBible.info. |
 | Tokenization beyond English | `tokenization.md` | not started | Rules for Greek, Hebrew and other scripts. Verse bridges (ADR-0004 open item). |
+| API.Bible | `api-bible.md` | noted 2026-11-12 | Which Bibles the key reaches. The chapter JSON and how it maps to our chapter document. |
 | Licensing | `licensing.md` | done 2026-11-09 for the step 3 sources | Per source, whether it can be redistributed in an app, its attribution, and whether raw files may be committed. |
 
 ## Trouble-spot fixtures
