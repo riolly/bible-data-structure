@@ -152,7 +152,7 @@ An editorial link between two passages (for example from the Treasury of Scriptu
 ## App contract
 
 **App contract**:
-The calls an app makes to read the model: `chapter`, `passage`, `verseText`, `map`, `resolve` and `rights` (`src/contract/contract.ts`). An app names an edition, and the edition supplies the scheme, so app code writes `JHN 3:16`. Every result carries the edition stamps, and never a row id. An app stores the addresses a result carries, with their scheme, and reads them back with `resolve`, which takes any scheme. A pack (plan step 13) or a provider (step 10) implements the same interface.
+The calls an app makes to read the model: `chapter`, `passage`, `verseText`, `map`, `resolve`, `words` and `rights` (`src/contract/contract.ts`). An app names an edition, and the edition supplies the scheme, so app code writes `JHN 3:16`. Every result carries the edition stamps, and never a row id. An app stores the addresses a result carries, with their scheme, and reads them back with `resolve`, which takes any scheme. A pack (plan step 13) or a provider (step 10) implements the same interface.
 
 **Reference**:
 A human-written string such as "1 Cor 13:4-7" or "Ps 23". `passage` resolves it to addresses under the edition's scheme with bible-passage-reference-parser, English only. A caller whose reader writes English numbers on a Hebrew or Greek edition passes the scheme the numbers follow (`kjv`). (ADR-0008)

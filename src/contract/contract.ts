@@ -7,6 +7,7 @@
  *     verseText(edition, address)        one verse unit, from `JHN 3:16`
  *     map(from, address, to)             one verse in another edition
  *     resolve(edition, address)          a stored address, under any scheme
+ *     words(edition, address)            a verse's words, or one word, with Strong's numbers
  *     rights(edition)                    what the edition's license allows
  *
  * An edition is named by its abbreviation (`KJV`, `BSB`). The edition
@@ -27,7 +28,7 @@
  * No Node-only import here.
  */
 
-import type { UsjNode } from '../model/corpus';
+import type { OriginalWordKind, UsjNode } from '../model/corpus';
 import type { RightsRecord } from './rights';
 
 export type { RightsRecord } from './rights';
@@ -226,6 +227,53 @@ export interface ResolveResult {
   readonly found: readonly Lookup[];
 }
 
+/** An original word's own data (ADR-0003, plan step 11). */
+export interface OriginalWordData {
+  /** The source's id for the word: OSHB's for Hebrew, MACULA's for Greek. What an alignment points at. */
+  readonly owId: string;
+  /** The source's lemma: OSHB's Strong's form (`c/1961`), or the Greek dictionary form (`λόγος`). */
+  readonly lemma: string;
+  /** The raw morphology code: OSHB's (`HC/Vqw3ms`), `/` between morphemes, or MACULA's (`N-NSF`). */
+  readonly morph: string;
+  /** The editorial gloss. Null on a ketiv (show its qere's) and on the few words the source leaves unglossed. */
+  readonly gloss: string | null;
+}
+
+/**
+ * One word of a verse unit. In WLC and SBLGNT each word is an original word.
+ * The Hebrew list is in read order: a ketiv (written, read otherwise) is
+ * followed by its qere words (read, not written).
+ */
+export interface Word {
+  /** The word address, `GEN 1:1!1/org`. Null for a qere, which is not written. */
+  readonly address: string | null;
+  readonly text: string;
+  /** `word`, or in Hebrew `ketiv` or `qere` (ADR-0007). */
+  readonly kind: OriginalWordKind;
+  /**
+   * The word's Strong's numbers (`H7225`, `G3056`). An original word has one,
+   * or several for a Greek compound. Empty when there is none: 2 SBLGNT words
+   * Strong's dictionary lacks (`Ἀρνί`, `ἄμωμον`).
+   */
+  readonly strongs: readonly string[];
+  /** Set on the words of WLC and SBLGNT, null on a translation's. */
+  readonly original: OriginalWordData | null;
+}
+
+export interface WordsResult {
+  readonly edition: EditionStamp;
+  /** The asked address with the edition's scheme: `GEN 1:1/org` or `GEN 1:1!3/org`. */
+  readonly asked: string;
+  /** What the verse part of the address finds, as `verseText` gives it. */
+  readonly found: Lookup | Parts;
+  /**
+   * The words of each unit found, in order: none when absent. A word address
+   * gives that word only, twice in the 12 places where OSHB divides one
+   * written Hebrew word in two (1CH 15:13).
+   */
+  readonly words: readonly Word[];
+}
+
 export interface BibleContract {
   /**
    * One chapter of an edition. Absent when the scheme has no such chapter
@@ -270,6 +318,20 @@ export interface BibleContract {
    * reference. Throws on a word address or an unknown scheme.
    */
   resolve(edition: string, address: string): Promise<ResolveResult>;
+
+  /**
+   * The words of one verse (`GEN 1:1`) or one word (`GEN 1:1!3`), with their
+   * Strong's numbers. For the Hebrew or Greek words of a verse in another
+   * edition, `map` it to WLC or SBLGNT and read each verse it gives:
+   *
+   *     const m = await c.map('KJV', 'GEN 1:1', 'WLC');
+   *     for (const v of m.verses) (await c.words('WLC', v.address)).words;
+   *
+   * The edition supplies the scheme, as for `verseText`. Throws on a range,
+   * except a bridge's own address (`JHN 1:5-6/kjv`), and on a word address in
+   * a verse printed only in parts, which needs the part's letter (`SIR 6:2a!1`).
+   */
+  words(edition: string, address: string): Promise<WordsResult>;
 
   /** The edition's rights record. Throws for an edition with none. */
   rights(edition: string): Promise<RightsRecord>;
