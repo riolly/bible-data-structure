@@ -11,9 +11,13 @@ const CORPUS = join(import.meta.dirname, '..', '..', 'build', 'corpus.db');
 
 const native = sqliteLoads();
 
+/** The editions the small pack holds: FIX and the hubs it stands in for. */
+const EDITIONS = ['FIX', 'WLC', 'SBLGNT'];
+
 describe.skipIf(!native)('checkPack on a small corpus (fixtures/adversarial.usj.json)', () => {
   let dir: string;
   let corpus: BibleContract;
+  let corpusDb: { sqlite: import('better-sqlite3').Database; contract: BibleContract };
 
   beforeAll(async () => {
     const { testCorpus } = await import('../contract/test-corpus');
@@ -28,10 +32,31 @@ describe.skipIf(!native)('checkPack on a small corpus (fixtures/adversarial.usj.
       { abbrev: 'SBLGNT', scheme: 'org', book: 'JHN', usj },
     ];
     corpus = corpusContract(await testCorpus(join(dir, 'corpus.db'), fixtures));
+    const { default: Database } = await import('better-sqlite3');
+    corpusDb = { sqlite: new Database(join(dir, 'corpus.db'), { readonly: true }), contract: corpus };
     buildPack(join(dir, 'corpus.db'), join(dir, 'FIX.db'), ['FIX']);
   });
 
-  afterAll(() => rmSync(dir, { recursive: true, force: true }));
+  afterAll(() => {
+    corpusDb?.sqlite.close();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  /** A copy of the small pack with `sql` run on it (it must change a row), opened read-only. */
+  async function brokenPack(name: string, sql: string) {
+    const { default: Database } = await import('better-sqlite3');
+    const { openPack } = await import('./pack');
+    const path = join(dir, `${name}.db`);
+    copyFileSync(join(dir, 'FIX.db'), path);
+    const sqlite = new Database(path);
+    sqlite.exec('BEGIN');
+    let n = 0;
+    for (const statement of sql.split(';').filter((x) => x.trim() !== '')) n += sqlite.prepare(statement).run().changes;
+    sqlite.exec('COMMIT');
+    sqlite.close();
+    expect(n).toBeGreaterThan(0);
+    return openPack(path);
+  }
 
   it('reads the same as the corpus DB, with every document deflated and no token or block rows', async () => {
     const { checkPack, openPack } = await import('./pack');
@@ -40,9 +65,9 @@ describe.skipIf(!native)('checkPack on a small corpus (fixtures/adversarial.usj.
     expect(tables).not.toContain('token');
     expect(tables).not.toContain('block');
     expect(pack.sqlite.prepare('SELECT DISTINCT typeof(usj) type FROM chapter_doc').all()).toEqual([{ type: 'blob' }]);
-    const got = await checkPack(pack, corpus, 'FIX');
-    expect(got.chapters).toBe(2);
-    expect(got.ms).toHaveLength(2);
+    const got = await checkPack(pack, corpusDb, EDITIONS);
+    expect(got.chapters).toBe(6);
+    expect(got.ms).toHaveLength(6);
     expect(got.words).toBeGreaterThan(0);
     pack.sqlite.close();
   });
@@ -63,18 +88,36 @@ describe.skipIf(!native)('checkPack on a small corpus (fixtures/adversarial.usj.
   });
 
   it('stops at a verse text row the pack lacks', async () => {
-    const { default: Database } = await import('better-sqlite3');
-    const { checkPack, openPack } = await import('./pack');
-    const broken = join(dir, 'broken.db');
-    copyFileSync(join(dir, 'FIX.db'), broken);
-    const sqlite = new Database(broken);
     // the last verse unit of chapter 1
-    sqlite.exec(`DELETE FROM verse_text WHERE translation_id = (SELECT id FROM translation WHERE abbrev = 'FIX') AND chapter = 1
-      AND verse = (SELECT max(verse) FROM verse_text WHERE chapter = 1 AND translation_id = (SELECT id FROM translation WHERE abbrev = 'FIX'))`);
-    expect(sqlite.prepare('SELECT changes() n').get()).toEqual({ n: 1 });
-    sqlite.close();
-    const pack = openPack(broken);
-    await expect(checkPack(pack, corpus, 'FIX')).rejects.toThrow(/the pack's chapter differs from the corpus DB's/);
+    const pack = await brokenPack(
+      'broken',
+      `DELETE FROM verse_text WHERE translation_id = (SELECT id FROM translation WHERE abbrev = 'FIX') AND chapter = 1
+       AND verse = (SELECT max(verse) FROM verse_text WHERE chapter = 1 AND translation_id = (SELECT id FROM translation WHERE abbrev = 'FIX'))`,
+    );
+    const { checkPack } = await import('./pack');
+    await expect(checkPack(pack, corpusDb, EDITIONS)).rejects.toThrow(/the pack's chapter differs from the corpus DB's/);
+    pack.sqlite.close();
+  });
+
+  it('stops at a chapter the pack lacks (#66)', async () => {
+    const fix = "translation_id = (SELECT id FROM translation WHERE abbrev = 'FIX') AND chapter = 2";
+    const pack = await brokenPack(
+      'no-chapter',
+      `DELETE FROM verse_text WHERE ${fix}; DELETE FROM reading WHERE ${fix}; DELETE FROM chapter_doc WHERE ${fix}`,
+    );
+    expect(await pack.contract.chapter('FIX', 'JHN', 2)).toMatchObject({ kind: 'absent' });
+    const { checkPack } = await import('./pack');
+    await expect(checkPack(pack, corpusDb, EDITIONS)).rejects.toThrow(/FIX JHN 2: the pack's chapter differs from the corpus DB's/);
+    pack.sqlite.close();
+  });
+
+  it('checks every edition in the pack, not only the first (#66)', async () => {
+    const pack = await brokenPack(
+      'hub',
+      `DELETE FROM verse_text WHERE translation_id = (SELECT id FROM translation WHERE abbrev = 'SBLGNT') AND chapter = 2 AND verse = 1`,
+    );
+    const { checkPack } = await import('./pack');
+    await expect(checkPack(pack, corpusDb, EDITIONS)).rejects.toThrow(/SBLGNT JHN 2: the pack's chapter differs from the corpus DB's/);
     pack.sqlite.close();
   });
 });

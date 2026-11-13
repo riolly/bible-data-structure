@@ -16,11 +16,11 @@ import { applyTextFixes } from './text-fixes';
 export const SOURCES_ROOT = join(import.meta.dirname, 'sources');
 
 /**
- * The path of a pinned data file (MACULA, Clear) under `root`, once the file
- * is there and its sha256 is the pin's. The ingest opens these files only
- * through here, so an edited or truncated file stops the build (ADR-0005,
- * step 6 amendment), as `readTvtms` does for TVTMS. The download checks a
- * file it already has the same way.
+ * The path of a pinned data file (TVTMS, MACULA, Clear) under `root`, once the
+ * file is there and its sha256 is the pin's. The ingest and
+ * `api-bible:facts` open these files only through here, so a missing, edited
+ * or truncated file stops them with the same fix (ADR-0005, step 6
+ * amendment). The download checks a file it already has the same way.
  */
 export function pinnedPath(pin: Pick<PinnedFile, 'id' | 'sha256' | 'file'>, root = SOURCES_ROOT): string {
   const path = join(root, pin.file);

@@ -29,7 +29,7 @@ const MIRROR_DIR = join(SOURCES_ROOT, 'mirror');
 async function main() {
   await mkdir(MIRROR_DIR, { recursive: true });
   for (const src of SOURCES) await fetchSource(src);
-  for (const file of [{ id: 'TVTMS', ...TVTMS }, MACULA_HEBREW, MACULA_GREEK, CLEAR_BSB.greek, CLEAR_BSB.hebrew, CLEAR_BSB.ntWords, CLEAR_BSB.otWords]) {
+  for (const file of [TVTMS, MACULA_HEBREW, MACULA_GREEK, CLEAR_BSB.greek, CLEAR_BSB.hebrew, CLEAR_BSB.ntWords, CLEAR_BSB.otWords]) {
     await fetchPinnedFile(file);
   }
 }

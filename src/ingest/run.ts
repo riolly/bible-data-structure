@@ -29,7 +29,6 @@ import { RIGHTS } from '../contract/rights';
 import { factsText, loadEditionFacts } from '../provider/edition-facts';
 import { checkExtendOnly, formatPivotSnapshot, pivotSnapshot, type PivotSnapshot } from './pivot';
 import {
-  TVTMS_PATH,
   addBookText,
   compileMappings,
   compilePivot,
@@ -66,7 +65,7 @@ async function main() {
   const { db, sqlite } = createCorpusDb(OUT_PATH, { deferIndexes: true });
   seedBooksAndCanons(db);
   const schemes = loadSchemes();
-  const tvtms = readTvtmsOrExplain();
+  const tvtms = readTvtms();
   // The pivot reads no edition text, so the scheme rows go in before the editions.
   const { pivot } = compilePivot(schemes, tvtms);
   checkPivotGrowth(pivot);
@@ -178,7 +177,7 @@ const seconds = (since: number) => `${((performance.now() - since) / 1000).toFix
 function prepareSource(src: SourceDef, pool: ParsePool) {
   const { edition, files, open } = readSource(src);
   if (edition !== src.edition) {
-    throw new Error(`${src.meta.abbrev}: the files give edition ${edition}, not the pinned ${src.edition}; run bun run ingest:download`);
+    throw new Error(`${src.meta.abbrev}: the files give edition ${edition}, not the pinned ${src.edition}; run \`bun run ingest:download\``);
   }
   const outcomes = files.map((f) => pool.parse(f.usfm, { rewriteVersifiedD: src.rewriteVersifiedD }));
   for (const o of outcomes) o.catch(() => {}); // awaited later; keep an early rejection from counting as unhandled
@@ -239,11 +238,6 @@ function writeEditionTextSnapshot(editions: readonly { scheme: string; text: Edi
 function align(db: CorpusDb, aligner: Aligner) {
   const started = performance.now();
   console.log(`\n${runAlignment(db, aligner)}; ${seconds(started)}`);
-}
-
-function readTvtmsOrExplain(): TvtmsRow[] {
-  if (!existsSync(TVTMS_PATH)) throw new Error(`${TVTMS_PATH} is missing: run \`bun run ingest:download\` first`);
-  return readTvtms();
 }
 
 /**

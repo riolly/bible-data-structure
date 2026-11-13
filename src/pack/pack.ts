@@ -149,41 +149,52 @@ export interface PackCheck {
 }
 
 /**
- * Check that `pack` reads the same as the corpus DB for `edition`: every
- * chapter the pack holds, and every verse's words and map to each hub in each
- * book's first chapter. Throws at the first difference. Every verse's words
- * take about 3 ms a call on each side, so the words check stops at a book's
- * first chapter.
+ * Check that `pack` reads the same as the corpus DB for each of `editions`:
+ * every chapter the corpus DB holds of them, in `books` when given, and every
+ * verse's words and map to each hub in each book's first chapter. The
+ * chapter list comes from the corpus DB, so a chapter the pack lacks fails
+ * (#66). Throws at the first difference. Every verse's words take about 3 ms
+ * a call on each side, so the words check stops at a book's first chapter.
  */
-export async function checkPack(pack: OpenPack, corpus: BibleContract, edition: string): Promise<PackCheck> {
-  const chapters = pack.sqlite
-    .prepare<[string], { book: string; chapter: number }>(
-      `SELECT d.book, d.chapter FROM chapter_doc d JOIN translation t ON t.id = d.translation_id
-       JOIN book b ON b.code = d.book WHERE t.abbrev = ? AND d.chapter > 0 ORDER BY b.usfm_number, d.chapter`,
-    )
-    .all(edition);
+export async function checkPack(
+  pack: OpenPack,
+  corpus: { readonly sqlite: Database.Database; readonly contract: BibleContract },
+  editions: readonly string[],
+  { books }: PackOptions = {},
+): Promise<PackCheck> {
+  const ofBooks = books ? ` AND d.book IN (${books.map(() => '?').join(', ')})` : '';
+  const listChapters = corpus.sqlite.prepare<string[], { book: string; chapter: number }>(
+    `SELECT d.book, d.chapter FROM chapter_doc d JOIN translation t ON t.id = d.translation_id
+     JOIN book b ON b.code = d.book WHERE t.abbrev = ? AND d.chapter > 0${ofBooks} ORDER BY b.usfm_number, d.chapter`,
+  );
   const ms: number[] = [];
+  let chapters = 0;
   let words = 0;
-  let lastBook = '';
-  for (const { book, chapter } of chapters) {
-    const t = performance.now();
-    const got = await pack.contract.chapter(edition, book, chapter);
-    ms.push(performance.now() - t);
-    if (JSON.stringify(got) !== JSON.stringify(await corpus.chapter(edition, book, chapter))) {
-      throw new Error(`${edition} ${book} ${chapter}: the pack's chapter differs from the corpus DB's`);
-    }
-    if (got.kind !== 'chapter' || book === lastBook) continue;
-    lastBook = book;
-    for (const v of got.verses) {
-      const [a, b] = await Promise.all([pack.contract.words(edition, v.address), corpus.words(edition, v.address)]);
-      if (JSON.stringify(a) !== JSON.stringify(b)) throw new Error(`${v.address}: the pack's words differ from the corpus DB's`);
-      words += a.words.length;
-      if (v.kind === 'bridge' || (HUBS as readonly string[]).includes(edition)) continue;
-      for (const hub of HUBS) {
-        const [m, n] = await Promise.all([pack.contract.map(edition, v.address, hub), corpus.map(edition, v.address, hub)]);
-        if (JSON.stringify(m) !== JSON.stringify(n)) throw new Error(`${v.address}: the pack maps it to ${hub} differently from the corpus DB`);
+  for (const edition of editions) {
+    const list = listChapters.all(edition, ...(books ?? []));
+    if (list.length === 0) throw new Error(`${edition}: the corpus DB has no chapter to check`);
+    chapters += list.length;
+    let lastBook = '';
+    for (const { book, chapter } of list) {
+      const t = performance.now();
+      const got = await pack.contract.chapter(edition, book, chapter);
+      ms.push(performance.now() - t);
+      if (JSON.stringify(got) !== JSON.stringify(await corpus.contract.chapter(edition, book, chapter))) {
+        throw new Error(`${edition} ${book} ${chapter}: the pack's chapter differs from the corpus DB's`);
+      }
+      if (got.kind !== 'chapter' || book === lastBook) continue;
+      lastBook = book;
+      for (const v of got.verses) {
+        const [a, b] = await Promise.all([pack.contract.words(edition, v.address), corpus.contract.words(edition, v.address)]);
+        if (JSON.stringify(a) !== JSON.stringify(b)) throw new Error(`${v.address}: the pack's words differ from the corpus DB's`);
+        words += a.words.length;
+        if (v.kind === 'bridge' || (HUBS as readonly string[]).includes(edition)) continue;
+        for (const hub of HUBS) {
+          const [m, n] = await Promise.all([pack.contract.map(edition, v.address, hub), corpus.contract.map(edition, v.address, hub)]);
+          if (JSON.stringify(m) !== JSON.stringify(n)) throw new Error(`${v.address}: the pack maps it to ${hub} differently from the corpus DB`);
+        }
       }
     }
   }
-  return { chapters: chapters.length, words, ms };
+  return { chapters, words, ms };
 }
