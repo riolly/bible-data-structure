@@ -130,7 +130,7 @@ One word occurrence in WLC or SBLGNT: an OSHB `<w>` element in Hebrew, ketiv and
 _Avoid_: lemma (dictionary form), Strong's (lexical id); assuming one written word is one Original Word (OSHB divides 12 written words in two)
 
 **Alignment**:
-The many-to-many mapping from an edition's Tokens to Original Words. Reverse-interlinear is derived from it, never stored.
+The many-to-many mapping from an edition's Tokens to Original Words. Stored for the BSB, one row per English word and Original Word, keyed by the word address, with the Strong's numbers of the morphemes the word's aligned group translates (`word_alignment`). Reverse-interlinear is derived from it, never stored. (ADR-0003 and its step 12 amendment)
 _Avoid_: interlinear (that is the display; Alignment is the data)
 
 **Lemma**:
