@@ -161,6 +161,20 @@ describe.skipIf(!native || !existsSync(CORPUS))('the app contract on the corpus 
     expect([bsb.kind, bsb.verses.map((x) => x.address)]).toEqual(['one', ['PSA 51:1/bsb']]);
   });
 
+  it('map: a Psalm title Hebrew prints inside verse 1 is part of that verse (issue #12, ADR-0006 amendment)', async () => {
+    // KJV 23:0 "A Psalm of David." is the start of WLC 23:1, מִזְמ֥וֹר לְדָוִ֑ד
+    const title = await c.map('KJV', 'PSA 23:0', 'WLC');
+    expect([title.kind, title.verses.map((v) => [v.address, v.part])]).toEqual(['part', [['PSA 23:1/org', 'a']]]);
+    const verse1 = await c.map('KJV', 'PSA 23:1', 'WLC');
+    expect([verse1.kind, verse1.verses.map((v) => [v.address, v.part])]).toEqual(['part', [['PSA 23:1/org', 'b']]]);
+    const back = await c.map('WLC', 'PSA 23:1', 'KJV');
+    expect([back.kind, back.verses.map((v) => v.address)]).toEqual(['several', ['PSA 23:0/kjv', 'PSA 23:1/kjv']]);
+    const later = await c.map('WLC', 'PSA 23:2', 'BSB');
+    expect([later.kind, later.verses.map((v) => v.address)]).toEqual(['one', ['PSA 23:2/bsb']]);
+    // Psalm 37, where TVTMS's notes are wrong and its short table is right
+    expect((await c.map('BSB', 'PSA 37:0', 'WLC')).verses.map((v) => v.address)).toEqual(['PSA 37:1/org']);
+  });
+
   it('map gives part of a verse: SBLGNT REV 12:18 is the first part of KJV REV 13:1', async () => {
     const m = await c.map('SBLGNT', 'REV 12:18', 'KJV');
     expect(m.kind).toBe('part');
