@@ -121,11 +121,3 @@ function restoreVersifiedD(usj: UsjDoc): number {
   });
   return n;
 }
-
-/** The USFM book code from the \id line (USJ `book` element). */
-export function usjBookCode(usj: UsjDoc): string | null {
-  for (const node of usj.content) {
-    if (typeof node !== 'string' && node.type === 'book') return node.code ?? null;
-  }
-  return null;
-}
