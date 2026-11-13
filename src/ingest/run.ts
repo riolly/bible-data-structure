@@ -14,7 +14,7 @@ import { existsSync, readFileSync, mkdirSync, rmSync, writeFileSync } from 'node
 import { join } from 'node:path';
 
 import { verseNumbers, type Block, type Token, type VerseText } from '../model/corpus';
-import type { IngestStats } from './normalize';
+import type { IngestStats, WordTag } from './normalize';
 import { PIVOT, checkCoverage } from '../model/mapping';
 import { checkVerses, hasVerse, titleChapters, type Scheme } from '../model/scheme';
 import { loadSchemes } from './schemes';
@@ -22,8 +22,10 @@ import { normalizeChapters, splitChapters } from './normalize';
 import { verseWords } from './tokenize';
 import { usjBookCode, type ParseOutcome } from './parse';
 import { createParsePool, type ParsePool } from './parse-pool';
-import { CLEAR_BSB, MACULA_GREEK, MACULA_HEBREW, SOURCES, type PinnedFile, type SourceDef } from './sources';
+import { CLEAR_BSB, KJV_TAGS, MACULA_GREEK, MACULA_HEBREW, SOURCES, type PinnedFile, type SourceDef } from './sources';
 import { alignWords, readClearAlignment, readClearWords } from './alignment';
+import { linkVerseTags, type HubWord, type TagStats } from './kjv-tags';
+import { loadMappings } from '../db/corpus-read';
 import { SOURCES_ROOT, readSource } from './source-files';
 import { checkReadings } from './oshb-xml';
 import {
@@ -93,6 +95,8 @@ async function main() {
   const editions: { scheme: string; text: EditionText }[] = [];
   /** Every MACULA morpheme and Greek word id, to the original word it is part of: what Clear's alignments point at. */
   const hubParts = new Map<string, HubPart>();
+  /** The KJV's `\w strong=` tags by book, for `alignKjv`. */
+  const kjvTags = new Map<string, WordTag[]>();
 
   // Parse one edition ahead: the workers parse the next edition's books while
   // this thread normalizes and writes the current one.
@@ -158,11 +162,13 @@ async function main() {
             normalized = normalizeChapters(raw, {
               titleChapters: titleChapters(scheme, file.code),
               hasVerse: (c, v) => hasVerse(scheme, file.code, c, v),
+              wordTags: src.meta.abbrev === KJV_TAGS.edition,
             });
           } catch (e) {
             throw new Error(`${file.code}: ${(e as Error).message}`, { cause: e });
           }
           const { docs, blocks, tokens, verses, droppedVerses, stats } = normalized;
+          if (normalized.wordTags.length > 0) kjvTags.set(file.code, normalized.wordTags);
           for (const v of droppedVerses) {
             console.warn(`  ⚠ ${file.code} ${v.chapter}:${v.verse}: printed with no words and not in scheme ${scheme.id}, no verse text`);
           }
@@ -230,6 +236,7 @@ async function main() {
   // The snapshot first: when writeMappings stops on a conflict, it is what to look at.
   writeEditionTextSnapshot(editions, tvtms);
   writeMappings(db, schemes, tvtms, texts);
+  alignKjv(db, sqlite, kjvTags);
 
   // No VACUUM: a database that was only inserted into has no free pages to reclaim.
   const finishStarted = performance.now();
@@ -343,6 +350,74 @@ function alignBsb(db: CorpusDb, sqlite: ReturnType<typeof createCorpusDb>['sqlit
       `${stats.split} whose Clear group didn't join; ${seconds(started)}`,
   );
 }
+
+/**
+ * The KJV's checked word tags (ADR-0003, KJV amendment): each tag links to an
+ * original word of the WLC or SBLGNT verse its KJV verse maps to. Runs after
+ * the mappings are written, since it reads them.
+ */
+function alignKjv(db: CorpusDb, sqlite: ReturnType<typeof createCorpusDb>['sqlite'], tagsByBook: ReadonlyMap<string, readonly WordTag[]>) {
+  const started = performance.now();
+  const kjv = sqlite.prepare(`SELECT id, scheme FROM translation WHERE abbrev = ?`).get(KJV_TAGS.edition) as { id: number; scheme: string };
+  const hubs = sqlite.prepare(`SELECT DISTINCT scheme FROM translation WHERE abbrev IN ('WLC', 'SBLGNT')`).all() as { scheme: string }[];
+  if (hubs.length !== 1) throw new Error(`KJV tags: WLC and SBLGNT must share one scheme, not ${hubs.map((h) => h.scheme).join(', ')}`);
+  const hubScheme = hubs[0].scheme;
+  const hubWords = new Map<string, HubWord[]>();
+  const words = sqlite
+    .prepare(
+      `SELECT o.book, o.chapter, o.verse, o.source, o.ow_id AS owId, o.kind, o.strongs FROM original_word o
+       JOIN translation t ON t.id = o.translation_id WHERE t.abbrev IN ('WLC', 'SBLGNT')
+       ORDER BY o.book, o.chapter, o.verse, o.segment, o.seq`,
+    )
+    .all() as { book: string; chapter: number; verse: number; source: HubWord['source']; owId: string; kind: HubWord['kind']; strongs: string }[];
+  for (const w of words) {
+    const key = `${w.book} ${w.chapter}:${w.verse}`;
+    const word: HubWord = { source: w.source, owId: w.owId, kind: w.kind, strongs: w.strongs ? w.strongs.split(' ') : [] };
+    (hubWords.get(key) ?? hubWords.set(key, []).get(key)!).push(word);
+  }
+  const wordCounts = new Map(
+    (
+      sqlite
+        .prepare(
+          `SELECT book, chapter, verse, segment, count(*) AS n FROM token WHERE translation_id = ? AND word_index IS NOT NULL
+           GROUP BY book, chapter, verse, segment`,
+        )
+        .all(kjv.id) as { book: string; chapter: number; verse: number; segment: string; n: number }[]
+    ).map((r) => [`${r.book} ${r.chapter}:${r.verse}${r.segment}`, r.n]),
+  );
+  const mappings = loadMappings(db);
+  const stats: TagStats = { tags: 0, passed: 0, unmapped: 0 };
+  const rows = [];
+  for (const [book, tags] of tagsByBook) {
+    const units = new Map<string, WordTag[]>();
+    for (const t of tags) {
+      const key = `${t.chapter}:${t.verse}${t.segment}`;
+      (units.get(key) ?? units.set(key, []).get(key)!).push(t);
+    }
+    for (const unitTags of units.values()) {
+      const { chapter, verse, segment } = unitTags[0];
+      const unit = { book, chapter, verse, segment };
+      const targets = [...new Set(mappings.map(kjv.scheme, hubScheme, unit).map((r) => `${r.book} ${r.chapter}:${r.verse}`))];
+      const wordCount = wordCounts.get(`${book} ${chapter}:${verse}${segment}`) ?? 0;
+      rows.push(...linkVerseTags(unit, wordCount, unitTags, targets.flatMap((k) => hubWords.get(k) ?? []), stats));
+    }
+  }
+  const failed = stats.tags - stats.passed - stats.unmapped;
+  if (failed > MAX_TAG_FAILURES) {
+    throw new Error(`KJV tags: ${failed} tags name no word of their mapped verse, more than ${MAX_TAG_FAILURES}. Check the KJV source and the mappings`);
+  }
+  sqlite.exec('BEGIN');
+  insertWordAlignments(db, kjv.id, KJV_TAGS.id, rows);
+  sqlite.exec('COMMIT');
+  const tagged = new Set(rows.map((r) => `${r.book} ${r.chapter}:${r.verse}${r.segment}!${r.wordIndex}`)).size;
+  console.log(
+    `\nKJV tags (${KJV_TAGS.id}): ${stats.passed} of ${stats.tags} pass, ${failed} name no word of their mapped verse, ` +
+      `${stats.unmapped} are in verses that map to none; ${rows.length} rows on ${tagged} words; ${seconds(started)}`,
+  );
+}
+
+/** The ingest stops when more KJV tags than this fail the check: 6,039 failed on 2026-11-13. */
+const MAX_TAG_FAILURES = 6500;
 
 function readTvtmsOrExplain(): TvtmsRow[] {
   if (!existsSync(TVTMS_PATH)) throw new Error(`${TVTMS_PATH} is missing: run \`bun run ingest:download\` first`);

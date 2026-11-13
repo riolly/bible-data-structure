@@ -357,7 +357,8 @@ export const originalWord = sqliteTable(
  * One original word an edition's word translates (ADR-0003 and its step 12
  * amendment): the word's address, the original word's id, and the Strong's
  * numbers of the parts the word aligns to. `seq` orders one word's rows.
- * Built for the BSB from Clear Bible's alignments (`aligned_by`).
+ * Built for the BSB from Clear Bible's alignments, and for the KJV from its own
+ * checked `\w` tags (`aligned_by`).
  */
 export const wordAlignment = sqliteTable(
   'word_alignment',
@@ -380,7 +381,7 @@ export const wordAlignment = sqliteTable(
     owId: text('ow_id').notNull(),
     /** Space-separated Strong's numbers of the parts of this original word the word's group aligns to: Hebrew morphemes' own (`H871 H7225`), or the Greek word's. */
     strongs: text('strongs').notNull(),
-    /** A data_source id: whose alignment this is (`clear-bsb`). */
+    /** A data_source id: whose alignment this is (`clear-bsb`, `kjv-strongs`). */
     alignedBy: text('aligned_by')
       .notNull()
       .references(() => dataSource.id),

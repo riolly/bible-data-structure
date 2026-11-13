@@ -342,3 +342,15 @@ export const CLEAR_BSB = {
   ntWords: clearFile('clear-bsb-nt', 'eng/targets/BSB/nt_BSB.tsv', 'd388c73f52361968eb96761098e983699fdd0dd37272b1d701efebd61a5a36df'),
   otWords: clearFile('clear-bsb-ot', 'eng/targets/BSB/ot_BSB.tsv', 'f06c76205f30e3e4a95f884a013c2e65a6df2e0acea3435ad3f2d77f71d003da'),
 } as const;
+
+/**
+ * The KJV's own `\w strong=` tags in ebible's `eng-kjv` (public domain, as the
+ * text), checked against the original words and stored as alignment rows
+ * (ADR-0003, KJV amendment, plan step 12). Pinned with the KJV's edition.
+ */
+export const KJV_TAGS = {
+  id: 'kjv-strongs',
+  edition: 'KJV',
+  url: 'https://ebible.org/Scriptures/eng-kjv_usfm.zip',
+  attribution: "Strong's numbers from the King James Version's word tags in eBible.org's eng-kjv, courtesy of the Crosswire Bible Society and eBible.org (public domain)",
+} as const;

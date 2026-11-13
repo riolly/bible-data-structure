@@ -59,6 +59,8 @@ export interface RawUsjElement {
   readonly altnumber?: string;
   readonly code?: string;
   readonly caller?: string;
+  /** A `\w` word's Strong's number (`H0430`, `G2316`). Read when `NormalizeOptions.wordTags` is set, and never stored. */
+  readonly strong?: string;
   readonly content?: readonly RawUsjNode[];
 }
 
@@ -98,7 +100,24 @@ export interface NormalizeResult {
   verses: VerseText[];
   /** Empty verse markers outside the scheme, which got no row (`NormalizeOptions.hasVerse`). */
   droppedVerses: { chapter: number; verse: number }[];
+  /** The source's `\w strong=` tags in reading order, with the words each covers (`NormalizeOptions.wordTags`). */
+  wordTags: WordTag[];
   stats: IngestStats;
+}
+
+/**
+ * One `\w strong=` tag of a verse unit, and the word indexes of the words its
+ * text touches: `these things|G5023` covers two. A word that only part of a
+ * tag's text touches (`LORD's` from `\w LORD\w*'s`) counts too. A tag split by
+ * a verse marker gives one entry per unit.
+ */
+export interface WordTag {
+  readonly chapter: number;
+  readonly verse: number;
+  readonly segment: string;
+  readonly wordIndexes: readonly number[];
+  /** As the source writes them, `H0430`. */
+  readonly strongs: readonly string[];
 }
 
 //---- the supported markers (ADR-0001 amendment, plan step 7) ----
@@ -122,9 +141,8 @@ const unsupported = (what: string, marker: string | undefined) =>
 
 /**
  * Split a book's USJ into one document per chapter. Chapter 0 is everything
- * before the first `\c`. The only change is that character styles lose the
- * source's word attributes (`strong`, `x-morph`): nothing checks them
- * (ADR-0003), so no stored document carries them (ADR-0001 amendment).
+ * before the first `\c`. The nodes are unchanged: `normalizeChapters` drops
+ * the word attributes from the documents it returns.
  */
 export function splitChapters(usj: UsjDoc): RawChapterDoc[] {
   const docs: { chapter: number; content: RawUsjNode[] }[] = [{ chapter: 0, content: [] }];
@@ -135,7 +153,7 @@ export function splitChapters(usj: UsjDoc): RawChapterDoc[] {
       if (docs.some((d) => d.chapter === n)) throw new Error(`chapter ${n} printed twice`);
       docs.push({ chapter: n, content: [] });
     }
-    docs[docs.length - 1].content.push(withoutWordAttributes(node));
+    docs[docs.length - 1].content.push(node);
   }
   return docs[0].content.length === 0 ? docs.slice(1) : docs;
 }
@@ -185,6 +203,11 @@ export interface NormalizeOptions {
    * (research/api-bible.md), so its provider passes its own test.
    */
   readonly isTitle?: (para: RawUsjElement) => boolean;
+  /**
+   * Collect the `\w strong=` tags in `wordTags`. Only the KJV's are used,
+   * after a check against the original words (ADR-0003, KJV amendment).
+   */
+  readonly wordTags?: boolean;
 }
 
 /** Normalize one book's USJ: split it into chapter documents and derive from those. */
@@ -219,6 +242,11 @@ export function normalizeChapters(docs: readonly RawChapterDoc[], opts: Normaliz
   // inside the current heading para (a heading never inherits `verse`)
   let headingVerse: number | null = null;
   let buf = '';
+  // Tag spans are offsets into all the text walked so far; `bufStart` is where `buf` begins.
+  let bufStart = 0;
+  type OpenTag = { start: number; end: number; strongs: string[]; units: Map<string, WordTag & { wordIndexes: number[] }> };
+  let openTags: OpenTag[] = [];
+  const wordTags: (WordTag & { wordIndexes: number[] })[] = [];
 
   // The verse-text row per `chapter:verse+segment`, for a title printed in several \d paragraphs.
   const verseRows = new Map<string, VerseRow>();
@@ -259,6 +287,11 @@ export function normalizeChapters(docs: readonly RawChapterDoc[], opts: Normaliz
     // would otherwise capture). Idempotent on already-NFC (ASCII) text.
     const run = buf.normalize('NFC');
     const raw = tokenize(run, { paragraphMarks: !inHeading });
+    const runStart = bufStart;
+    if (openTags.length > 0 && run !== buf) {
+      throw new Error(`chapter ${chapter}: a tagged run changes under NFC, so its word tags can't be placed`);
+    }
+    bufStart += buf.length;
     buf = '';
     // #1/#3: heading tokens carry only a verse EXPLICITLY set inside the
     // heading (never the inherited one); other tokens need a \v seen.
@@ -267,8 +300,25 @@ export function normalizeChapters(docs: readonly RawChapterDoc[], opts: Normaliz
     if (inVerse && verseText) verseText.text += ` ${run}`;
     if (raw.length === 0) return;
     const blk = ensureBlock();
+    let at = 0; // the token's offset in `run`: tokens cover every non-space character in order
     for (const t of raw) {
       const isWord = t.kind === 'word';
+      at = run.indexOf(t.text, at);
+      const span = { start: runStart + at, end: runStart + at + t.text.length };
+      at += t.text.length;
+      if (isWord && inVerse && openTags.length > 0) {
+        for (const tag of openTags) {
+          if (tag.start >= span.end || tag.end <= span.start) continue;
+          const key = `${effectiveVerse}${segment}`;
+          let unit = tag.units.get(key);
+          if (!unit) {
+            unit = { chapter, verse: effectiveVerse, segment, wordIndexes: [], strongs: tag.strongs };
+            tag.units.set(key, unit);
+            wordTags.push(unit);
+          }
+          unit.wordIndexes.push(wordIndexInVerse);
+        }
+      }
       tokens.push({
         id: tokens.length,
         blockId: blk.id,
@@ -284,6 +334,7 @@ export function normalizeChapters(docs: readonly RawChapterDoc[], opts: Normaliz
       });
       if (isWord && !inVerse) stats.preVerseWordTokens++;
     }
+    openTags = openTags.filter((tag) => tag.end > bufStart);
   };
 
   const consumeVerseStart = () => {
@@ -337,7 +388,12 @@ export function normalizeChapters(docs: readonly RawChapterDoc[], opts: Normaliz
           if (marker === 'w') stats.wWrapped++;
           if (marker === 'wj') stats.wordsOfJesus++;
           if (marker === 'qs') stats.selah++;
-          walkInline(node.content ?? []);
+          if (opts.wordTags && node.strong !== undefined) {
+            const tag: OpenTag = { start: bufStart + buf.length, end: Infinity, strongs: node.strong.split(/[\s,]+/).filter(Boolean), units: new Map() };
+            openTags.push(tag);
+            walkInline(node.content ?? []);
+            tag.end = bufStart + buf.length;
+          } else walkInline(node.content ?? []);
           break;
         }
         case 'note': {
@@ -388,6 +444,7 @@ export function normalizeChapters(docs: readonly RawChapterDoc[], opts: Normaliz
         case 'para': {
           const marker = node.marker ?? '';
           cur = null;
+          bufStart += buf.length;
           buf = '';
           if (marker === 'b') break; // stanza break — never a block
           if (REFERENCES.has(marker)) {
@@ -445,6 +502,9 @@ export function normalizeChapters(docs: readonly RawChapterDoc[], opts: Normaliz
     }
     kept.push({ ...v, verse: inside[0], lastVerse: inside.at(-1)! });
   }
-  // every node passed the checks above, so the documents have the stored type
-  return { docs: docs as readonly ChapterDoc[], blocks, tokens, verses: kept, droppedVerses, stats };
+  // Character styles lose the source's word attributes (`strong`, `x-morph`):
+  // no stored document carries them (ADR-0001 amendment). Every node passed
+  // the checks above, so the documents have the stored type.
+  const stored = docs.map((d) => ({ ...d, content: d.content.map(withoutWordAttributes) }));
+  return { docs: stored as readonly ChapterDoc[], blocks, tokens, verses: kept, droppedVerses, wordTags, stats };
 }

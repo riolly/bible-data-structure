@@ -63,7 +63,8 @@ describe('splitChapters: one document per chapter, unchanged', () => {
 
   it('drops the word attributes of the source, which nothing checks (ADR-0003), and keeps the text', () => {
     const w = { type: 'char', marker: 'w', strong: 'H7225', 'x-morph': 'HNcfsa', content: ['beginning'] };
-    const [d] = splitChapters({ type: 'USJ', version: '3.1', content: [{ type: 'chapter', marker: 'c', number: '1' }, { type: 'para', marker: 'p', content: [w] }] });
+    const raw = splitChapters({ type: 'USJ', version: '3.1', content: [{ type: 'chapter', marker: 'c', number: '1' }, { type: 'para', marker: 'p', content: [w] }] });
+    const [d] = normalizeChapters(raw, { wordTags: true }).docs;
     expect(d.content[1]).toEqual({ type: 'para', marker: 'p', content: [{ type: 'char', marker: 'w', content: ['beginning'] }] });
   });
 
