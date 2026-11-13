@@ -126,8 +126,8 @@ const native = sqliteLoads();
 
 describe.skipIf(!native)('mapping rows in the corpus DB', () => {
   it('read back into the same mappings', { timeout: 30_000 }, async () => {
-    const { createCorpusDb, seedBooksAndCanons, seedSchemes, insertMappings, insertTranslation } =
-      await import('./write-db');
+    const { createCorpusDb, seedBooksAndCanons, seedSchemes, insertMappings } = await import('./write-db');
+    const { writeEdition } = await import('./edition-writer');
     const { loadMappings } = await import('../db/corpus-read');
     const { db, sqlite } = createCorpusDb(':memory:');
     seedBooksAndCanons(db);
@@ -151,7 +151,7 @@ describe.skipIf(!native)('mapping rows in the corpus DB', () => {
     }
 
     const meta = { name: 'X', abbrev: 'X', language: 'en', year: null, license: null, edition: 'sha256:0', scheme: PIVOT };
-    expect(() => insertTranslation(db, meta)).toThrow(/pivot/);
+    await expect(writeEdition(db, meta, [], async () => {})).rejects.toThrow(/pivot/);
     sqlite.close();
   });
 });

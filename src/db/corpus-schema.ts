@@ -2,7 +2,7 @@ import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'driz
 
 /**
  * Corpus DB schema (old-repo ADR-0009). Shared by the ingest writer
- * (src/ingest/write-db.ts) and the reader (corpus-read.ts).
+ * (src/ingest/write-db.ts, edition-writer.ts) and the reader (corpus-read.ts).
  *
  * Integer pks here are STORAGE ids only — regenerated wholesale on every
  * re-ingest. Outside references use addresses (src/model/address.ts): scheme +

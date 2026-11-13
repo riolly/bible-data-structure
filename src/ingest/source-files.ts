@@ -47,7 +47,8 @@ function readUpstream(src: SourceDef, root: string): SourceFile[] {
 /**
  * A source's books as USFM, after conversion and its counted text fixes, its
  * edition stamp, and the readings (ADR-0007) and OSHB words (ADR-0003) its
- * conversion found, checked against the stored tokens by run.ts.
+ * conversion found, checked against the stored tokens: the readings by
+ * edition-writer.ts, the words by run.ts.
  */
 export function readSource(
   src: SourceDef,

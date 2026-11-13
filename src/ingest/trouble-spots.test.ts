@@ -50,6 +50,7 @@ describe.skipIf(!native || !hasTvtms)('trouble spots (research/README.md)', () =
     const { usfmToUsj } = await import('./parse');
     const { normalizeChapters, splitChapters } = await import('./normalize');
     const w = await import('./write-db');
+    const { writeEdition } = await import('./edition-writer');
     const { readChapter, loadMappings } = await import('../db/corpus-read');
 
     const schemes = loadSchemes();
@@ -62,7 +63,8 @@ describe.skipIf(!native || !hasTvtms)('trouble spots (research/README.md)', () =
     w.insertMappings(db, rows);
 
     for (const e of EDITIONS) {
-      const translationId = w.insertTranslation(db, {
+      const names = readdirSync(join(FIXTURES, e.dir));
+      const meta = {
         name: e.abbrev,
         abbrev: e.abbrev,
         language: e.language,
@@ -70,19 +72,21 @@ describe.skipIf(!native || !hasTvtms)('trouble spots (research/README.md)', () =
         license: null,
         scheme: e.scheme,
         edition: 'sha256:fixture',
+      };
+      await writeEdition(db, meta, names.map((n) => n.slice(0, 3)), async (edition) => {
+        for (const name of names) {
+          const usfm = readFileSync(join(FIXTURES, e.dir, name), 'utf8');
+          const { usj, parseErrors } = usfmToUsj(usfm);
+          expect(parseErrors, `${e.dir}/${name}`).toEqual([]);
+          const book = name.slice(0, 3);
+          const { docs, blocks, tokens, verses: texts } = normalizeChapters(splitChapters(usj), {
+            titleChapters: titleChapters(schemes.get(e.scheme)!, book),
+          });
+          const verses = tokens.flatMap((t) => (t.verse == null ? [] : [{ chapter: t.chapter, verse: t.verse }]));
+          expect(checkVerses(schemes.get(e.scheme)!, book, verses).unknown, `${e.dir}/${name}`).toEqual([]);
+          edition.addBook(book, { docs, verses: texts, blocks, tokens });
+        }
       });
-      for (const name of readdirSync(join(FIXTURES, e.dir))) {
-        const usfm = readFileSync(join(FIXTURES, e.dir, name), 'utf8');
-        const { usj, parseErrors } = usfmToUsj(usfm);
-        expect(parseErrors, `${e.dir}/${name}`).toEqual([]);
-        const book = name.slice(0, 3);
-        const { docs, blocks, tokens, verses: texts } = normalizeChapters(splitChapters(usj), {
-          titleChapters: titleChapters(schemes.get(e.scheme)!, book),
-        });
-        const verses = tokens.flatMap((t) => (t.verse == null ? [] : [{ chapter: t.chapter, verse: t.verse }]));
-        expect(checkVerses(schemes.get(e.scheme)!, book, verses).unknown, `${e.dir}/${name}`).toEqual([]);
-        w.insertBookRows(db, { translationId, book }, { docs, verses: texts, blocks, tokens });
-      }
     }
 
     mappings = loadMappings(db);

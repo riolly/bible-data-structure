@@ -443,6 +443,7 @@ describe.skipIf(!native)('the app contract on a verse bridge (fixtures/adversari
 
   beforeAll(async () => {
     const w = await import('../ingest/write-db');
+    const { writeEdition } = await import('../ingest/edition-writer');
     const { normalizeChapters, splitChapters } = await import('../ingest/normalize');
     const { loadSchemes } = await import('../ingest/schemes');
     const { corpusContract } = await import('./corpus-contract');
@@ -451,7 +452,7 @@ describe.skipIf(!native)('the app contract on a verse bridge (fixtures/adversari
     const { db } = w.createCorpusDb(':memory:');
     w.seedBooksAndCanons(db);
     w.seedSchemes(db, loadSchemes());
-    const translationId = w.insertTranslation(db, {
+    const meta = {
       name: 'Fixture',
       abbrev: 'FIX',
       language: 'english',
@@ -459,8 +460,8 @@ describe.skipIf(!native)('the app contract on a verse bridge (fixtures/adversari
       license: null,
       scheme: 'kjv',
       edition: 'sha256:fixture',
-    });
-    w.insertBookRows(db, { translationId, book: 'JHN' }, { docs, verses, blocks, tokens });
+    };
+    await writeEdition(db, meta, ['JHN'], async (edition) => edition.addBook('JHN', { docs, verses, blocks, tokens }));
     c = corpusContract(db);
   });
 

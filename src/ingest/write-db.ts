@@ -2,21 +2,15 @@
  * Corpus DB writer — the build-time side of the old-repo ADR-0009 Drizzle seam. Writes
  * through drizzle-orm/better-sqlite3 using the SAME schema module
  * (src/db/corpus-schema.ts) the reader uses (src/db/corpus-read.ts).
- *
- * Integer ids are storage-only and regenerated every ingest; block rows are
- * inserted first and their rowids mapped by the block's local ordinal.
- * Outside references use addresses, never these ids.
+ * edition-writer.ts writes each edition's rows.
  */
 
 import Database from 'better-sqlite3';
-import { eq } from 'drizzle-orm';
 import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 
 import { BOOKS, ENGLISH_NAMES, USFM_SPEC_URL } from '../model/books';
 import { CANONS } from '../model/canon';
-import type { Block, ChapterDoc, OriginalWord, Reading, Token, VerseText } from '../model/corpus';
 import { PIVOT, type MappingRow } from '../model/mapping';
-import { chapterStamp } from './edition';
 import { LIBPALASO_URL } from './schemes';
 import { CLEAR_BSB, KJV_TAGS, MACULA_GREEK, MACULA_HEBREW, OSHB, TVTMS } from './sources';
 import type { WordAlignment } from './alignment';
@@ -24,7 +18,7 @@ import { WORD_TEST_MARGIN } from './tvtms';
 import type { Scheme } from '../model/scheme';
 import * as schema from '../db/corpus-schema';
 
-export type CorpusDb = BetterSQLite3Database<typeof schema>;
+export type CorpusDb = BetterSQLite3Database<typeof schema> & { $client: Database.Database };
 
 /**
  * DDL mirroring src/db/corpus-schema.ts. The large tables
@@ -269,35 +263,6 @@ export function createIndexes(sqlite: Database.Database): void {
   sqlite.exec(INDEX_DDL);
 }
 
-export interface TranslationMeta {
-  name: string;
-  abbrev: string;
-  language: string;
-  year: number | null;
-  license: string | null;
-  /** Registry scheme id (ADR-0002), e.g. `kjv`. */
-  scheme: string;
-  edition: string;
-}
-
-export function insertTranslation(db: CorpusDb, meta: TranslationMeta): number {
-  if (meta.scheme === PIVOT) throw new Error(`${meta.abbrev}: an edition cannot use the pivot scheme (ADR-0006)`);
-  const [row] = db
-    .insert(schema.translation)
-    .values(meta)
-    .returning({ id: schema.translation.id })
-    .all();
-  return row.id;
-}
-
-/** Record an edition's words and text stamps once its books are written (ADR-0005 amendments). */
-export function setStamps(db: CorpusDb, translationId: number, stamps: { words: string; text: string }): void {
-  db.update(schema.translation)
-    .set({ wordsStamp: stamps.words, textStamp: stamps.text })
-    .where(eq(schema.translation.id, translationId))
-    .run();
-}
-
 /** Write the data sources, every USFM book, every canon and the default English names (ADR-0002). */
 export function seedBooksAndCanons(db: CorpusDb): void {
   db.insert(schema.dataSource).values([...DATA_SOURCES]).run();
@@ -372,108 +337,9 @@ function seedSchemesIn(db: CorpusDb, schemes: ReadonlyMap<string, Scheme>): void
   }
 }
 
-/** Tokens per multi-row INSERT: one call into SQLite per row was most of the insert time. */
-const TOKENS_PER_INSERT = 100;
-const TOKEN_INSERT = `INSERT INTO token (translation_id, book, chapter, verse, segment, word_index, seq, kind, text,
-  block_id, verse_start, ow_id) VALUES `;
-const TOKEN_VALUES = '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
-
-/** Prepared once per connection: drizzle's insert builder took about 6 s for a 51k-token book. */
-const bookStatements = new WeakMap<
-  Database.Database,
-  {
-    doc: Database.Statement;
-    verse: Database.Statement;
-    block: Database.Statement;
-    token: Database.Statement;
-    tokens: Database.Statement;
-  }
->();
-
-/**
- * Insert one book's chapter documents and the rows derived from them; maps
- * local block ordinals → rowids. Returns each chapter's stamp, in order. The statements follow the column order of
- * src/db/corpus-schema.ts, and roundtrip.test.ts reads the rows back through
- * that schema.
- */
-export function insertBookRows(
-  db: CorpusDb,
-  ids: { translationId: number; book: string },
-  rows: { docs: readonly ChapterDoc[]; verses: readonly VerseText[]; blocks: Block[]; tokens: Token[] },
-): { chapter: number; stamp: string }[] {
-  const sqlite = (db as unknown as { $client: Database.Database }).$client;
-  let stmts = bookStatements.get(sqlite);
-  if (!stmts) {
-    stmts = {
-      doc: sqlite.prepare('INSERT INTO chapter_doc (translation_id, book, chapter, usj, stamp) VALUES (?, ?, ?, ?, ?)'),
-      verse: sqlite.prepare(
-        'INSERT INTO verse_text (translation_id, book, chapter, verse, last_verse, segment, text) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      ),
-      block: sqlite.prepare(
-        'INSERT INTO block (translation_id, book, chapter, genre, marker, seq) VALUES (?, ?, ?, ?, ?, ?)',
-      ),
-      token: sqlite.prepare(TOKEN_INSERT + TOKEN_VALUES),
-      tokens: sqlite.prepare(TOKEN_INSERT + Array(TOKENS_PER_INSERT).fill(TOKEN_VALUES).join(', ')),
-    };
-    bookStatements.set(sqlite, stmts);
-  }
-  const { doc, verse, block, token, tokens } = stmts;
-  const stamps = rows.docs.map((d) => {
-    const usj = JSON.stringify(d.content);
-    const stamp = chapterStamp(usj, rows.verses.filter((v) => v.chapter === d.chapter));
-    doc.run(ids.translationId, ids.book, d.chapter, usj, stamp);
-    return { chapter: d.chapter, stamp };
-  });
-  for (const v of rows.verses) verse.run(ids.translationId, ids.book, v.chapter, v.verse, v.lastVerse, v.segment, v.text);
-  const blockRowId = new Map<number, number>();
-  for (const b of rows.blocks) {
-    const { lastInsertRowid } = block.run(ids.translationId, ids.book, b.chapter, b.genre, b.marker, b.seq);
-    blockRowId.set(b.id, Number(lastInsertRowid));
-  }
-  const values = (t: Token) => {
-    const blockId = blockRowId.get(t.blockId);
-    if (blockId == null) throw new Error(`token ${t.id} references unknown block ${t.blockId}`);
-    return [ids.translationId, ids.book, t.chapter, t.verse, t.segment, t.wordIndex, t.seq, t.kind, t.text, blockId,
-      t.verseStart ? 1 : 0, t.owId];
-  };
-  // Rows go in token order either way, so the rowids match one insert per row.
-  let i = 0;
-  for (; i + TOKENS_PER_INSERT <= rows.tokens.length; i += TOKENS_PER_INSERT) {
-    tokens.run(rows.tokens.slice(i, i + TOKENS_PER_INSERT).flatMap(values));
-  }
-  for (; i < rows.tokens.length; i++) token.run(values(rows.tokens[i]));
-  return stamps;
-}
-
-/** Write an edition's readings (ADR-0007). run.ts checks them against the stored tokens first. */
-export function insertReadings(db: CorpusDb, translationId: number, source: string, readings: readonly Reading[]): void {
-  const sqlite = (db as unknown as { $client: Database.Database }).$client;
-  const stmt = sqlite.prepare(
-    `INSERT INTO reading (translation_id, book, chapter, verse, segment, word_index, word_count, kind, text, ow_ids, source)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  );
-  for (const r of readings) {
-    stmt.run(translationId, r.book, r.chapter, r.verse, r.segment ?? '', r.wordIndex, r.wordCount, r.kind, r.text,
-      r.owIds.join(' '), source);
-  }
-}
-
-/** Write one book's original words (plan step 11), with `source` naming whose ids they are. */
-export function insertOriginalWords(db: CorpusDb, translationId: number, source: string, words: readonly OriginalWord[]): void {
-  const sqlite = (db as unknown as { $client: Database.Database }).$client;
-  const stmt = sqlite.prepare(
-    `INSERT INTO original_word (source, ow_id, translation_id, book, chapter, verse, segment, seq, word_index, kind,
-       text, lemma, strongs, morph, gloss) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  );
-  for (const w of words) {
-    stmt.run(source, w.owId, translationId, w.book, w.chapter, w.verse, w.segment, w.seq, w.wordIndex, w.kind, w.text,
-      w.lemma, w.strongs.join(' '), w.morph, w.gloss);
-  }
-}
-
 /** An edition's alignment rows (ADR-0003 step 12 amendment). */
 export function insertWordAlignments(db: CorpusDb, translationId: number, alignedBy: string, rows: readonly WordAlignment[]): void {
-  const sqlite = (db as unknown as { $client: Database.Database }).$client;
+  const sqlite = db.$client;
   const stmt = sqlite.prepare(
     `INSERT INTO word_alignment (translation_id, book, chapter, verse, segment, word_index, seq, source, ow_id, strongs,
        aligned_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -591,7 +457,7 @@ export function insertMappings(db: CorpusDb, rows: readonly MappingRow[], source
     source: r.source ?? source,
   }));
   // A prepared statement: drizzle's builder takes seconds for tens of thousands of rows.
-  const sqlite = (db as unknown as { $client: Database.Database }).$client;
+  const sqlite = db.$client;
   const stmt = sqlite.prepare(
     `INSERT INTO scheme_mapping (scheme, book, chapter, verse, segment, pivot_book, pivot_chapter,
        pivot_verse, pivot_segment, kind, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,

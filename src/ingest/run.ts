@@ -25,7 +25,6 @@ import { alignWords, readClearAlignment, readClearWords } from './alignment';
 import { linkVerseTags, type HubWord, type TagStats } from './kjv-tags';
 import { loadMappings } from '../db/corpus-read';
 import { SOURCES_ROOT, readSource } from './source-files';
-import { checkReadings } from './oshb-xml';
 import {
   GREEK_EXCEPTIONS,
   checkExceptionsUsed,
@@ -35,7 +34,7 @@ import {
   type HubPart,
   type MaculaWord,
 } from './original-words';
-import { textStamp, wordsStamp } from './edition';
+import { writeEdition } from './edition-writer';
 import { RIGHTS } from '../contract/rights';
 import { factsText, loadEditionFacts } from '../provider/edition-facts';
 import { checkExtendOnly, formatPivotSnapshot, pivotSnapshot, type PivotSnapshot } from './pivot';
@@ -54,13 +53,8 @@ import {
   createCorpusDb,
   createIndexes,
   type CorpusDb,
-  insertBookRows,
-  insertOriginalWords,
-  insertReadings,
-  insertTranslation,
   insertMappings,
   insertWordAlignments,
-  setStamps,
   seedBooksAndCanons,
   seedSchemes,
 } from './write-db';
@@ -119,23 +113,19 @@ async function main() {
       const greekUsed = new Set<string>();
       const rights = RIGHTS.get(src.meta.abbrev);
       if (!rights) throw new Error(`${src.meta.abbrev}: no rights record in src/contract/rights.ts`);
-      const translationId = insertTranslation(db, { ...src.meta, license: rights.license, edition });
-      const words = wordsStamp();
-      const chapters = textStamp();
       const text = editionText(src.meta.abbrev);
       texts.set(scheme.id, [...(texts.get(scheme.id) ?? []), text]);
       editions.push({ scheme: scheme.id, text });
-      console.log(`\n${src.meta.abbrev} — edition ${edition}`);
-      for (const fix of src.textFixes ?? []) console.log(`  text fix ×${fix.count}: ${JSON.stringify(fix.find)} (${fix.why})`);
-
       const totals: Record<string, number> = {};
       let blockCount = 0;
       let tokenCount = 0;
       let chapterCount = 0;
       // One transaction per edition, held open across awaits: each book is
       // written as soon as it is parsed, in book order.
-      sqlite.exec('BEGIN');
-      try {
+      const meta = { ...src.meta, license: rights.license, edition };
+      const stamps = await writeEdition(db, meta, files.map((f) => f.code), async (writer) => {
+        console.log(`\n${src.meta.abbrev} — edition ${edition}`);
+        for (const fix of src.textFixes ?? []) console.log(`  text fix ×${fix.count}: ${JSON.stringify(fix.find)} (${fix.why})`);
         for (const [j, file] of files.entries()) {
           const checked = checkBook(file.code, JSON.parse(await outcomes[j]) as ParseOutcome, scheme, {
             wordTags: src.meta.abbrev === KJV_TAGS.edition,
@@ -144,10 +134,8 @@ async function main() {
           if (!checked.ok) throw checked.error;
           const { docs, blocks, tokens, verses, stats } = checked.rows;
           if (checked.rows.wordTags.length > 0) kjvTags.set(file.code, checked.rows.wordTags);
-          chapters.add(file.code, insertBookRows(db, { translationId, book: file.code }, { docs, verses, blocks, tokens }));
           const bookReadings = readings.filter((r) => r.book === file.code);
-          checkReadings(file.code, bookReadings, tokens);
-          insertReadings(db, translationId, 'oshb', bookReadings);
+          writer.addBook(file.code, checked.rows, bookReadings);
           if (macula) {
             const { words: ow, stats, morphemes } =
               hub === MACULA_HEBREW
@@ -157,26 +145,20 @@ async function main() {
             if (hub === MACULA_GREEK) {
               for (const w of ow) hubParts.set(w.owId, { source: 'macula-greek', owId: w.owId, strongs: w.strongs });
             }
-            insertOriginalWords(db, translationId, hub === MACULA_HEBREW ? 'oshb' : MACULA_GREEK.id, ow);
+            writer.addOriginalWords(file.code, hub === MACULA_HEBREW ? 'oshb' : MACULA_GREEK.id, ow);
             owTotals.words += ow.length;
             owTotals.noGloss += stats.noGloss;
           }
           addBookText(text, file.code, blocks, tokens, verses);
-          words.add(file.code, tokens, verses);
           addStats(totals, stats);
           blockCount += blocks.length;
           tokenCount += tokens.length;
           chapterCount += docs.length;
         }
         if (hub === MACULA_GREEK) checkExceptionsUsed(GREEK_EXCEPTIONS, greekUsed);
-        setStamps(db, translationId, { words: words.digest(), text: chapters.digest() });
-        sqlite.exec('COMMIT');
-        prepared.delete(i); // free this edition's parse results
-      } catch (e) {
-        sqlite.exec('ROLLBACK');
-        throw e;
-      }
-      console.log(`  ${blockCount} blocks, ${tokenCount} tokens, words stamp ${words.digest()}, text stamp ${chapters.digest()}`);
+      });
+      prepared.delete(i); // free this edition's parse results
+      console.log(`  ${blockCount} blocks, ${tokenCount} tokens, words stamp ${stamps.words}, text stamp ${stamps.text}`);
       if (readings.length > 0) console.log(`  ${readings.length} qere readings (ADR-0007)`);
       if (hub) {
         console.log(`  ${owTotals.words} original words, glosses from ${hub.id}: ${owTotals.noGloss} read words have none`);
