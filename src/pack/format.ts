@@ -2,12 +2,15 @@
  * How a pack stores what the corpus DB stores, in both directions: which
  * tables it drops, how it encodes a chapter document, and the reader that
  * reads it back. `buildPack` (pack.ts) writes this format. No Node-only
- * import here, so an app reads a pack through `packReader`.
+ * import here, so an app reads a pack through `packContract`, or through
+ * `packReader` under a provider.
  */
 
 import { and, eq, sql } from 'drizzle-orm';
 import { deflateSync, inflateSync, strFromU8, strToU8 } from 'fflate';
 
+import type { BibleContract } from '../contract/contract';
+import { readerContract } from '../contract/corpus-contract';
 import { dbReader, type CorpusReader } from '../contract/reader';
 import { at, prepared, type SyncSqliteDb } from '../db/corpus-read';
 import * as schema from '../db/corpus-schema';
@@ -25,6 +28,11 @@ export const inflateDoc = (stored: Uint8Array): string => strFromU8(inflateSync(
 /** The corpus DB's reader over a pack, with each chapter document inflated. */
 export function packReader(db: SyncSqliteDb): CorpusReader {
   return { ...dbReader(db), chapterDoc: (abbrev, book, chapter) => readPackedDoc(db, abbrev, book, chapter) };
+}
+
+/** The app contract over a pack, on any sync drizzle SQLite driver. */
+export function packContract(db: SyncSqliteDb): BibleContract {
+  return readerContract(packReader(db));
 }
 
 /** One chapter's document from a pack and its stamp, or null when the edition has no such chapter. */

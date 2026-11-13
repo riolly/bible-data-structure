@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 
 import { sqliteLoads } from '../ingest/native-probe';
-import type { BibleContract, Lookup } from './contract';
+import { ContractError, type BibleContract, type Lookup } from './contract';
 import { parseReference } from './reference';
 
 /**
@@ -535,6 +535,25 @@ describe.skipIf(!native)('the app contract on a verse bridge (fixtures/adversari
       { id: 'FIX', name: 'Fixture', language: 'english', scheme: 'kjv', stamp: 'sha256:fixture', wordsStamp: expect.any(String), textStamp: expect.any(String) },
     ]);
     expect(await c.books('FIX')).toEqual([{ book: 'JHN', name: 'John', section: 'nt', chapters: 2 }]);
+  });
+
+  it('a call that cannot answer rejects with a ContractError, whose code says why', async () => {
+    const code = (call: Promise<unknown>) =>
+      call.then(
+        () => 'answered',
+        (e: unknown) => (e instanceof ContractError ? e.code : `not a ContractError: ${e}`),
+      );
+    expect(await code(c.chapter('ESV', 'JHN', 1))).toBe('unknown-edition');
+    expect(await code(c.verseText('FIX', 'John 3:16'))).toBe('bad-address');
+    expect(await code(c.verseText('FIX', 'JHN 1:1-2'))).toBe('bad-address');
+    expect(await code(c.words('FIX', 'JHN 1:1-2'))).toBe('bad-address');
+    expect(await code(c.chapter('FIX', 'JHN', 0))).toBe('bad-address');
+    expect(await code(c.resolve('FIX', 'JHN 1:1'))).toBe('bad-address');
+    expect(await code(c.resolve('FIX', 'JHN 1:1/nope'))).toBe('unknown-scheme');
+    expect(await code(c.map('FIX', 'JHN 99:1', 'FIX'))).toBe('not-in-scheme');
+    expect(await code(c.rights('FIX'))).toBe('no-rights');
+    const bad = await c.resolve('FIX', 'JHN 1:1').catch((e: unknown) => e as ContractError);
+    expect((bad as ContractError).cause).toBeInstanceOf(Error);
   });
 
   it('rights throws for an edition the contract does not read, though it has a record', async () => {

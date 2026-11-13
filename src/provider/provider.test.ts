@@ -3,6 +3,7 @@ import { join } from 'node:path';
 
 import { beforeAll, describe, expect, it } from 'vitest';
 
+import { ContractError } from '../contract/contract';
 import { dbReader } from '../contract/reader';
 import type { RightsRecord } from '../contract/rights';
 import type { SyncSqliteDb } from '../db/corpus-read';
@@ -179,6 +180,19 @@ describe.skipIf(!native || !existsSync(CORPUS))('the provider: local and license
     ]);
     expect((await p.books('KJV')).map((b) => [b.book, b.chapters])).toEqual((await p.books('KJVAB')).map((b) => [b.book, b.chapters]));
     expect(fetches).toEqual([]);
+  });
+
+  it('a failed fetch rejects the call as unavailable, with the fetch error as its cause', async () => {
+    const offline: FetchChapter = async () => {
+      throw new Error('offline');
+    };
+    const p = provider({ local: dbReader(db), fetchChapter: offline, editions: EDITIONS });
+    const e = (await p.chapter('KJVAB', 'JHN', 3).catch((x: unknown) => x)) as ContractError;
+    expect(e).toBeInstanceOf(ContractError);
+    expect([e.code, e.message, (e.cause as Error).message]).toEqual(['unavailable', 'KJVAB JHN 3 could not be read: offline', 'offline']);
+    expect(((await p.map('KJV', 'JHN 3:16', 'KJVAB').catch((x: unknown) => x)) as ContractError).code).toBe('unavailable');
+    // a local edition still reads
+    expect((await p.chapter('KJV', 'JHN', 3)).kind).toBe('chapter');
   });
 
   it('rights: the licensed records, and the local ones from rights.ts', async () => {

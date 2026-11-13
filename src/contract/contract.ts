@@ -31,6 +31,9 @@
  * (`corpus-contract.ts`), a pack (plan step 13) and a licensed provider
  * (step 10) can each implement the same interface.
  *
+ * A call that can't answer rejects with a `ContractError`, whose `code` says
+ * why. Any other error is a fault in the file or in this code.
+ *
  * No Node-only import here.
  */
 
@@ -38,6 +41,30 @@ import type { OriginalWordKind, UsjNode } from '../model/corpus';
 import type { RightsRecord } from './rights';
 
 export type { RightsRecord } from './rights';
+
+/**
+ * Why a call can't answer:
+ *
+ * - `unknown-edition`: this contract reads no edition of that name.
+ * - `unknown-scheme`: the file holds no scheme of that name, or it is the pivot.
+ * - `bad-address`: the address, reference or chapter number is malformed, or
+ *   is not the kind the call takes (a range where one verse is asked).
+ * - `not-in-scheme`: `map` was asked for a verse its source scheme lacks.
+ * - `no-rights`: the edition has no rights record.
+ * - `unavailable`: a chapter of a licensed edition could not be fetched.
+ *   `cause` is the fetch's error. The same call may answer later.
+ */
+export type ContractErrorCode = 'unknown-edition' | 'unknown-scheme' | 'bad-address' | 'not-in-scheme' | 'no-rights' | 'unavailable';
+
+export class ContractError extends Error {
+  readonly code: ContractErrorCode;
+
+  constructor(code: ContractErrorCode, message: string, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = 'ContractError';
+    this.code = code;
+  }
+}
 
 /**
  * An edition and its stamps (ADR-0005). An edition fetched a chapter at a
@@ -154,10 +181,24 @@ export type ChapterResult =
        * The chapter document: the source's USJ nodes from this `\c` up to the
        * next, without word attributes (ADR-0001 amendment). Every element is
        * one of the supported markers (`UsjElement`). Render it, footnotes and
-       * all.
+       * all. Three rules connect it to `verses`:
+       *
+       * - Each `verse` element starts one unit of `verses`, in the same order.
+       * - A Psalm title has no `verse` element. When `verses[0].verse` is 0,
+       *   the title is the `d` paragraph before the first `verse` element. A
+       *   `d` paragraph is not a title otherwise: WEB's Psalm 119 has 22, the
+       *   acrostic letters, and no verse 0.
+       * - The text is the source's, unchanged. `Verse.text` and `Word.text`
+       *   are NFC with each run of whitespace made one space, so normalize
+       *   the document's text the same way before comparing (WLC's is not NFC).
        */
       readonly content: readonly UsjNode[];
-      /** Chapter 1 only: the book's front matter (`\mt` titles), rendered above the chapter. */
+      /**
+       * Chapter 1 only: the book's front matter, everything before `\c 1`.
+       * Render its `mt` paragraphs (the titles) above the chapter. Its `id`
+       * element and its `h` and `toc1` to `toc3` paragraphs are metadata, not
+       * text to show.
+       */
       readonly front: readonly UsjNode[] | null;
       /** The chapter's verse units in order, each with its address and text. */
       readonly verses: readonly Verse[];

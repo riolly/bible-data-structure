@@ -51,6 +51,26 @@ Steps only a person can do:
 - Ask API.Bible in writing whether NASB and NLT may be stored whole on a device, and whether our server may cache chapters for our app.
 - Ask the Lockman Foundation for terms on NASB files with Strong's numbers. That license moves NASB from Reading to Full.
 
+## Use from an app
+
+An app imports `src/index.ts` and brings a sync drizzle SQLite driver. The contract ran unchanged on better-sqlite3, `node:sqlite`, `bun:sqlite` and sql.js on 2026-11-14.
+
+```ts
+import Database from 'better-sqlite3';
+import { drizzle } from 'drizzle-orm/better-sqlite3';
+import { ContractError, packContract, schema } from './src';
+
+const db = drizzle({ client: new Database('build/packs/KJV+BSB.db', { readonly: true }), schema });
+const bible = packContract(db);
+
+const editions = await bible.editions();            // KJV, BSB, WLC, SBLGNT
+const books = await bible.books('KJV');             // 66 books in canon order, each with its chapter count
+const chapter = await bible.chapter('KJV', 'JHN', 3);
+const hebrew = await bible.map('KJV', 'PSA 51:1', 'WLC');
+```
+
+For licensed editions, wrap the pack in a provider with the app's own fetch: `provider({ local: packReader(db), fetchChapter })`. A call that can't answer rejects with a `ContractError`, and its `code` says whether the address was bad, the edition unknown or a fetch failed (`src/contract/contract.ts`).
+
 ## Carried over from bible-codex
 
 Each ADR's status line names the old ADR it carries or replaces. What is left:
