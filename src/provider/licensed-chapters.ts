@@ -66,8 +66,8 @@ export function licensedChapters(opts: LicensedChaptersOptions): LicensedChapter
       const got = await opts.fetchChapter(id, book, chapter, e);
       const read = got ? await readLicensedChapter(id, e, opts.schemeOf(id), book, chapter, got.data) : null;
       const fetchedAt = got ? Date.parse(got.fetchedAt) : opts.now();
-      if (!fresh(e, fetchedAt)) {
-        throw new Error(`${key} is still missing after its fetch: the fetch gave a copy from ${got!.fetchedAt}, older than ${e.rights.refreshDays} days`);
+      if (got && !fresh(e, fetchedAt)) {
+        throw new Error(`${key} is still missing after its fetch: the fetch gave a copy from ${got.fetchedAt}, older than ${e.rights.refreshDays} days`);
       }
       // a refresh replaces the held chapter here: a changed stamp (held.get(key)?.read?.stamp) would be reported here
       held.set(key, { read, fetchedAt });

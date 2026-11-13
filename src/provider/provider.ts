@@ -76,7 +76,7 @@ export function provider(opts: ProviderOptions): Provider {
     },
     chapter: (id, book, chapter) => (licensed(id) ? held.chapter(id, book, chapter) : db.chapter(id, book, chapter)),
     chapterDoc: (id, book, chapter) =>
-      licensed(id) ? thenRead(held.chapter(id, book, chapter), (r: ReadChapter) => r.doc) : db.chapterDoc(id, book, chapter),
+      licensed(id) ? thenRead(held.chapter(id, book, chapter), (r: ReadChapter) => ({ ...r.doc, stamp: r.stamp })) : db.chapterDoc(id, book, chapter),
     originalWords: (id, ...at) => (licensed(id) ? [] : db.originalWords(id, ...at)),
     wordAlignments: (id, ...at) => (licensed(id) ? [] : db.wordAlignments(id, ...at)),
     dataSources: () => db.dataSources(),

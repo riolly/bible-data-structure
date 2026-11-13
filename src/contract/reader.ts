@@ -38,8 +38,12 @@ export type ChapterRead<T> = T | null | Promise<T | null>;
 export interface CorpusReader {
   edition(abbrev: string): { abbrev: string; scheme: string; edition: string | null; wordsStamp: string | null; textStamp: string | null } | null;
   chapter(abbrev: string, book: string, chapter: number): ChapterRead<ChapterUnits>;
-  /** Chapter 0 is the book's front matter. */
-  chapterDoc(abbrev: string, book: string, chapter: number): ChapterRead<ChapterDoc>;
+  /**
+   * The chapter's document, with the stamp of the copy it is from: a reader
+   * that fetches can replace a chapter between this read and `chapter`.
+   * Chapter 0 is the book's front matter.
+   */
+  chapterDoc(abbrev: string, book: string, chapter: number): ChapterRead<ChapterDoc & { readonly stamp: string }>;
   originalWords(abbrev: string, book: string, chapter: number, verse: number, segment: string): OriginalWord[];
   wordAlignments(abbrev: string, book: string, chapter: number, verse: number, segment: string): AlignedOriginal[];
   dataSources(): Credit[];

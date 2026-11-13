@@ -118,6 +118,43 @@ describe('licensed chapters: hold, refresh and fetch', () => {
     expect(t.fetches).toEqual(['JHN 4']);
   });
 
+  it('holds a chapter the edition does not print when nothing is kept (0 refresh days)', async () => {
+    const editions = new Map<string, LicensedEdition>([['KJVAB', { scheme: 'tst', rights: { ...rights, refreshDays: 0 } }]]);
+    const held = licensedChapters({ editions, fetchChapter: async () => null, schemeOf: () => SCHEME, now: () => 0 });
+    expect(await held.chapter('KJVAB', 'JHN', 4)).toBeNull();
+  });
+
+  it('the contract gives one copy of a chapter that is replaced between its two reads', async () => {
+    // two copies of John 3: the second ends with one more text node, so its stamp differs
+    const copy = async (extra: string) => {
+      const content = [...JHN_3.content, { type: 'text', text: extra }] as ApiBibleChapter['content'];
+      const t = make(new Map([['JHN 3', { ...JHN_3, content }]]));
+      return (await t.held.chapter('KJVAB', 'JHN', 3))!;
+    };
+    const [first, second] = [await copy(' a'), await copy(' b')];
+    expect(first.stamp).not.toBe(second.stamp);
+    const reader = (units: (typeof first)[]): CorpusReader => ({
+      edition: (abbrev) => ({ abbrev, scheme: 'tst', edition: null, wordsStamp: null, textStamp: null }),
+      // the units come from `units` in turn, the last one from then on; the document is always the second copy's
+      chapter: () => (units.length > 1 ? units.shift()! : units[0]),
+      chapterDoc: (_, __, chapter) => (chapter === 3 ? { ...second.doc, stamp: second.stamp } : null),
+      originalWords: () => [],
+      wordAlignments: () => [],
+      dataSources: () => [],
+      schemes: () => new Map([['tst', SCHEME]]),
+      mappings: () => {
+        throw new Error('no mappings');
+      },
+    });
+    const got = await readerContract(reader([first, second])).chapter('KJVAB', 'JHN', 3);
+    if (got.kind !== 'chapter') throw new Error('absent');
+    expect(got.stamp).toBe(second.stamp);
+    expect(got.content).toEqual(second.doc.content);
+    expect(got.verses.map((v) => v.text)).toEqual(second.verses.map((v) => v.text));
+    // units that never match the document are an error, not a mixed chapter
+    await expect(readerContract(reader([first])).chapter('KJVAB', 'JHN', 3)).rejects.toThrow('chapter: KJVAB JHN 3 changed while it was read');
+  });
+
   it('the contract fetches the chapters of one call at once', async () => {
     const t = make(new Map([['JHN 3', JHN_3], ['JHN 4', JHN_4]]));
     t.state.hold = true;
