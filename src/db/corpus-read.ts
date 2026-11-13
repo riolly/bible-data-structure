@@ -1,5 +1,5 @@
 import { and, asc, eq, gte, inArray, isNull, lte, or } from 'drizzle-orm';
-import type { BaseSQLiteDatabase } from 'drizzle-orm/sqlite-core';
+import { alias, type BaseSQLiteDatabase } from 'drizzle-orm/sqlite-core';
 
 import type { Block, ChapterDoc, OriginalWord, Reading, Token, VerseText } from '../model/corpus';
 import { Mappings, type MappingRow } from '../model/mapping';
@@ -308,6 +308,64 @@ export function readOriginalWords(
       ),
     )
     .orderBy(asc(w.seq))
+    .all()
+    .map((row) => ({ ...row, strongs: row.strongs ? row.strongs.split(' ') : [] }));
+}
+
+/** One alignment row of a word: the original word it translates and the Strong's numbers it carries (plan step 12). */
+export interface AlignedOriginal {
+  readonly wordIndex: number;
+  readonly strongs: readonly string[];
+  readonly owId: string;
+  /** Where the original word is: its edition and scheme, and its word index (null for a qere). */
+  readonly edition: string;
+  readonly scheme: string;
+  readonly book: string;
+  readonly chapter: number;
+  readonly verse: number;
+  readonly segment: string;
+  readonly owWordIndex: number | null;
+}
+
+/** The alignment rows of one verse unit's words, by word index and then `seq`. Empty for an edition with none. */
+export function readWordAlignments(
+  db: SyncSqliteDb,
+  translationAbbrev: string,
+  bookCode: string,
+  chapter: number,
+  verse: number,
+  segment: string,
+): AlignedOriginal[] {
+  const a = schema.wordAlignment;
+  const o = schema.originalWord;
+  const hub = alias(schema.translation, 'hub');
+  return db
+    .select({
+      wordIndex: a.wordIndex,
+      strongs: a.strongs,
+      owId: a.owId,
+      edition: hub.abbrev,
+      scheme: hub.scheme,
+      book: o.book,
+      chapter: o.chapter,
+      verse: o.verse,
+      segment: o.segment,
+      owWordIndex: o.wordIndex,
+    })
+    .from(a)
+    .innerJoin(schema.translation, eq(a.translationId, schema.translation.id))
+    .innerJoin(o, and(eq(o.source, a.source), eq(o.owId, a.owId)))
+    .innerJoin(hub, eq(o.translationId, hub.id))
+    .where(
+      and(
+        eq(schema.translation.abbrev, translationAbbrev),
+        eq(a.book, bookCode),
+        eq(a.chapter, chapter),
+        eq(a.verse, verse),
+        eq(a.segment, segment),
+      ),
+    )
+    .orderBy(asc(a.wordIndex), asc(a.seq))
     .all()
     .map((row) => ({ ...row, strongs: row.strongs ? row.strongs.split(' ') : [] }));
 }
