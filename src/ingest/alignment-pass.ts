@@ -102,23 +102,30 @@ export function runAlignment(db: CorpusDb, aligner: Aligner): string {
   return summary;
 }
 
-/** The hub texts are the editions with original words (WLC and SBLGNT). They share one scheme. */
+/** The hub texts (plan step 11). Original words of any other edition are not a hub for the aligners. */
+const HUB_TEXTS = ['WLC', 'SBLGNT'];
+
+/** The hub texts' original words by whole verse. The hub texts must share one scheme. */
 function readHubWords(db: CorpusDb): { scheme: string; words: Map<string, HubWord[]> } {
   const sqlite = db.$client;
-  const hubs = sqlite
-    .prepare(`SELECT abbrev, scheme FROM translation WHERE id IN (SELECT DISTINCT translation_id FROM original_word) ORDER BY id`)
-    .all() as { abbrev: string; scheme: string }[];
+  const named = HUB_TEXTS.map(() => '?').join(', ');
+  const hubs = sqlite.prepare(`SELECT abbrev, scheme FROM translation WHERE abbrev IN (${named}) ORDER BY id`).all(...HUB_TEXTS) as {
+    abbrev: string;
+    scheme: string;
+  }[];
   const schemes = [...new Set(hubs.map((h) => h.scheme))];
   if (schemes.length !== 1) {
-    throw new Error(`the hub texts ${hubs.map((h) => h.abbrev).join(' and ')} must share one scheme, not ${schemes.join(', ')}`);
+    const found = hubs.length > 0 ? hubs.map((h) => `${h.abbrev} under ${h.scheme}`).join(', ') : 'neither';
+    throw new Error(`the hub texts ${HUB_TEXTS.join(' and ')} must share one scheme in the corpus; found ${found}`);
   }
   const words = new Map<string, HubWord[]>();
   const rows = sqlite
     .prepare(
-      `SELECT book, chapter, verse, source, ow_id AS owId, kind, strongs FROM original_word
-       ORDER BY book, chapter, verse, segment, seq`,
+      `SELECT o.book, o.chapter, o.verse, o.source, o.ow_id AS owId, o.kind, o.strongs FROM original_word o
+       JOIN translation t ON t.id = o.translation_id WHERE t.abbrev IN (${named})
+       ORDER BY o.book, o.chapter, o.verse, o.segment, o.seq`,
     )
-    .all() as { book: string; chapter: number; verse: number; source: HubWord['source']; owId: string; kind: HubWord['kind']; strongs: string }[];
+    .all(...HUB_TEXTS) as { book: string; chapter: number; verse: number; source: HubWord['source']; owId: string; kind: HubWord['kind']; strongs: string }[];
   for (const w of rows) {
     // whole verses: a mapped verse unit meets every word of its hub verses
     const key = unitKey({ ...w, segment: '' });

@@ -65,7 +65,7 @@ async function corpus() {
       )
       .all(abbrev)
       .map((r) => (r as { row: string }).row);
-  return { db, writeMappings, stored };
+  return { db, edition, writeMappings, stored };
 }
 
 /** Clear's BSB files under a sources root: GEN 1:1's words, and `In … beginning`, `God` and `created` aligned to morphemes. */
@@ -118,5 +118,31 @@ describe.skipIf(!native)('the alignment pass', () => {
     // one H430 tag, two H430 words: the tag at word 4 of 5 takes the last hub word, nearer its place than a2
     expect(stored('KJV')).toEqual(['GEN 1:2!2 a1 H7225', 'GEN 1:2!3 a4 H430']);
     expect(summary).toBe('KJV tags (kjv-strongs): 2 of 3 pass, 1 name no word of their mapped verse, 0 are in verses that map to none; 2 rows on 2 words');
+  });
+
+  it("reads hub words from WLC and SBLGNT only, under one scheme", async () => {
+    const { kjvTagAligner, runAlignment } = await import('./alignment-pass');
+    const { db, edition, writeMappings, stored } = await corpus();
+    writeMappings();
+    // another edition with original words in the hub scheme is not a hub text
+    await edition('LXX', 'org', async (w) => {
+      w.addBook('GEN', rows(1));
+      w.addOriginalWords('GEN', 'oshb', [hubWord('x1', 0, 'H9999')]);
+    });
+    const tags = new Map([['GEN', [{ chapter: 1, verse: 2, segment: '', wordIndexes: [4], strongs: ['H9999'] }]]]);
+    expect(runAlignment(db, kjvTagAligner(tags))).toMatch(/: 0 of 1 pass, 1 name no word/);
+    expect(stored('KJV')).toEqual([]);
+    await edition('SBLGNT', 'kj', async (w) => {
+      w.addBook('GEN', rows(1));
+      w.addOriginalWords('GEN', 'oshb', [hubWord('g1', 0, 'G2316')]);
+    });
+    expect(() => runAlignment(db, kjvTagAligner(tags))).toThrow('the hub texts WLC and SBLGNT must share one scheme in the corpus; found WLC under org, SBLGNT under kj');
+  });
+
+  it('stops when the aligned edition is not in the corpus', async () => {
+    const { runAlignment } = await import('./alignment-pass');
+    const { db } = await corpus();
+    const aligner = { edition: 'ESV', alignedBy: 'test', align: () => ({ rows: [], summary: '' }) };
+    expect(() => runAlignment(db, aligner)).toThrow('test: no edition ESV in the corpus');
   });
 });
