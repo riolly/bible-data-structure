@@ -59,7 +59,8 @@ export function readMacula(path: string): Map<string, MaculaWord[]> {
   const header = lines[0].replace(/\r$/, '').split('\t');
   const refAt = header.indexOf('ref');
   const idAt = header.indexOf('xml:id');
-  const wanted = [...MACULA_COLUMNS, ...(header.includes('strongnumberx') ? [] : GREEK_COLUMNS)];
+  // Hebrew rows keep each morpheme's Strong's number, which the BSB alignment reads (plan step 12).
+  const wanted = [...MACULA_COLUMNS, ...(header.includes('strongnumberx') ? ['strongnumberx'] : GREEK_COLUMNS)];
   const missing = ['xml:id', 'ref', ...wanted].filter((c) => !header.includes(c));
   if (missing.length > 0) throw new Error(`${path}: no ${missing.join(', ')} column`);
   const keep = wanted.map((c) => [c, header.indexOf(c)] as const);
@@ -72,6 +73,7 @@ export function readMacula(path: string): Map<string, MaculaWord[]> {
     const cells = line.split('\t');
     const row: Record<string, string> = {};
     for (const [c, j] of keep) row[c] = cells[j] ?? '';
+    row['xml:id'] = cells[idAt];
     const ref = cells[refAt];
     if (last && last.ref === ref) {
       last.word.rows.push(row);
@@ -146,6 +148,15 @@ function wordsByVerse(code: string, tokens: readonly Token[]): Map<string, strin
     list.push(t.text);
   }
   return byVerse;
+}
+
+/** An id an alignment source points at (a MACULA morpheme or word) and the original word it is part of. */
+export interface HubPart {
+  /** A data_source id: whose id `owId` is. */
+  readonly source: 'oshb' | 'macula-greek';
+  readonly owId: string;
+  /** The part's own Strong's numbers: a Hebrew morpheme's (`H871` for בְּ), or the Greek word's. */
+  readonly strongs: readonly string[];
 }
 
 export interface JoinStats {
@@ -223,7 +234,7 @@ export function hebrewWords(
   verses: readonly OshbVerse[],
   readings: readonly OshbReading[],
   macula: ReadonlyMap<string, MaculaWord[]>,
-): { words: OriginalWord[]; stats: JoinStats } {
+): { words: OriginalWord[]; stats: JoinStats; morphemes: [string, HubPart][] } {
   const stored = wordsByVerse(code, tokens);
   const readingsByVerse = new Map<string, OshbReading[]>();
   for (const r of readings) {
@@ -231,6 +242,7 @@ export function hebrewWords(
     (readingsByVerse.get(key) ?? readingsByVerse.set(key, []).get(key)!).push(r);
   }
   const out: OriginalWord[] = [];
+  const morphemes: [string, HubPart][] = [];
   let noGloss = 0;
   for (const v of verses) {
     const key = `${code} ${v.chapter}:${v.verse}`;
@@ -274,6 +286,10 @@ export function hebrewWords(
         throw new Error(`${key}!${j + 1} (read text): OSHB has "${w.text}", MACULA Hebrew "${m.text}"`);
       }
       glossOf.set(w.id, maculaGloss(m, 'H'));
+      for (const row of m.rows) {
+        const strong = strongKey('H', row.strongnumberx ?? '');
+        morphemes.push([row['xml:id'], { source: 'oshb', owId: w.id, strongs: strong ? [strong] : [] }]);
+      }
     });
 
     // store in read order: each ketiv word in its place, its qere right after it
@@ -310,7 +326,7 @@ export function hebrewWords(
       if (ends) for (const w of rs[r++].qere) push(w, 'qere', null);
     }
   }
-  return { words: out, stats: { noGloss } };
+  return { words: out, stats: { noGloss }, morphemes };
 }
 
 function parseKey(key: string): { chapter: number; verse: number; segment: string } {
