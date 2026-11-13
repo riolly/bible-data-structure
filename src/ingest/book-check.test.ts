@@ -1,12 +1,18 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import type { Scheme } from '../model/scheme';
 import { checkBook, checkVerseWords, validate, type BookCheck } from './book-check';
-import { normalizeUsj, type UsjDoc } from './normalize';
+import { normalizeChapters, normalizeUsj, type NormalizeResult, type UsjDoc } from './normalize';
 import type { ParseOutcome } from './parse';
+
+// checkBook's normalizeChapters is the real one unless a test below changes what it returns once.
+vi.mock('./normalize', async (importOriginal) => {
+  const real = await importOriginal<typeof import('./normalize')>();
+  return { ...real, normalizeChapters: vi.fn(real.normalizeChapters) };
+});
 
 /**
  * The checks the ingest runs on each book (book-check.ts), on the committed
@@ -132,5 +138,56 @@ describe('the row checks no USJ input reaches', () => {
     expect(() => checkVerseWords('JHN', tokens, verses)).not.toThrow();
     const changed = verses.map((v, i) => (i === 0 ? { ...v, text: `${v.text} more` } : v));
     expect(() => checkVerseWords('JHN', tokens, changed)).toThrow(/^JHN 1:1: the verse text's words differ from its word tokens/);
+  });
+});
+
+describe('checkBook runs the row checks on the rows normalize returns', () => {
+  /** Run checkBook on the adversarial fixture with its normalized rows changed. */
+  const withRows = async (change: (rows: NormalizeResult) => void) => {
+    const real = await vi.importActual<typeof import('./normalize')>('./normalize');
+    vi.mocked(normalizeChapters).mockImplementationOnce((docs, opts) => {
+      const rows = real.normalizeChapters(docs, opts);
+      change(rows);
+      return rows;
+    });
+    return checkBook('JHN', parsed(adversarial), jhn, { wordTags: false });
+  };
+
+  it('stops on rows that break a corpus invariant', async () => {
+    const r = await withRows((rows) => {
+      const i = rows.tokens.findIndex((t) => t.kind === 'word' && t.verse !== null);
+      rows.tokens[i] = { ...rows.tokens[i], text: 'a b' };
+    });
+    expect(errorOf(r)).toMatch(/whitespace leaked/);
+  });
+
+  it('stops on a verse text whose words are not its word tokens', async () => {
+    const r = await withRows((rows) => {
+      rows.verses[0] = { ...rows.verses[0], text: `${rows.verses[0].text} more` };
+    });
+    expect(errorOf(r)).toMatch(/^JHN 1:1: the verse text's words differ from its word tokens/);
+  });
+});
+
+describe('checkBook with wordTags', () => {
+  const w = (text: string, strong: string) => ({ type: 'char', marker: 'w', strong, content: [text] });
+  const gen: UsjDoc = {
+    type: 'USJ',
+    version: '3.1',
+    content: [
+      { type: 'book', marker: 'id', code: 'GEN', content: [] },
+      { type: 'chapter', marker: 'c', number: '1' },
+      { type: 'para', marker: 'p', content: [{ type: 'verse', marker: 'v', number: '1' }, 'In the ', w('beginning', 'H7225'), '.'] },
+    ],
+  };
+  const tagsWith = (wordTags: boolean) => {
+    const r = checkBook('GEN', parsed(gen), scheme('GEN', [1]), { wordTags });
+    if (!r.ok) throw r.error;
+    return r.rows.wordTags.map((t) => [t.wordIndexes, t.strongs]);
+  };
+
+  it('collects the `\\w strong=` tags only when the source asks for them', () => {
+    expect(tagsWith(true)).toEqual([[[2], ['H7225']]]);
+    expect(tagsWith(false)).toEqual([]);
   });
 });
