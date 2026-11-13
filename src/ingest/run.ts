@@ -13,14 +13,12 @@
 import { existsSync, readFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { verseNumbers, type Block, type Token, type VerseText } from '../model/corpus';
 import type { IngestStats, WordTag } from './normalize';
 import { PIVOT, checkCoverage } from '../model/mapping';
-import { checkVerses, hasVerse, titleChapters, type Scheme } from '../model/scheme';
+import type { Scheme } from '../model/scheme';
 import { loadSchemes } from './schemes';
-import { normalizeChapters, splitChapters } from './normalize';
-import { verseWords } from './tokenize';
-import { usjBookCode, type ParseOutcome } from './parse';
+import { checkBook } from './book-check';
+import type { ParseOutcome } from './parse';
 import { createParsePool, type ParsePool } from './parse-pool';
 import { CLEAR_BSB, KJV_TAGS, MACULA_GREEK, MACULA_HEBREW, SOURCES, type PinnedFile, type SourceDef } from './sources';
 import { alignWords, readClearAlignment, readClearWords } from './alignment';
@@ -139,44 +137,13 @@ async function main() {
       sqlite.exec('BEGIN');
       try {
         for (const [j, file] of files.entries()) {
-          const { usj, parseErrors, versifiedTitleRewrites } = JSON.parse(await outcomes[j]) as ParseOutcome;
-          if (versifiedTitleRewrites > 0) {
-            console.warn(
-              `  ⚠ ${file.code}: ${versifiedTitleRewrites} versified \\d title(s) rewritten to \\qd (grammar gap, see parse.ts)`,
-            );
-          }
-          if (parseErrors.length > 0) {
-            console.warn(
-              `  ⚠ ${file.code}: usfm-grammar strict parse failed, ingested with ignoreErrors —\n` +
-                parseErrors.map((e) => `      ${e}`).join('\n'),
-            );
-          }
-          const usjCode = usjBookCode(usj);
-          if (usjCode !== file.code) {
-            throw new Error(`${file.code}: USJ book code mismatch ("${usjCode}")`);
-          }
-          // The chapter documents are the stored truth; every other row is derived from them (ADR-0001 amendment).
-          const raw = splitChapters(usj);
-          let normalized;
-          try {
-            normalized = normalizeChapters(raw, {
-              titleChapters: titleChapters(scheme, file.code),
-              hasVerse: (c, v) => hasVerse(scheme, file.code, c, v),
-              wordTags: src.meta.abbrev === KJV_TAGS.edition,
-            });
-          } catch (e) {
-            throw new Error(`${file.code}: ${(e as Error).message}`, { cause: e });
-          }
-          const { docs, blocks, tokens, verses, droppedVerses, stats } = normalized;
-          if (normalized.wordTags.length > 0) kjvTags.set(file.code, normalized.wordTags);
-          for (const v of droppedVerses) {
-            console.warn(`  ⚠ ${file.code} ${v.chapter}:${v.verse}: printed with no words and not in scheme ${scheme.id}, no verse text`);
-          }
-          validate(file.code, blocks, tokens);
-          checkVerseWords(file.code, tokens, verses);
-          warnVerseGaps(file.code, tokens, verses);
-          // Every token's verse has a verse-text row, so the rows alone cover the check.
-          checkScheme(scheme, file.code, verses.flatMap(unitVerses));
+          const checked = checkBook(file.code, JSON.parse(await outcomes[j]) as ParseOutcome, scheme, {
+            wordTags: src.meta.abbrev === KJV_TAGS.edition,
+          });
+          for (const w of checked.warnings) console.warn(`  ⚠ ${w.text}`);
+          if (!checked.ok) throw checked.error;
+          const { docs, blocks, tokens, verses, stats } = checked.rows;
+          if (checked.rows.wordTags.length > 0) kjvTags.set(file.code, checked.rows.wordTags);
           chapters.add(file.code, insertBookRows(db, { translationId, book: file.code }, { docs, verses, blocks, tokens }));
           const bookReadings = readings.filter((r) => r.book === file.code);
           checkReadings(file.code, bookReadings, tokens);
@@ -435,99 +402,6 @@ function checkPivotGrowth(pivot: Scheme) {
   const prev = JSON.parse(readFileSync(PIVOT_SNAPSHOT, 'utf8')) as PivotSnapshot;
   const violations = checkExtendOnly(prev, next);
   if (violations.length > 0) throw new Error(`the pivot shrank:\n  ${violations.slice(0, 10).join('\n  ')}`);
-}
-
-function unitVerses(u: VerseText): { chapter: number; verse: number }[] {
-  return verseNumbers(u).map((verse) => ({ chapter: u.chapter, verse }));
-}
-
-/**
- * Every verse an edition has, each number of a bridge included, must exist in
- * its declared scheme (ADR-0002), or its addresses would name verses the
- * scheme lacks. A chapter that ends early only warns: an edition may omit
- * verses.
- */
-function checkScheme(scheme: Scheme, code: string, rows: readonly { chapter: number; verse: number }[]) {
-  const { unknown, short } = checkVerses(scheme, code, rows);
-  if (unknown.length > 0) {
-    const list = unknown.map((v) => `${v.chapter}:${v.verse}`).join(', ');
-    throw new Error(`${code}: verses not in scheme ${scheme.id}: ${list}`);
-  }
-  for (const s of short) {
-    console.warn(`  ⚠ ${code} ${s.chapter}: ends at verse ${s.last}, scheme ${scheme.id} has ${s.expected}`);
-  }
-}
-
-/**
- * Each verse unit's word tokens are its verse text's words (`verseWords`): a
- * pack reads a word address from the verse text alone (plan step 13).
- */
-function checkVerseWords(code: string, tokens: readonly Token[], units: readonly VerseText[]) {
-  const words = new Map<string, string[]>();
-  for (const t of tokens) {
-    if (t.wordIndex === null) continue;
-    const key = `${t.chapter}:${t.verse}${t.segment}`;
-    (words.get(key) ?? words.set(key, []).get(key)!).push(t.text);
-  }
-  for (const u of units) {
-    const key = `${u.chapter}:${u.verse}${u.segment}`;
-    const fromText = verseWords(u.text);
-    const stored = words.get(key) ?? [];
-    if (fromText.join(' ') !== stored.join(' ')) {
-      throw new Error(`${code} ${key}: the verse text's words differ from its word tokens (${fromText.length} and ${stored.length} words)`);
-    }
-  }
-}
-
-/** Corpus invariants (CONTEXT.md) — fail the build, not the reader. */
-function validate(code: string, blocks: readonly Block[], tokens: readonly Token[]) {
-  const blockCount = blocks.length;
-  const usedBlocks = new Set<number>();
-  for (const t of tokens) {
-    if (t.blockId < 0 || t.blockId >= blockCount) {
-      throw new Error(`${code}: token references unknown block ${t.blockId}`);
-    }
-    usedBlocks.add(t.blockId);
-    if (/\s/.test(t.text) || t.text.length === 0) {
-      throw new Error(`${code}: whitespace leaked into token text ${JSON.stringify(t.text)}`);
-    }
-    if (t.verse === 0 && blocks[t.blockId]?.marker !== 'd') {
-      throw new Error(`${code}: verse 0 outside a psalm title — other heading tokens must carry NULL`);
-    }
-    if (t.verse == null && t.wordIndex != null) {
-      throw new Error(`${code}: non-verse token carries a word_index`);
-    }
-    if (t.kind === 'punct' && t.wordIndex != null) {
-      throw new Error(`${code}: punct token carries a word_index`);
-    }
-  }
-  if (usedBlocks.size !== blockCount) {
-    throw new Error(`${code}: ${blockCount - usedBlocks.size} empty block(s) break the partition`);
-  }
-}
-
-/**
- * Non-fatal coverage check: a hole in 1..max(verse) per chapter usually means
- * the parser dropped text (a real translation may also legitimately omit
- * late-manuscript verses — hence warn, not throw; a human reads the log).
- */
-function warnVerseGaps(code: string, tokens: { chapter: number; verse: number | null }[], units: readonly VerseText[]) {
-  // a bridge's tokens carry its first number and cover the rest (ADR-0004 v1.5)
-  const last = new Map(units.map((u) => [`${u.chapter}:${u.verse}`, u.lastVerse]));
-  const byChapter = new Map<number, Set<number>>();
-  for (const t of tokens) {
-    if (t.verse == null) continue;
-    const verses = byChapter.get(t.chapter) ?? byChapter.set(t.chapter, new Set()).get(t.chapter)!;
-    for (let v = t.verse; v <= (last.get(`${t.chapter}:${t.verse}`) ?? t.verse); v++) verses.add(v);
-  }
-  for (const [chapter, verses] of byChapter) {
-    const max = Math.max(...verses);
-    const missing = [];
-    for (let v = 1; v <= max; v++) if (!verses.has(v)) missing.push(v);
-    if (missing.length > 0) {
-      console.warn(`  ⚠ ${code} ${chapter}: no tokens for verse(s) ${missing.join(', ')}`);
-    }
-  }
 }
 
 main().catch((e: unknown) => {
