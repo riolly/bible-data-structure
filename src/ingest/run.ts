@@ -20,11 +20,11 @@ import { loadSchemes } from './schemes';
 import { checkBook } from './book-check';
 import type { ParseOutcome } from './parse';
 import { createParsePool, type ParsePool } from './parse-pool';
-import { CLEAR_BSB, KJV_TAGS, MACULA_GREEK, MACULA_HEBREW, SOURCES, type PinnedFile, type SourceDef } from './sources';
+import { CLEAR_BSB, KJV_TAGS, MACULA_GREEK, MACULA_HEBREW, SOURCES, type SourceDef } from './sources';
 import { alignWords, readClearAlignment, readClearWords } from './alignment';
 import { linkVerseTags, type HubWord, type TagStats } from './kjv-tags';
 import { loadMappings } from '../db/corpus-read';
-import { SOURCES_ROOT, readSource } from './source-files';
+import { pinnedPath, readSource } from './source-files';
 import {
   GREEK_EXCEPTIONS,
   checkExceptionsUsed,
@@ -32,7 +32,6 @@ import {
   hebrewWords,
   readMacula,
   type HubPart,
-  type MaculaWord,
 } from './original-words';
 import { writeEdition } from './edition-writer';
 import { RIGHTS } from '../contract/rights';
@@ -108,7 +107,7 @@ async function main() {
       if (i + 1 < SOURCES.length) try { prepare(i + 1); } catch {}
       // The hub texts get their original words (plan step 11): OSHB's own for WLC, MACULA's for SBLGNT.
       const hub = src.format?.kind === 'oshb-xml' ? MACULA_HEBREW : src.format?.kind === 'sblgnt-xml' ? MACULA_GREEK : null;
-      const macula = hub ? readMaculaOrExplain(hub) : null;
+      const macula = hub ? readMacula(pinnedPath(hub)) : null;
       const owTotals = { words: 0, noGloss: 0 };
       const greekUsed = new Set<string>();
       const rights = RIGHTS.get(src.meta.abbrev);
@@ -263,20 +262,14 @@ function writeEditionTextSnapshot(editions: readonly { scheme: string; text: Edi
   }
 }
 
-function readMaculaOrExplain(pin: PinnedFile): Map<string, MaculaWord[]> {
-  const path = join(SOURCES_ROOT, pin.file);
-  if (!existsSync(path)) throw new Error(`${path} is missing: run \`bun run ingest:download\` first`);
-  return readMacula(path);
-}
-
 /**
  * The BSB's alignment to the step 11 words, from Clear Bible (plan step 12).
  * Runs after the hub texts, which come after the BSB in SOURCES.
  */
 function alignBsb(db: CorpusDb, sqlite: ReturnType<typeof createCorpusDb>['sqlite'], hubParts: ReadonlyMap<string, HubPart>) {
   const started = performance.now();
-  const files = [CLEAR_BSB.greek, CLEAR_BSB.hebrew, CLEAR_BSB.ntWords, CLEAR_BSB.otWords].map((f) => join(SOURCES_ROOT, f.file));
-  for (const path of files) if (!existsSync(path)) throw new Error(`${path} is missing: run \`bun run ingest:download\` first`);
+  // each file is checked against its pin before it is read
+  const files = [CLEAR_BSB.greek, CLEAR_BSB.hebrew, CLEAR_BSB.ntWords, CLEAR_BSB.otWords].map((f) => pinnedPath(f));
   const { id } = sqlite.prepare(`SELECT id FROM translation WHERE abbrev = 'BSB'`).get() as { id: number };
   const ours = new Map<string, string[]>();
   const tokens = sqlite

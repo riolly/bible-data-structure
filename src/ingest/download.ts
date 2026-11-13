@@ -20,7 +20,7 @@ import { existsSync } from 'node:fs';
 import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 
-import { SOURCES_ROOT, sourceEdition } from './source-files';
+import { SOURCES_ROOT, pinnedPath, sourceEdition } from './source-files';
 import { CLEAR_BSB, MACULA_GREEK, MACULA_HEBREW, MIRROR, SOURCES, TVTMS, mirrorAsset, mirrorLabel, type SourceDef } from './sources';
 
 const STAGING = join(SOURCES_ROOT, '.staging');
@@ -97,11 +97,12 @@ function fetchMirror(src: SourceDef, path: string) {
   });
 }
 
-/** A file pinned by its URL at a git commit and its sha256 (TVTMS, MACULA, Clear). Its bytes can't change. */
+/** A file pinned by its URL at a git commit and its sha256 (TVTMS, MACULA, Clear). Its bytes can't change, so a file already here must match the pin. */
 async function fetchPinnedFile(pin: { id: string; url: string; sha256: string; file: string }) {
   const path = join(SOURCES_ROOT, pin.file);
   if (existsSync(path)) {
-    console.log(`✓ ${pin.id}: ${path} exists, skipping (delete it to download again)`);
+    pinnedPath(pin);
+    console.log(`✓ ${pin.id}: ${path} exists and matches its pin, skipping`);
     return;
   }
   console.log(`↓ ${pin.id}: ${pin.url}`);
