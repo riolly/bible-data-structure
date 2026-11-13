@@ -12,6 +12,7 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 
 import { API_BIBLE_EDITIONS, CHAPTER_QUERY, type ApiBibleChapter } from './api-bible';
+import type { FetchChapter } from './provider';
 
 export const API_BASE = 'https://rest.api.bible/v1';
 
@@ -85,6 +86,22 @@ export type CachedChapter = Cached<ApiBibleChapter>;
 export function cachedChapter(edition: string, book: string, chapter: number, opts: CacheOptions): Promise<CachedChapter> {
   return cachedGet(edition, `/chapters/${book}.${chapter}?${CHAPTER_QUERY}`, `${book}.${chapter}.json`, opts);
 }
+
+/**
+ * The provider's fetch on Node (provider.ts): each chapter through the kept
+ * responses. A 404 is a chapter the edition doesn't print.
+ */
+export const chapterFetcher =
+  (opts: CacheOptions): FetchChapter =>
+  async (edition, book, chapter) => {
+    try {
+      const { data, fetchedAt } = await cachedChapter(edition, book, chapter, opts);
+      return { data, fetchedAt };
+    } catch (e) {
+      if (e instanceof ApiBibleHttpError && e.status === 404) return null;
+      throw e;
+    }
+  };
 
 /**
  * A passage such as `PSA.18.22-PSA.150.999`. API.Bible returns at most 200

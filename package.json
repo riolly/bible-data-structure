@@ -13,7 +13,8 @@
     "ingest": "tsx src/ingest/run.ts",
     "pack": "tsx src/pack/cli.ts",
     "api-bible:chapter": "tsx src/provider/chapter-cli.ts",
-    "api-bible:facts": "tsx src/provider/facts-cli.ts"
+    "api-bible:facts": "tsx src/provider/facts-cli.ts",
+    "api-bible:check": "tsx src/provider/check-cli.ts"
   },
   "dependencies": {
     "better-sqlite3": "12.11.1",

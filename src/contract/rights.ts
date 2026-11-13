@@ -1,8 +1,8 @@
 /**
  * Rights records (ADR-0008, CONTEXT.md "Rights record"): what each edition's
  * license lets an app do. The verdicts and their sources are in
- * research/licensing.md, and this file is their machine form. Step 10 adds the
- * licensed editions and the API.Bible route.
+ * research/licensing.md, and this file is their machine form. The licensed
+ * editions are read through API.Bible (plan step 10, src/provider/provider.ts).
  *
  * No Node-only import here.
  */
@@ -68,7 +68,30 @@ const publicDomain = (edition: string, licenseUrl: string, conditions: string[] 
   conditions,
 });
 
-/** The seven editions we hold as files, keyed by abbreviation. */
+const API_BIBLE_TERMS = 'https://api.bible/terms-and-conditions';
+
+/** An edition read through API.Bible, under its terms (research/licensing.md, closed-license translations). */
+const apiBible = (edition: string, license: string, aiUse: AiUse, attribution: string, conditions: string[]): RightsRecord => ({
+  edition,
+  license,
+  licenseUrl: API_BIBLE_TERMS,
+  route: 'api.bible',
+  // section 11: content kept offline is checked for updates at least every 30 days
+  offline: 'cache',
+  refreshDays: 30,
+  // section 12: no printing of more than 100 verses
+  copyLimit: 100,
+  aiUse,
+  attribution,
+  conditions: [
+    ...conditions,
+    'Show the text unchanged in structure and content (API.Bible terms, section 4.1).',
+    'Protect kept chapters with DRM (section 12), and delete them within 72 hours if the API.Bible license ends (section 10.2).',
+    'A web app reports usage through FUMS (section 3.3).',
+  ],
+});
+
+/** The seven editions we hold as files and the three licensed ones, keyed by abbreviation. */
 export const RIGHTS: ReadonlyMap<string, RightsRecord> = new Map(
   [
     publicDomain('KJV', 'https://ebible.org/eng-kjv/copyright.htm', [
@@ -99,5 +122,29 @@ export const RIGHTS: ReadonlyMap<string, RightsRecord> = new Map(
       '"World English Bible" is a trademark. A changed text must not be called "World English Bible".',
     ]),
     publicDomain('Brenton', 'https://ebible.org/grcbrent/copyright.htm'),
+    apiBible(
+      'NASB95',
+      'API.Bible standard license',
+      'no-training',
+      'Scripture quotations taken from the (NASB®) New American Standard Bible®, Copyright © 1960, 1971, 1977, 1995 by The Lockman Foundation. Used by permission. All rights reserved. lockman.org',
+      [
+        'Without a direct Lockman license, at most 1,000 verses may be quoted or stored in an electronic retrieval system, never a whole book and at most half of the work they appear in (https://www.lockman.org/permission-to-quote-copyright-trademark-information/). Keep a device\'s kept NASB chapters under that.',
+      ],
+    ),
+    apiBible(
+      'NLT',
+      'API.Bible license',
+      'no-training',
+      'Scripture quotations are taken from the Holy Bible, New Living Translation, copyright © 1996, 2004, 2015 by Tyndale House Foundation. Used by permission of Tyndale House Publishers, Carol Stream, Illinois 60188. All rights reserved.',
+      ['Quote the text exactly, punctuation and capitalization included (Tyndale).'],
+    ),
+    apiBible(
+      'NIV',
+      'Biblica express license through API.Bible',
+      // Biblica: no AI features in an app that shows the NIV
+      'none',
+      'Scripture quotations taken from The Holy Bible, New International Version® NIV®. Copyright © 1973, 1978, 1984, 2011 by Biblica, Inc.™ Used by permission. All rights reserved worldwide.',
+      ['Non-commercial use only, and no unrestricted download (Biblica).'],
+    ),
   ].map((r) => [r.edition, r]),
 );

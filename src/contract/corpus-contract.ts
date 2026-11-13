@@ -1,7 +1,9 @@
 /**
  * The app contract (contract.ts) over the corpus DB, `build/corpus.db` today.
- * It reads through corpus-read.ts, so it runs on either sync drizzle driver.
- * Nothing from the DB leaves here but addresses, text, documents and stamps.
+ * It reads through a `CorpusReader`, which is corpus-read.ts over one DB
+ * unless a provider passes its own (src/provider/provider.ts), so it runs on
+ * either sync drizzle driver. Nothing from the DB leaves here but addresses,
+ * text, documents and stamps.
  */
 
 import {
@@ -20,7 +22,7 @@ import {
 } from '../db/corpus-read';
 import { verseWords } from '../ingest/tokenize';
 import { formatAddress, parseAddress, type Address, type VerseRef } from '../model/address';
-import type { VerseText } from '../model/corpus';
+import type { ChapterDoc, OriginalWord, VerseText } from '../model/corpus';
 import { refExists, type Mappings, type Ref } from '../model/mapping';
 import { lastVerse, type Scheme } from '../model/scheme';
 import type {
@@ -28,6 +30,7 @@ import type {
   AbsentReason,
   BibleContract,
   ChapterResult,
+  Credit,
   EditionStamp,
   Lookup,
   MapKind,
@@ -44,15 +47,58 @@ import type {
 import { parseReference, type BookRange } from './reference';
 import { RIGHTS, type RightsRecord } from './rights';
 
+/**
+ * The reads the contract makes, all sync. Each takes an edition's
+ * abbreviation, and each read of one chapter returns null or empty when the
+ * edition doesn't hold it. An edition fetched a chapter at a time has no
+ * edition stamp, words stamp or text stamp (ADR-0005, 2026-11-11 amendment).
+ */
+export interface CorpusReader {
+  edition(abbrev: string): { abbrev: string; scheme: string; edition: string | null; wordsStamp: string | null; textStamp: string | null } | null;
+  chapterDoc(abbrev: string, book: string, chapter: number): (ChapterDoc & { stamp: string }) | null;
+  chapterStamp(abbrev: string, book: string, chapter: number): string | null;
+  verseText(abbrev: string, book: string, chapter: number): VerseText[];
+  verseUnit(abbrev: string, book: string, chapter: number, verse: number, segment?: string): VerseText | null;
+  originalWords(abbrev: string, book: string, chapter: number, verse: number, segment: string): OriginalWord[];
+  wordAlignments(abbrev: string, book: string, chapter: number, verse: number, segment: string): AlignedOriginal[];
+  dataSources(): Credit[];
+  schemes(): Map<string, Scheme>;
+  mappings(schemes: Map<string, Scheme>): Mappings;
+}
+
+/** corpus-read.ts over one DB: the corpus or a pack. */
+export function dbReader(db: SyncSqliteDb): CorpusReader {
+  return {
+    edition: (abbrev) => readEdition(db, abbrev),
+    chapterDoc: (abbrev, book, chapter) => readChapterDoc(db, abbrev, book, chapter),
+    chapterStamp: (abbrev, book, chapter) => readChapterStamp(db, abbrev, book, chapter),
+    verseText: (abbrev, book, chapter) => readVerseText(db, abbrev, book, chapter),
+    verseUnit: (abbrev, book, chapter, verse, segment) => readVerseUnit(db, abbrev, book, chapter, verse, segment),
+    originalWords: (abbrev, book, chapter, verse, segment) => readOriginalWords(db, abbrev, book, chapter, verse, segment),
+    wordAlignments: (abbrev, book, chapter, verse, segment) => readWordAlignments(db, abbrev, book, chapter, verse, segment),
+    dataSources: () => readDataSources(db),
+    schemes: () => readSchemes(db),
+    mappings: (schemes) => loadMappings(db, schemes),
+  };
+}
+
 export function corpusContract(db: SyncSqliteDb): BibleContract {
-  const schemes = readSchemes(db);
+  return readerContract(dbReader(db));
+}
+
+/**
+ * The contract over any reader. Every call reads synchronously before its
+ * first `await` (it has none), which the provider's refetch loop relies on.
+ */
+export function readerContract(read: CorpusReader): BibleContract {
+  const schemes = read.schemes();
   const editions = new Map<string, EditionStamp>();
   let mappings: Mappings | undefined;
 
   function edition(id: string): EditionStamp {
     const cached = editions.get(id);
     if (cached) return cached;
-    const row = readEdition(db, id);
+    const row = read.edition(id);
     if (!row) throw new Error(`unknown edition "${id}"`);
     const e: EditionStamp = {
       id: row.abbrev,
@@ -87,7 +133,7 @@ export function corpusContract(db: SyncSqliteDb): BibleContract {
     const key = `${e.id} ${book} ${chapter}`;
     const cached = chapterStamps.get(key);
     if (cached !== undefined) return cached;
-    const stamp = readChapterStamp(db, e.id, book, chapter);
+    const stamp = read.chapterStamp(e.id, book, chapter);
     if (stamp === null) throw new Error(`${e.id} has verse text in ${book} ${chapter} but no chapter document`);
     chapterStamps.set(key, stamp);
     return stamp;
@@ -115,15 +161,15 @@ export function corpusContract(db: SyncSqliteDb): BibleContract {
   /** One address in one edition: the verse, the bridge that holds it, its parts, or absent. */
   function lookup(e: EditionStamp, r: Ref): Lookup | Parts {
     if (!refExists(schemeOf(e), r)) return absent(point(e, r), 'scheme');
-    const unit = readVerseUnit(db, e.id, r.book, r.chapter, r.verse, r.segment);
+    const unit = read.verseUnit(e.id, r.book, r.chapter, r.verse, r.segment);
     if (unit) return toVerse(e, r.book, unit);
     if (r.segment !== '') {
       // the edition doesn't mark the part: the whole unit, flagged
-      const whole = readVerseUnit(db, e.id, r.book, r.chapter, r.verse);
+      const whole = read.verseUnit(e.id, r.book, r.chapter, r.verse);
       if (whole) return toVerse(e, r.book, whole, r.segment);
     } else {
       // the edition prints the verse only in parts
-      const parts = readVerseText(db, e.id, r.book, r.chapter).filter((u) => u.verse <= r.verse && u.lastVerse >= r.verse);
+      const parts = read.verseText(e.id, r.book, r.chapter).filter((u) => u.verse <= r.verse && u.lastVerse >= r.verse);
       if (parts.length > 0) return { kind: 'parts', address: point(e, r), parts: parts.map((u) => toVerse(e, r.book, u)) };
     }
     return absent(point(e, r), 'text');
@@ -132,7 +178,7 @@ export function corpusContract(db: SyncSqliteDb): BibleContract {
   /** Every unit that holds each verse number of one chapter, in print order: a bridge under each of its numbers, a whole verse before its parts. */
   function unitsByVerse(e: EditionStamp, book: string, chapter: number): Map<number, VerseText[]> {
     const byVerse = new Map<number, VerseText[]>();
-    for (const u of readVerseText(db, e.id, book, chapter)) {
+    for (const u of read.verseText(e.id, book, chapter)) {
       for (let v = u.verse; v <= u.lastVerse; v++) {
         const list = byVerse.get(v);
         if (list) list.push(u);
@@ -264,7 +310,7 @@ export function corpusContract(db: SyncSqliteDb): BibleContract {
 
   /** The edition's units for steps under another scheme, each verse moved through the pivot. */
   function otherSteps(e: EditionStamp, scheme: string, steps: readonly Step[]): Lookup[] {
-    mappings ??= loadMappings(db, schemes);
+    mappings ??= read.mappings(schemes);
     const placed: Placed[] = [];
     for (const { r, exists } of steps) {
       const targets = exists ? mappings.map(scheme, e.scheme, r) : [];
@@ -282,7 +328,7 @@ export function corpusContract(db: SyncSqliteDb): BibleContract {
   function unitWords(e: EditionStamp, u: Verse, only?: number): Word[] {
     const at = (wordIndex: number) =>
       formatAddress({ scheme: e.scheme, start: { book: u.book, chapter: u.chapter, verse: u.verse, segment: u.segment, wordIndex } });
-    const original = readOriginalWords(db, e.id, u.book, u.chapter, u.verse, u.segment);
+    const original = read.originalWords(e.id, u.book, u.chapter, u.verse, u.segment);
     if (original.length > 0) {
       return original.filter((w) => only === undefined || w.wordIndex === only).map((w) => ({
         address: w.wordIndex === null ? null : at(w.wordIndex),
@@ -296,7 +342,7 @@ export function corpusContract(db: SyncSqliteDb): BibleContract {
     // a translation's words come from the verse text, so a pack needs no token rows
     const tokens = verseWords(u.text).map((text, wordIndex) => ({ wordIndex, text }));
     const aligned = new Map<number, AlignedOriginal[]>();
-    for (const r of readWordAlignments(db, e.id, u.book, u.chapter, u.verse, u.segment)) {
+    for (const r of read.wordAlignments(e.id, u.book, u.chapter, u.verse, u.segment)) {
       (aligned.get(r.wordIndex) ?? aligned.set(r.wordIndex, []).get(r.wordIndex)!).push(r);
     }
     return tokens.filter((t) => only === undefined || t.wordIndex === only).map((t) => {
@@ -335,7 +381,7 @@ export function corpusContract(db: SyncSqliteDb): BibleContract {
       if (lastVerse(schemeOf(e), book, chapter) === undefined) {
         return { kind: 'absent', edition: e, book, chapter, reason: 'scheme' };
       }
-      const doc = readChapterDoc(db, e.id, book, chapter);
+      const doc = read.chapterDoc(e.id, book, chapter);
       if (!doc) return { kind: 'absent', edition: e, book, chapter, reason: 'text' };
       return {
         kind: 'chapter',
@@ -344,8 +390,8 @@ export function corpusContract(db: SyncSqliteDb): BibleContract {
         chapter,
         stamp: doc.stamp,
         content: doc.content,
-        front: chapter === 1 ? (readChapterDoc(db, e.id, book, 0)?.content ?? null) : null,
-        verses: readVerseText(db, e.id, book, chapter).map((u) => toVerse(e, book, u)),
+        front: chapter === 1 ? (read.chapterDoc(e.id, book, 0)?.content ?? null) : null,
+        verses: read.verseText(e.id, book, chapter).map((u) => toVerse(e, book, u)),
       };
     },
 
@@ -372,7 +418,7 @@ export function corpusContract(db: SyncSqliteDb): BibleContract {
       const r = verseRef(from, address, 'map');
       const asked = point(from, r);
       if (!refExists(schemeOf(from), r)) throw new Error(`map: ${from.scheme} has no ${asked}`);
-      mappings ??= loadMappings(db, schemes);
+      mappings ??= read.mappings(schemes);
       const placed: Placed[] = [];
       place(to, mappings.map(from.scheme, to.scheme, r), placed);
       const ordered = inOrder(placed).map((p) => p.l);
@@ -435,7 +481,7 @@ export function corpusContract(db: SyncSqliteDb): BibleContract {
     },
 
     async credits() {
-      return readDataSources(db);
+      return read.dataSources();
     },
   };
 }

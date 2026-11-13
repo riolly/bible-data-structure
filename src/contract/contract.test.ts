@@ -394,7 +394,7 @@ describe.skipIf(!native || !existsSync(CORPUS))('the app contract on the corpus 
     expect((await c.rights('KJV')).attribution).toBeNull();
     expect((await c.rights('SBLGNT')).attribution).toMatch(/Society of Biblical Literature/);
     expect((await c.rights('WLC')).attribution).toMatch(/Open Scriptures Hebrew Bible/);
-    await expect(c.rights('NIV')).rejects.toThrow(/no rights record/);
+    await expect(c.rights('ESV')).rejects.toThrow(/no rights record/);
     // the BSB's Strong's numbers are Clear Bible's (plan step 12)
     expect((await c.rights('BSB')).conditions.join(' ')).toMatch(/Clear Bible/);
   });
