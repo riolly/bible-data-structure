@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { BOOK_BY_CODE } from '../model/books';
 import { PROTESTANT, canonBookCodes } from '../model/canon';
 import { checkVerses, hasVerse, lastVerse } from '../model/scheme';
-import { nativeModuleLoads } from './native-probe';
+import { sqliteLoads } from './native-probe';
 import { DERIVED_SCHEMES, KJV_TITLES, deriveScheme, loadSchemes } from './schemes';
 import { SOURCES as SOURCE_DEFS } from './sources';
 import { readSource } from './source-files';
@@ -236,9 +236,7 @@ describe.each(SOURCE_DEFS.map((s) => [s.meta.abbrev, s] as const))('%s source te
   }, 60_000); // converting the 39 OSHB books takes seconds
 });
 
-const native = nativeModuleLoads(
-  "import('better-sqlite3').then(({ default: Database }) => { new Database(':memory:').close(); process.exit(0); }, () => process.exit(1));",
-);
+const native = sqliteLoads();
 
 describe.skipIf(!native)('scheme tables', () => {
   it('stores every scheme with its verse counts, and editions must name one', async () => {

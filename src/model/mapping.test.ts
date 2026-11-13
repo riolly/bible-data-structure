@@ -1,9 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import { Mappings, PIVOT, Relation, checkCoverage, parseRefKey, refKey, type MappingRow } from './mapping';
+import { Mappings, PIVOT, Relation, checkCoverage, parseRefKey, ref, refKey, type MappingRow } from './mapping';
 import type { Scheme } from './scheme';
 
-const ref = (book: string, chapter: number, verse: number, segment = '') => ({ book, chapter, verse, segment });
 const scheme = (id: string, counts: Record<string, number[]>, extra: Partial<Scheme> = {}): Scheme => ({
   id,
   name: id,
