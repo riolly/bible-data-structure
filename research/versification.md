@@ -135,8 +135,7 @@ What does not agree, or was not verified:
 
 - The book code for the Song of the Three Young Men differs. Paratext uses `S3Y`, SWORD uses `PrAzar`.
 - The `S3Y` verse count disagrees inside Paratext: 67 in `org.vrs`, 68 in `eng.vrs` and in TVTMS.
-- *Unverified:* that BSB follows KJV numbering everywhere. It does at every spot in the table, but no full comparison was run.
-- *Unverified:* that OSHB, the planned Hebrew edition, matches `org` verse for verse.
+- BSB follows KJV numbering in every verse, and OSHB matches `org` (`schemes.test.ts` checks every verse of both).
 - *Unverified:* the full Esther and Greek Daniel correspondence. Only the rows quoted above were read.
 
 ## 4. Address syntaxes in real use
@@ -212,55 +211,16 @@ The last item already happens in this corpus. KJV and BSB both number Rev 12:17 
 
 ## Recommendation
 
-This section is separate from the findings above.
+Adopted on 2026-11-09. The address syntax and its storage columns are in ADR-0002, and the pivot and the mapping sources in ADR-0006. Two reasons are recorded only here:
 
-### Address syntax
+- The part before `/` is valid SRS 1.0, which the USFM committee maintains.
+- The scheme suffix carries a name because Paratext's 7-value integer enum cannot grow.
 
-**String form: a USFM SRS reference, then `/`, then a scheme id.**
+The pivot's three invariants are SWORD's ([bible-intermediate-v11n.md lines 62-64][sw-pivot]).
 
-```
-PSA 51:3/org       the Hebrew verse that KJV numbers 51:1
-PSA 51:0/eng       the Psalm title as verse 0
-REV 13:1a/kjv      part of a verse
-GEN 1:1-31/kjv     a range; the scheme applies to both ends
-MAT 2:1!3/kjv      a word (word index base to be decided, see below)
-```
+### What was decided next
 
-- **Why SRS for the reference part.** The part before `/` is valid SRS 1.0. It uses USFM book codes (ADR-0002), verse 0, one-letter segments and contextual ranges, and the USFM committee maintains it.
-- **Why a suffix.** The scheme goes in a suffix because the SRS prefix slot is taken by language and translation ids, and `eng` already parses there as a language. Paratext's `GEN 3:11/4` is precedent for a `/` suffix. Ours carries a name instead of the 7-value integer enum, which cannot grow.
-- **One scheme per string.** A range or list never mixes schemes.
-- **Scheme ids are lowercase names in our own registry.** Seed it with `kjv` (SWORD KJV numbering) and the six Paratext names `org`, `eng`, `lxx`, `vul`, `rso`, `rsc`. Each scheme is defined by a verse-count table in `.vrs` body format. KJV and BSB both declare `kjv`.
-
-**Storage form: separate columns, not a packed integer.**
-
-| Column | Type | Note |
-|---|---|---|
-| `scheme` | text | registry id |
-| `book` | text | USFM code |
-| `chapter` | integer | |
-| `verse` | integer | 0 allowed |
-| `segment` | text | `''` for the whole verse, else one letter |
-
-Add a generated `bcv` integer (BBBCCCVVV with Paratext book numbers) only as a sort and range-query key. Never fold the scheme into it.
-
-### Mapping source
-
-- **Pivot.** Map through a synthetic, extend-only pivot scheme, never through `kjv` or `org` directly. This follows SWORD's 2026 conclusion and Paratext's `org` practice. Seed the pivot from TVTMS's Standard numbering: KJV numbers plus subverses, `Title`, and the extra books. Store `Title` as verse 0 to match the address form. Adopt SWORD's invariants: an id is never removed, counts never decrease, a meaning is never reassigned ([bible-intermediate-v11n.md lines 62-64][sw-pivot]). Stored addresses never use the pivot. Only mapping rows do.
-- **Primary data: TVTMS (CC BY 4.0).** Compile it at build time into one sparse table per scheme. The `=Last` and `=Exist` tests can be evaluated against a scheme's verse-count table. The word-count tests (`<`, `>`) need text, so evaluate those per edition at ingest.
-- **Scheme definitions and second witness: Paratext `.vrs` (MIT).** Use the verse-count lines and diff the mapping lines against compiled TVTMS. Report disagreements, do not resolve them silently.
-- **SWORD and JSword: third witness only.** Use them in a local diff, never in shipped output, because of GPL-2 and LGPL.
-- **Mapping row shape.** `(scheme, book, chapter, verse, segment) -> (pivot book, chapter, verse, segment)`. Allow many-to-many, cross-book rows, explicit `absent` rows, and a `kind` taken from the TVTMS action. Drop the bijection check. Replace it with a check that every verse in the scheme's count table maps somewhere or is marked absent.
-
-### What must be decided next
-
-1. **Word index base.** SRS `!n` counts from 1. CONTEXT.md's word index counts from 0. Pick one for the string form, or convert at the boundary.
-2. **Per-edition schemes.** TVTMS tests run against an edition's text, and one Bible can mix traditions. Decide whether a mixed edition gets its own scheme id (for example `kjv+x`), or whether the ingest rejects editions that match no registered scheme. Decided 2026-11-09: derived schemes, ADR-0002 amendment.
-3. **Pivot details.** Name the pivot. Write the extend-only check as a test.
-4. **TVTMS attribution.** Decide where the attribution and change log live in compiled outputs.
-5. **Fixtures.** Fix `divergent.vrs` (Rev 13 is a partial verse, not a shift). Add fixtures for 3 John 14-15, the two-verse title of Psalm 51 (many-to-one), Romans 14:24-26 and Daniel 3 to S3Y (cross-book).
-6. **OSHB.** Verify OSHB's numbering against `org` before ingesting it. Done 2026-11-09: ebible's `hboWLC` has no verse `org` lacks (`schemes.test.ts`) and no chapter that ends early.
-7. **Canon research.** `S3Y` versus `PrAzar`, and `ESG` versus `ADE` versus 16-chapter `EST`, are book-identity questions for `canons.md`.
-8. **Text tests per edition.** Two editions under one scheme can need different TVTMS rows (KJV and BSB at Philippians 1:16-17), and some word tests misfire in English. Counts in [tvtms-text-tests.md](tvtms-text-tests.md).
+Every item this section listed is settled. Word numbers in strings count from 1, and an edition that mixes traditions gets a derived scheme (ADR-0002). The pivot is the scheme `pivot`, a test checks that it only grows, and TVTMS's attribution is in the `data_source` table (ADR-0006). `src/ingest/fixtures/real-cases.vrs` replaced the Revelation 13 fixture. OSHB's numbering was checked against `org` on 2026-11-09: no verse `org` lacks and no chapter that ends early (`schemes.test.ts`). The book-identity questions went to [canons.md](canons.md) and the text tests to [tvtms-text-tests.md](tvtms-text-tests.md).
 
 [lp-res]: https://github.com/sillsdev/libpalaso/tree/f1f70e93a79d55b1769a4e20fb36047f2fa08d99/SIL.Scripture/Resources
 [lp-eng]: https://github.com/sillsdev/libpalaso/blob/f1f70e93a79d55b1769a4e20fb36047f2fa08d99/SIL.Scripture/Resources/eng.vrs.txt#L1-L60

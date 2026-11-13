@@ -23,7 +23,6 @@ Moving an address from one versification scheme to another needs mapping data. R
 - `src/ingest/vrs.ts` must learn the full `.vrs` format: segments, cross-book lines and `#!` lines. Done in step 2 (2026-11-09).
 - `src/ingest/fixtures/divergent.vrs` shifts Revelation 13:1-17 by one verse, which no real source does. The real difference is a partial verse (NRSV 12:18 = KJV 13:1a). Replace it with real cases: 3 John 14-15, the two-verse title of Psalm 51 (many-to-one), Romans 14:24-26 (cross-chapter), and Daniel 3 to `S3Y` (cross-book). Done in step 2: `src/ingest/fixtures/real-cases.vrs`.
 - Verse mapping can't see a clause that moves between verses with the same numbers (the "stood on the sand" clause, which KJV and BSB place differently in Revelation 12:17 / 13:1). Only word alignment (ADR-0003) or the quote witness (ADR-0005) catches that.
-- Open: whether OSHB's numbering matches `org` (unverified).
 
 ## Amendments from building it (2026-11-09)
 

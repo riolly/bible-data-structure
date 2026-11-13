@@ -17,7 +17,7 @@ One file per topic, written from primary sources with links. A finding that chan
 | Notes and cross-references | `apparatus.md` | not started | USFM footnotes (`\f`), cross-references (`\x`), the Treasury of Scripture Knowledge, OpenBible.info. |
 | Tokenization beyond English | `tokenization.md` | not started | Rules for scripts without spaces between words. |
 | API.Bible | `api-bible.md` | noted 2026-11-12 | Which Bibles the key reaches. The chapter JSON and how it maps to our chapter document. |
-| Licensing | `licensing.md` | done 2026-11-09 for the step 3 sources | Per source, whether it can be redistributed in an app, its attribution, and whether raw files may be committed. |
+| Licensing | `licensing.md` | covers every source in use, updated 2026-11-13 | Per source, whether it can be redistributed in an app, its attribution, and whether raw files may be committed. |
 | Psalm titles inside Hebrew verse 1 | `psalm-titles-in-hebrew-verse-1.md` | done 2026-11-13, issue #12 | Where TVTMS records the 53 Psalms whose English title is part of Hebrew verse 1. |
 | Strong's numbers on English words | `word-tags.md` | noted 2026-11-13 for plan step 12 | Which source tags BSB and KJV words, how well each joins to our text, and what the KJV's own tags miss. |
 
