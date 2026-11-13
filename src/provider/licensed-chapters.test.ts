@@ -16,7 +16,15 @@ import { licensedChapters, type FetchChapter } from './licensed-chapters';
  */
 
 const JHN_3 = (JSON.parse(readFileSync(join(import.meta.dirname, 'fixtures', 'api-bible-kjv-JHN.3.json'), 'utf8')) as { data: ApiBibleChapter }).data;
-const JHN_4: ApiBibleChapter = { ...JHN_3, id: 'JHN.4', number: '4', content: JHN_3.content.map((n) => (n.name === 'chapter' ? { ...n, attrs: { ...n.attrs, number: '4' } } : n)) };
+/** John 3's 36 verses under another chapter number. */
+const renumbered = (number: string): ApiBibleChapter => ({
+  ...JHN_3,
+  id: `JHN.${number}`,
+  number,
+  content: JHN_3.content.map((n) => (n.name === 'chapter' ? { ...n, attrs: { ...n.attrs, number } } : n)),
+});
+const JHN_1 = renumbered('1');
+const JHN_4 = renumbered('4');
 
 const SCHEME: Scheme = {
   id: 'tst',
@@ -28,7 +36,7 @@ const SCHEME: Scheme = {
   segments: new Map(),
   titles: new Set(),
 };
-const rights = { edition: 'KJVAB', route: 'api.bible', refreshDays: 30 } as RightsRecord;
+const rights = { edition: 'KJVAB', route: 'api.bible', refreshDays: 30, keepLimit: null } as RightsRecord;
 const EDITIONS = new Map<string, LicensedEdition>([['KJVAB', { scheme: 'tst', rights }]]);
 const day = 86_400_000;
 
@@ -164,6 +172,55 @@ describe('licensed chapters: hold, refresh and fetch', () => {
     expect(t.fetches).toEqual(['JHN 3']);
     await contract.chapter('KJVAB', 'JHN', 3);
     expect(t.fetches).toEqual(['JHN 3', 'JHN 3']);
+  });
+
+  // the scheme gives John 1, 3 and 4 51, 36 and 54 verses, which is what a keep limit counts
+  const limited = (keepLimit: number) =>
+    new Map<string, LicensedEdition>([
+      ['KJVAB', { scheme: 'tst', rights: { ...rights, keepLimit } }],
+      ['OTHER', { scheme: 'tst', rights: { ...rights, edition: 'OTHER' } }],
+    ]);
+  const isHeld = (t: ReturnType<typeof make>, edition: string, chapter: number) => !(t.held.chapter(edition, 'JHN', chapter) instanceof Promise);
+
+  it('a keep limit drops the least recently read chapters of the edition, and no chapter of another edition', async () => {
+    const t = make(new Map([['JHN 1', JHN_1], ['JHN 3', JHN_3], ['JHN 4', JHN_4]]), limited(100));
+    await t.held.chapter('OTHER', 'JHN', 3);
+    await t.held.chapter('KJVAB', 'JHN', 3);
+    await t.held.chapter('KJVAB', 'JHN', 4);
+    // 36 + 54 verses are held. Reading John 3 again makes John 4 the least recently read
+    expect(isHeld(t, 'KJVAB', 3)).toBe(true);
+    // John 1 makes 141: dropping John 4 leaves 87
+    expect((await t.held.chapter('KJVAB', 'JHN', 1))?.verses).toHaveLength(36);
+    expect(t.fetches).toEqual(['JHN 3', 'JHN 3', 'JHN 4', 'JHN 1']);
+    expect(isHeld(t, 'KJVAB', 1)).toBe(true);
+    expect(isHeld(t, 'KJVAB', 3)).toBe(true);
+    expect(isHeld(t, 'OTHER', 3)).toBe(true);
+    expect(t.fetches).toHaveLength(4);
+    // John 4 was dropped, so its read fetches. It makes 141 again, and John 1, now the least recently read, goes for it
+    expect(await t.held.chapter('KJVAB', 'JHN', 4)).not.toBeNull();
+    expect(t.fetches).toEqual(['JHN 3', 'JHN 3', 'JHN 4', 'JHN 1', 'JHN 4']);
+    expect(isHeld(t, 'KJVAB', 3)).toBe(true);
+    expect(isHeld(t, 'KJVAB', 4)).toBe(true);
+    expect(t.fetches).toHaveLength(5);
+    expect(isHeld(t, 'KJVAB', 1)).toBe(false);
+  });
+
+  it('a chapter with more verses than the keep limit is read and not held', async () => {
+    const t = make(undefined, limited(30));
+    expect((await t.held.chapter('KJVAB', 'JHN', 3))?.verses).toHaveLength(36);
+    expect((await t.held.chapter('KJVAB', 'JHN', 3))?.verses).toHaveLength(36);
+    expect(t.fetches).toEqual(['JHN 3', 'JHN 3']);
+  });
+
+  it('a refreshed chapter counts once toward the keep limit', async () => {
+    const t = make(new Map([['JHN 3', JHN_3], ['JHN 4', JHN_4]]), limited(100));
+    await t.held.chapter('KJVAB', 'JHN', 4);
+    await t.held.chapter('KJVAB', 'JHN', 3);
+    t.later(31 * day);
+    // John 3 is refetched: 54 + 36 still fit, so John 4 stays held, though it is past its refresh days
+    await t.held.chapter('KJVAB', 'JHN', 3);
+    t.later(-31 * day);
+    expect(isHeld(t, 'KJVAB', 4)).toBe(true);
   });
 
   it('the contract gives one copy of a chapter that is replaced between its two reads', async () => {
