@@ -1,7 +1,7 @@
 /**
  * Corpus DB writer — the build-time side of the old-repo ADR-0009 Drizzle seam. Writes
  * through drizzle-orm/better-sqlite3 using the SAME schema module
- * (src/db/corpus-schema.ts) the app reads through drizzle-orm/expo-sqlite.
+ * (src/db/corpus-schema.ts) the reader uses (src/db/corpus-read.ts).
  *
  * Integer ids are storage-only and regenerated every ingest; block rows are
  * inserted first and their rowids mapped by the block's local ordinal.
@@ -27,7 +27,7 @@ import * as schema from '../db/corpus-schema';
 export type CorpusDb = BetterSQLite3Database<typeof schema>;
 
 /**
- * DDL mirroring src/db/corpus-schema.ts (and schema.dbml). The large tables
+ * DDL mirroring src/db/corpus-schema.ts. The large tables
  * keyed by their primary key are WITHOUT ROWID, so the key isn't stored twice:
  * it took a BSB pack from 145 MB to 118 MB (plan step 13).
  */
@@ -484,7 +484,7 @@ export function insertWordAlignments(db: CorpusDb, translationId: number, aligne
 }
 
 /** Where seeded data came from, with attribution and a note of changes. */
-export const DATA_SOURCES = [
+const DATA_SOURCES = [
   {
     id: 'usfm-spec',
     url: USFM_SPEC_URL,

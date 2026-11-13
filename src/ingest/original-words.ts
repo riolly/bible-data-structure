@@ -98,7 +98,7 @@ export function readMacula(path: string): Map<string, MaculaWord[]> {
 }
 
 /** A word's letters without accents, points, case or punctuation, for comparing two copies of one text. */
-export const letters = (s: string) =>
+const letters = (s: string) =>
   s
     .normalize('NFD')
     .replace(/[^\p{Ll}\p{Lu}\p{Lo}]/gu, '')

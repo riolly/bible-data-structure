@@ -2,8 +2,7 @@
  * USFM → USJ via usfm-grammar (ADR-0001: parse at build time, never on
  * device). Isolated in its own module because usfm-grammar loads a NATIVE
  * tree-sitter binding at import: everything else in the pipeline is pure TS,
- * so tests import this lazily and skip when the native module is unavailable
- * (CI installs with ignore-scripts).
+ * so tests import this lazily and skip when the native module is unavailable.
  *
  * Parsing is STRICT first; on failure it retries with ignoreErrors and
  * surfaces every parser error to the caller, so the ingest log gets human
@@ -20,8 +19,7 @@
  * step 7). A source with the rewrite on that also has a real `\qd` stops,
  * since the two could not be told apart. The rewrite count is reported to the
  * caller. A source that has NOT opted in fails loudly when the construct
- * appears, so a new translation never gets its markers silently rewritten
- * (issue #20).
+ * appears, so a new translation never gets its markers silently rewritten.
  */
 
 import { createRequire } from 'node:module';

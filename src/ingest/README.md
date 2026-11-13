@@ -7,66 +7,12 @@ plan step 7). Consumers read normalized rows through the Drizzle
 schema in `src/db/corpus-schema.ts`, shared by the writer here and the reader in
 `src/db/corpus-read.ts`.
 
-```
-bun run ingest:download   # once: fetch pinned ebible.org zips, upstream SBLGNT and OSHB, TVTMS, the MACULA word tables and Clear's BSB alignments, check edition stamps and hashes → sources/ (gitignored)
-bun run ingest            # sources → build/corpus.db, build/mapping-diff.tsv, build/pivot.json (gitignored)
-```
+The commands are in [CLAUDE.md](../../CLAUDE.md). Each file's header comment says what it does.
 
 The ingest stops if the pivot lost anything compared with `fixtures/pivot.json`
 (ADR-0006). When it only grew, copy `build/pivot.json` over the fixture to
 accept the growth. `build/mapping-diff.tsv` lists the verses where TVTMS and
 the `.vrs` files disagree.
-
-## Layout
-
-- `tokenize.ts` — **the registered tokenization policy (ADR-0004).** Part of
-  the locked anchor seam; a change here is an anchor migration.
-- `normalize.ts`: `splitChapters` cuts a book's USJ into chapter documents,
-  and `normalizeChapters` derives `Block[]`, `Token[]` and verse text from
-  them, with a stats bag of notes and styles. A marker outside the supported
-  list in ADR-0001 throws.
-- `parse.ts` — usfm-grammar wrapper (strict first, lenient with logged errors;
-  versified-`\d` grammar-gap preprocess, written back as `d` after the parse).
-- `parse-pool.ts` / `parse-worker.ts`: run `parse.ts` in worker threads and
-  cache each result in `build/usj-cache/`, keyed by the USFM text, the parse
-  options, `parse.ts` and the parser versions. Delete the directory to force
-  fresh parses.
-- Books, canons and English names live in `src/model/books.ts` and `src/model/canon.ts`; `write-db.ts` seeds them.
-- `schemes.ts`: the scheme registry, `kjv` plus six Paratext schemes from
-  `vrs/libpalaso/` (MIT, pinned by commit and sha256), plus the derived
-  schemes `rp`, `web`, `brenton` and `bsb` (a base and listed changes,
-  ADR-0002).
-- `vrs.ts`: the Paratext `.vrs` parser (counts, excluded verses, segments,
-  mappings, `#!` lines), read the way libpalaso reads them.
-- `pivot.ts`: the extend-only pivot (`fixtures/pivot.json` is the previous
-  build) and the `.vrs` mappings compiled to pivot rows (ADR-0006).
-- `tvtms.ts`: STEPBible TVTMS compiled per scheme by evaluating its count
-  tests, merged with the `.vrs` rows and diffed against them. `sources.ts`
-  says why the raw file is downloaded, not committed.
-- `sblgnt-xml.ts`, `oshb-xml.ts`: upstream SBLGNT and OSHB XML to USFM, read
-  by `source-files.ts`. `oshb-xml.ts` also returns the qere readings, which
-  `run.ts` checks against the stored tokens and writes to `reading` (ADR-0007),
-  and each word's OSHB id, lemma and morphology.
-- `original-words.ts`: the original words of WLC and SBLGNT (ADR-0003
-  amendment, plan step 11), from OSHB and MACULA, joined to the stored tokens.
-  The ingest stops on any verse whose words differ between the sources.
-- `alignment.ts`: the BSB's words to the original words they translate (ADR-0003
-  step 12 amendment), from Clear Bible's manual alignments, joined to our newer
-  BSB verse by verse. The ingest stops on an aligned id that is no original
-  word or morpheme.
-- `edition.ts` — deterministic `translation.edition` stamp (ADR-0005): sha256
-  over the source text, immune to zip repackaging.
-- `sources.ts` / `download.ts`: each text source is pinned by its edition
-  stamp, and TVTMS by its sha256 (ADR-0005, step 6 amendment). Each source
-  lists the books it must have and any counted `textFixes` (`text-fixes.ts`).
-  When upstream gives another stamp, the download tries our copy in the
-  `sources` release, and stops when no copy gives the pinned stamp. Updating a
-  text pin is a new edition; updating the TVTMS pin changes mapping rows (see
-  CLAUDE.md).
-- `write-db.ts` / `run.ts` — Drizzle(better-sqlite3) writer + CLI with
-  invariant validation and verse-coverage warnings. Blocks and tokens go in
-  through prepared statements, and the indexes are built after the last
-  edition.
 
 ## Golden fixtures
 

@@ -16,14 +16,12 @@
  * step in Paratext's own data here, never the pivot.
  */
 
-import { PIVOT, Relation, parseRefKey, refExists, refKey, type MappingRow, type Ref } from '../model/mapping';
+import { PIVOT, Relation, parseRefKey, ref, refExists, refKey, type MappingRow, type Ref } from '../model/mapping';
 import type { Scheme } from '../model/scheme';
 import { PROTESTANT, canonBookCodes } from '../model/canon';
 import { DERIVED_SCHEMES, PARATEXT_SCHEMES, readParatextVrs } from './schemes';
 import { TVTMS } from './sources';
 import { parseVrs, type VrsMapping } from './vrs';
-
-const ref = (book: string, chapter: number, verse: number, segment = ''): Ref => ({ book, chapter, verse, segment });
 
 /**
  * Where `eng` (NRSV-style) differs from the pivot: the TVTMS condensed table
@@ -130,7 +128,7 @@ function relation(id: string): Relation {
  * read: `renumber` (one to one), `split` (one to several), `merge` (several to
  * one), or `absent` (no counterpart).
  */
-export function vrsPivotRows(
+function vrsPivotRows(
   schemeId: string,
   schemes: ReadonlyMap<string, Scheme>,
   engToPivotRows: readonly { from: Ref; to: Ref | null }[] = ENG_TO_PIVOT,
@@ -206,7 +204,7 @@ export function allVrsPivotRows(
  * wrong. An unmapped verse is reported; a wrong row is not. With `kjv` or
  * `eng` as the source there are no rows to take; TVTMS alone maps those.
  */
-export function derivedVrsPivotRows(paratextRows: readonly MappingRow[]): MappingRow[] {
+function derivedVrsPivotRows(paratextRows: readonly MappingRow[]): MappingRow[] {
   const byScheme = new Map<string, MappingRow[]>();
   for (const r of paratextRows) (byScheme.get(r.scheme) ?? byScheme.set(r.scheme, []).get(r.scheme)!).push(r);
   const out: MappingRow[] = [];

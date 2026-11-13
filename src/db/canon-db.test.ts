@@ -1,10 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import { nativeModuleLoads } from '../ingest/native-probe';
+import { sqliteLoads } from '../ingest/native-probe';
 
-const native = nativeModuleLoads(
-  "import('better-sqlite3').then(({ default: Database }) => { new Database(':memory:').close(); process.exit(0); }, () => process.exit(1));",
-);
+const native = sqliteLoads();
 
 describe.skipIf(!native)('book and canon tables', () => {
   it('seeds books, the protestant canon and English names', async () => {

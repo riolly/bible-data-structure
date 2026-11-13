@@ -1,6 +1,6 @@
 # Original words keep external ids, split Hebrew into morphemes, and keep the lexicon separable
 
-Status: accepted. Carried from old bible-codex ADR-0007, commit `c2643a2`. Built for WLC and SBLGNT on 2026-11-13, at word grain (amendment below). Alignment is not built.
+Status: accepted. Carried from old bible-codex ADR-0007, commit `c2643a2`. Built for WLC and SBLGNT on 2026-11-13, at word grain (amendment below). Alignment is built for the BSB and the KJV (step 12 and KJV amendments below).
 
 The **Original Word** hub is the word-level link between translations: a translation's Tokens align to original Hebrew/Greek words, and two translations relate at word level only through that hub. The storage shape:
 
@@ -26,7 +26,7 @@ The **Original Word** hub is the word-level link between translations: a transla
 - With ADR-0002, the hub's address names the scheme it uses. Original-language editions have their own native schemes (Masoretic, Septuagint), which is one more reason the old single-scheme model had to go.
 - The validation pass must also check `token.ow_id ∈ interlinear_alignment(token)`, because the head can't be derived from the bare junction.
 - "Lemma is the spine" depends on the source supplying a lemma id per occurrence. If it doesn't, `lemma_id` is null and statistics hang off `strong_id` until a lemma source arrives.
-- A translation's own inline `\w strong=` tags can't bootstrap the hub. The old prototype found WEB's Hebrew tags systematically shifted. The hub needs a dedicated aligned corpus (`research/interlinear-corpus-sourcing.md`).
+- A translation's own inline `\w strong=` tags can't bootstrap the hub. The old prototype found WEB's Hebrew tags systematically shifted. The hub needs a dedicated aligned corpus (`research/word-tags.md`).
 - Sourcing and licensing are the open risk, not the schema.
 
 ## Amendment: the hub at word grain, from OSHB and MACULA (2026-11-13, plan step 11)

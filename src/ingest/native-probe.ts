@@ -15,9 +15,13 @@ import { spawnSync } from 'node:child_process';
 export function nativeModuleLoads(script: string): boolean {
   return (
     spawnSync(process.execPath, ['-e', script], {
-      cwd: __dirname, // resolve modules against app/node_modules
+      cwd: __dirname, // resolve modules against this repo's node_modules
       stdio: 'ignore',
       timeout: 30_000,
     }).status === 0
   );
 }
+
+/** Whether better-sqlite3 loads and opens a database. */
+export const sqliteLoads = (): boolean =>
+  nativeModuleLoads("import('better-sqlite3').then(({ default: D }) => { new D(':memory:').close(); process.exit(0); }, () => process.exit(1));");

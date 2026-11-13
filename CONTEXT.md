@@ -66,7 +66,7 @@ Where an edition's text comes from at read time: a local pack, or a licensed API
 A numbering system for chapters and verses: KJV, Masoretic, Septuagint, Vulgate and others. The same `chapter:verse` can mean different text under different schemes (Psalm titles, Joel 2/3, Malachi 3/4, Revelation 12/13). (ADR-0002)
 
 **Scheme id**:
-A lowercase name from our registry: `kjv`, the Paratext names `org`, `eng`, `lxx`, `vul`, `rso`, `rsc`, and the derived schemes `rp`, `web`, `brenton`, `bsb`. Paratext `eng` is not KJV numbering.
+A lowercase name from our registry: `kjv`, the Paratext names `org`, `eng`, `lxx`, `vul`, `rso`, `rsc`, and the derived schemes `rp`, `web`, `brenton`, `bsb`, `nasb95`, `niv`, `nlt`. Paratext `eng` is not KJV numbering.
 _Avoid_: av11n (that is SWORD's name for its mapping feature, not a scheme)
 
 **Verse address**:
@@ -124,7 +124,7 @@ Another text for a range of written words in one edition, stored beside the toke
 _Avoid_: variant (OSHB's word for the note, but also used for textual variants between manuscripts)
 
 **Structure overlay** *(planned)*:
-Any further grouping laid over the token stream: sections, pericopes, literary units that cross chapter boundaries, chiasm, parallelism. Unlike Blocks, overlays may overlap. The old repo's curated literary edition was one such overlay (`docs/prior-art/old-adr-0017-*`).
+Any further grouping laid over the token stream: sections, pericopes, literary units that cross chapter boundaries, chiasm, parallelism. Unlike Blocks, overlays may overlap. The old repo's curated literary edition was one such overlay (old-repo ADR-0017).
 
 ## Original language
 
@@ -133,7 +133,7 @@ One word occurrence in WLC or SBLGNT: an OSHB `<w>` element in Hebrew, ketiv and
 _Avoid_: lemma (dictionary form), Strong's (lexical id); assuming one written word is one Original Word (OSHB divides 12 written words in two)
 
 **Alignment**:
-The many-to-many mapping from an edition's Tokens to Original Words. Stored for the BSB, one row per English word and Original Word, keyed by the word address, with the Strong's numbers of the morphemes the word's aligned group translates (`word_alignment`). Reverse-interlinear is derived from it, never stored. (ADR-0003 and its step 12 amendment)
+The many-to-many mapping from an edition's Tokens to Original Words. Stored for the BSB and the KJV, one row per English word and Original Word, keyed by the word address, with the Strong's numbers of the morphemes the word's aligned group translates (`word_alignment`). Reverse-interlinear is derived from it, never stored. (ADR-0003, step 12 and KJV amendments)
 _Avoid_: interlinear (that is the display; Alignment is the data)
 
 **Lemma**:
@@ -170,6 +170,5 @@ What `map` gives for one verse in another edition: one verse, several, part of a
 ## Rules
 
 - **Translations never link to each other directly.** They relate through a verse address (coarse) or an Original Word (fine). There is no Token-to-Token edge between editions.
-- **Outside references point at addresses, never at row ids.** Row ids are rebuilt on every ingest. Addresses and external `ow_id`s are stable.
-- **Every address names its scheme.** Moving between schemes goes through mapping data.
-- **The tokenizer policy is part of the address.** A rule change is a migration.
+
+The other rules are in [CLAUDE.md](CLAUDE.md).

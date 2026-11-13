@@ -1,6 +1,6 @@
 # Licensing
 
-Status: done 2026-11-09 for the step 3 sources. Each verdict answers three questions: may an app redistribute the text, what attribution it needs, and whether the raw files may be committed here. Every text below is downloaded by `bun run ingest:download` and gitignored, so "commit raw files" only matters for test fixtures.
+Status: covers every source in use, last updated 2026-11-13. Each verdict answers three questions: may an app redistribute the text, what attribution it needs, and whether the raw files may be committed here. Every text below is downloaded by `bun run ingest:download` and gitignored, so "commit raw files" only matters for test fixtures.
 
 The ebible.org catalog with its `Redistributable` and `Copyright` columns is [translations.csv][catalog]. Each zip carries a `copr.htm`, which is the same page as the edition's `copyright.htm` linked below.
 

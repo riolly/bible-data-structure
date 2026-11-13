@@ -12,7 +12,7 @@ The TVTMS header defines them at lines 117-127.
 
 ## How they were evaluated
 
-- A verse's word count is the number of `word` tokens with that verse number in the edition. A verse the edition lacks counts 0. A verse bridge puts all its words in the first verse (ADR-0004 rule 6).
+- A verse's word count is the number of `word` tokens with that verse number in the edition. A verse the edition lacks counts 0. A verse bridge's words count under every number it holds (ADR-0006).
 - `TextBeforeV1` holds when the chapter has a `\d` block (a Psalm title) before its first verse-1 token. Section headings (BSB's "Deliver Me, O LORD!") are not canonical text and don't count. KJV, BSB and WEB have unnumbered titles. In WLC and Brenton the title is part of verse 1.
 - A row is evaluated only if the edition has every book its text tests name. Otherwise it stays undecided, as today.
 - After its count tests pass, a row whose text tests all pass is kept, and a row with a failing text test is dropped. `compileTvtms` then runs unchanged.
@@ -90,6 +90,6 @@ With the 20% margin, BSB under `bsb`, and a row decided for a scheme only when a
 
 `bsb`'s two TVTMS rows are the Philippians 1:16-17 swap. No edition's own results differ from its scheme's rows.
 
-A verse bridge puts all its words in its first verse (ADR-0004 rule 6), so a word test on the bridge's second verse would read 0. The pinned editions' only bridges are six in WEB's Sirach and 4 Maccabees, and no tested verse falls in one.
+A verse bridge's words count under every number it holds (ADR-0006). The pinned editions' only bridges are six in WEB's Sirach and 4 Maccabees, and no tested verse falls in one.
 
 [tvtms]: https://github.com/STEPBible/STEPBible-Data/tree/5de0a47f35f0fc13dfe1430d104e5db8a4285f9c/Versification

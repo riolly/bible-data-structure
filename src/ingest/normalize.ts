@@ -279,12 +279,10 @@ export function normalizeChapters(docs: readonly RawChapterDoc[], opts: Normaliz
 
   const flushText = () => {
     if (!buf) return;
-    // Unicode NFC before tokenizing (#25): sources arrive decomposed (esp.
-    // Greek polytonic & Hebrew); canonical composition makes stored token
-    // text — and the draw layer's cmap-advance measure — match the shaped
-    // glyph run. Also keeps decomposed base+mark from splitting a word apart
-    // (a combining mark is category M, which the tokenizer's punct branch
-    // would otherwise capture). Idempotent on already-NFC (ASCII) text.
+    // Unicode NFC before tokenizing: sources arrive decomposed (esp. Greek
+    // polytonic & Hebrew). Also keeps decomposed base+mark from splitting a
+    // word apart (a combining mark is category M, which the tokenizer's punct
+    // branch would otherwise capture). Idempotent on already-NFC (ASCII) text.
     const run = buf.normalize('NFC');
     const raw = tokenize(run, { paragraphMarks: !inHeading });
     const runStart = bufStart;
@@ -293,8 +291,8 @@ export function normalizeChapters(docs: readonly RawChapterDoc[], opts: Normaliz
     }
     bufStart += buf.length;
     buf = '';
-    // #1/#3: heading tokens carry only a verse EXPLICITLY set inside the
-    // heading (never the inherited one); other tokens need a \v seen.
+    // Heading tokens carry only a verse EXPLICITLY set inside the heading
+    // (never the inherited one); other tokens need a \v seen.
     const effectiveVerse = inHeading ? headingVerse : verse;
     const inVerse = effectiveVerse != null;
     if (inVerse && verseText) verseText.text += ` ${run}`;

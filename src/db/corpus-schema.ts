@@ -1,10 +1,8 @@
 import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
 /**
- * Corpus DB schema (read-only, bundled asset — old-repo ADR-0009, schema.dbml). Shared
- * by BOTH sides of the Drizzle seam:
- *   - the build-time ingest writer (scripts/ingest, better-sqlite3 driver)
- *   - the app reader (expo-sqlite driver, opened from the bundled asset)
+ * Corpus DB schema (old-repo ADR-0009). Shared by the ingest writer
+ * (src/ingest/write-db.ts) and the reader (corpus-read.ts).
  *
  * Integer pks here are STORAGE ids only — regenerated wholesale on every
  * re-ingest. Outside references use addresses (src/model/address.ts): scheme +

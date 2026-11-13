@@ -1,7 +1,6 @@
 /**
  * Framework-agnostic corpus row shapes — the domain form of the read-only
- * corpus DB (schema.dbml: `block` / `token`). The build-time ingester (#6)
- * writes rows of this shape; the layout engine (#7) consumes them.
+ * corpus DB. The ingest writes rows of this shape.
  *
  * INVARIANTS (CONTEXT.md):
  * - Blocks PARTITION the token stream: every Token belongs to exactly one Block.
@@ -13,11 +12,9 @@
  *   scheme numbers as verse 0 carries verse 0 and word indexes (ADR-0001).
  * - `id` fields are STORAGE ids only. Outside references use addresses
  *   (address.ts), never these ids; they do not survive re-ingest.
- *
- * No Skia / CanvasKit import in this layer (old-repo ADR-0008).
  */
 
-/** Typesetting branch of a Block (schema.dbml `genre`). */
+/** Typesetting branch of a Block. */
 export type Genre = 'prose' | 'poetry' | 'heading';
 
 /** Word/punct classification is registered anchor policy (ADR-0004). */
