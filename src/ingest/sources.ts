@@ -44,9 +44,8 @@ export interface SourceDef {
   readonly textFixes?: readonly TextFix[];
   /**
    * How to read the unpacked source. Absent: its `.usfm` files. `sblgnt-xml`:
-   * upstream SBLGNT's per-book XML under `path`, converted by sblgnt-xml.ts.
-   * `oshb-xml`: upstream OSHB's per-book OSIS under `path`, converted with its
-   * qere readings by oshb-xml.ts.
+   * upstream SBLGNT's per-book XML under `path`. `oshb-xml`: upstream OSHB's
+   * per-book OSIS under `path`. Each kind's adapter is in source-formats.ts.
    */
   readonly format?: { readonly kind: 'sblgnt-xml' | 'oshb-xml'; readonly path: string };
   /**
