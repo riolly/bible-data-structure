@@ -53,7 +53,8 @@ export interface EditionWriter {
  * Write the edition `meta` with the books `books`, in that order: `write`
  * adds them, and may await between books. When it returns, the stamps are set
  * and the transaction commits. When it or an add throws, the edition rolls
- * back, its translation row included. Returns the stamps.
+ * back, its translation row included, even when `write` catches the add's
+ * error and goes on. Returns the stamps.
  */
 export async function writeEdition(
   db: CorpusDb,
@@ -63,8 +64,20 @@ export async function writeEdition(
 ): Promise<{ words: string; text: string }> {
   const sqlite = db.$client;
   let finished = false;
+  let failed = false;
   const stillOpen = (what: string) => {
     if (finished) throw new Error(`${meta.abbrev}: ${what} after the edition was written`);
+    if (failed) throw new Error(`${meta.abbrev}: ${what} after an add failed`);
+  };
+  /** Run one add. A throw marks the edition failed, so it can't commit with half a book. */
+  const add = (what: string, body: () => void) => {
+    stillOpen(what);
+    try {
+      body();
+    } catch (e) {
+      failed = true;
+      throw e;
+    }
   };
   sqlite.exec('BEGIN');
   try {
@@ -75,28 +88,36 @@ export async function writeEdition(
     let added = 0;
     await write({
       addBook(book, rows, readings = []) {
-        stillOpen(`${book} added`);
-        if (books[added] !== book) {
-          throw new Error(`${meta.abbrev}: ${book} added where the edition lists ${books[added] ?? 'no more books'}`);
-        }
-        added++;
-        text.add(book, insertBookRows(insert, translationId, book, rows));
-        checkReadings(book, readings, rows.tokens);
-        for (const r of readings) {
-          insert.reading.run(translationId, r.book, r.chapter, r.verse, r.segment ?? '', r.wordIndex, r.wordCount, r.kind,
-            r.text, r.owIds.join(' '), 'oshb');
-        }
-        words.add(book, rows.tokens, rows.verses);
+        add(`${book} added`, () => {
+          if (books[added] !== book) {
+            throw new Error(`${meta.abbrev}: ${book} added where the edition lists ${books[added] ?? 'no more books'}`);
+          }
+          // the rows are stored under their own book, so each must be this book's
+          const stray = readings.find((r) => r.book !== book);
+          if (stray) throw new Error(`${meta.abbrev}: a reading of ${stray.book} added with ${book}`);
+          checkReadings(book, readings, rows.tokens);
+          added++;
+          text.add(book, insertBookRows(insert, translationId, book, rows));
+          for (const r of readings) {
+            insert.reading.run(translationId, r.book, r.chapter, r.verse, r.segment ?? '', r.wordIndex, r.wordCount, r.kind,
+              r.text, r.owIds.join(' '), 'oshb');
+          }
+          words.add(book, rows.tokens, rows.verses);
+        });
       },
       addOriginalWords(book, source, ow) {
-        stillOpen(`${book}'s original words added`);
-        if (book !== books[added - 1]) throw new Error(`${meta.abbrev}: original words of ${book} added, not of the book added last`);
-        for (const w of ow) {
-          insert.originalWord.run(source, w.owId, translationId, w.book, w.chapter, w.verse, w.segment, w.seq, w.wordIndex,
-            w.kind, w.text, w.lemma, w.strongs.join(' '), w.morph, w.gloss);
-        }
+        add(`${book}'s original words added`, () => {
+          if (book !== books[added - 1]) throw new Error(`${meta.abbrev}: original words of ${book} added, not of the book added last`);
+          const stray = ow.find((w) => w.book !== book);
+          if (stray) throw new Error(`${meta.abbrev}: an original word of ${stray.book} added with ${book}`);
+          for (const w of ow) {
+            insert.originalWord.run(source, w.owId, translationId, w.book, w.chapter, w.verse, w.segment, w.seq, w.wordIndex,
+              w.kind, w.text, w.lemma, w.strongs.join(' '), w.morph, w.gloss);
+          }
+        });
       },
     });
+    if (failed) throw new Error(`${meta.abbrev}: finished after an add failed`);
     if (added < books.length) throw new Error(`${meta.abbrev}: finished without ${books.slice(added).join(', ')}`);
     const stamps = { words: words.digest(), text: text.digest() };
     db.update(schema.translation)
@@ -106,7 +127,11 @@ export async function writeEdition(
     sqlite.exec('COMMIT');
     return stamps;
   } catch (e) {
-    if (sqlite.inTransaction) sqlite.exec('ROLLBACK');
+    try {
+      if (sqlite.inTransaction) sqlite.exec('ROLLBACK');
+    } catch {
+      // `e` is the error to report, not a rollback that failed after it
+    }
     throw e;
   } finally {
     finished = true;

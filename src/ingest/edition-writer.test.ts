@@ -84,6 +84,52 @@ describe.skipIf(!native)('writeEdition', () => {
     ).rejects.toThrow(/^JHN 1:1!1: reading "x"/);
     expect(counts()).toEqual(before);
     expect(sqlite.inTransaction).toBe(false);
+
+    // the same when the caller catches the add's error and goes on
+    await expect(
+      writeEdition(db, meta('C'), ['PSA', 'JHN'], async (edition) => {
+        edition.addBook('PSA', PSA);
+        try {
+          edition.addBook('JHN', JHN, [reading]);
+        } catch {
+          // swallowed
+        }
+        expect(() => edition.addOriginalWords('JHN', 'oshb', [])).toThrow("C: JHN's original words added after an add failed");
+      }),
+    ).rejects.toThrow('C: finished after an add failed');
+    // and when the book's rows fail to insert: the token names a block that isn't there
+    await expect(
+      writeEdition(db, meta('D'), ['PSA'], async (edition) => {
+        try {
+          edition.addBook('PSA', { ...PSA, blocks: PSA.blocks.slice(0, 1) });
+        } catch {
+          // swallowed
+        }
+      }),
+    ).rejects.toThrow('D: finished after an add failed');
+    expect(counts()).toEqual(before);
+    sqlite.close();
+  });
+
+  it('refuses a reading or an original word of another book', async () => {
+    const { db, sqlite, writeEdition, counts } = await corpus();
+    const write = (add: (e: EditionWriter) => void) => writeEdition(db, meta('X'), ['PSA'], async (edition) => add(edition));
+    const reading = {
+      book: 'JHN', chapter: 1, verse: 1, segment: '', kind: 'qere' as const, wordIndex: 0, wordCount: 0, text: 'x', owIds: [],
+      qere: [], ketiv: [], verseWords: [],
+    };
+    await expect(write((e) => e.addBook('PSA', PSA, [reading]))).rejects.toThrow('X: a reading of JHN added with PSA');
+    const word = {
+      owId: 'o1', book: 'JHN', chapter: 1, verse: 1, segment: '', seq: 0, wordIndex: 0, kind: 'word' as const, text: 'x',
+      lemma: '', strongs: [], morph: '', gloss: null,
+    };
+    await expect(
+      write((e) => {
+        e.addBook('PSA', PSA);
+        e.addOriginalWords('PSA', 'oshb', [word]);
+      }),
+    ).rejects.toThrow('X: an original word of JHN added with PSA');
+    expect(counts()).toEqual([0, 0, 0, 0, 0, 0, 0]);
     sqlite.close();
   });
 
