@@ -1,6 +1,6 @@
 # Original words keep external ids, split Hebrew into morphemes, and keep the lexicon separable
 
-Status: accepted. Carried from old bible-codex ADR-0007, commit `c2643a2`. Built for WLC and SBLGNT on 2026-11-13, at word grain (amendment below). Alignment is not built.
+Status: accepted. Carried from old bible-codex ADR-0007, commit `c2643a2`. Built for WLC and SBLGNT on 2026-11-13, at word grain (amendment below). Alignment is built for the BSB and the KJV (step 12 and KJV amendments below).
 
 The **Original Word** hub is the word-level link between translations: a translation's Tokens align to original Hebrew/Greek words, and two translations relate at word level only through that hub. The storage shape:
 

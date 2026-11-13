@@ -35,7 +35,7 @@ GET /v1/bibles/{bibleId}/chapters/{BOOK}.{n}?content-type=json&include-notes=tru
 
 Text nodes carry `verseId` and `verseOrgIds` (`PSA.3.1` and `PSA.3.2` in KJV), which is API.Bible's own mapping to the Hebrew numbering. We map through our pivot (ADR-0006) and drop these.
 
-Not seen yet: published or alternate verse numbers (`\vp`, `\va`) and a verse bridge. NLT Numbers 1:20-21 will show whether a bridge's `number` is `20-21`, as `\v 20-21` gives in USFM.
+Not seen yet: published or alternate verse numbers (`\vp`, `\va`).
 
 ## Samples
 
