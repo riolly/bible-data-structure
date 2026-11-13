@@ -395,6 +395,15 @@ describe.skipIf(!native || !existsSync(CORPUS))('the app contract on the corpus 
     expect((await c.rights('SBLGNT')).attribution).toMatch(/Society of Biblical Literature/);
     expect((await c.rights('WLC')).attribution).toMatch(/Open Scriptures Hebrew Bible/);
     await expect(c.rights('NIV')).rejects.toThrow(/no rights record/);
+    // the BSB's Strong's numbers are Clear Bible's (plan step 12)
+    expect((await c.rights('BSB')).conditions.join(' ')).toMatch(/Clear Bible/);
+  });
+
+  it('credits: every data source with its license and credit', async () => {
+    const credits = await c.credits();
+    expect(credits.map((r) => r.id)).toEqual(['clear-bsb', 'macula-greek', 'macula-hebrew', 'oshb', 'tvtms', 'usfm-spec', 'vrs']);
+    for (const r of credits) expect(r.attribution.length && r.license.length && r.url.length).toBeTruthy();
+    expect(credits.find((r) => r.id === 'vrs')).toMatchObject({ license: 'MIT' });
   });
 });
 

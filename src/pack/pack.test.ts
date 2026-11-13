@@ -26,15 +26,16 @@ describe.skipIf(!native || !existsSync(CORPUS))('a BSB pack (build/corpus.db)', 
     const { corpusContract } = await import('../contract/corpus-contract');
     const { buildPack } = await import('./pack');
     const path = join(mkdtempSync(join(tmpdir(), 'pack-')), 'BSB.db');
-    editions = buildPack(CORPUS, path, ['BSB']);
+    // three books keep the build near a second, and cover a Psalm title and both hubs
+    editions = buildPack(CORPUS, path, ['BSB'], { books: ['GEN', 'PSA', 'JHN'] });
     const sqlite = new Database(path, { readonly: true });
     tables = sqlite.prepare<[], { name: string }>("SELECT name FROM sqlite_master WHERE type = 'table'").all().map((r) => r.name);
     pack = corpusContract(drizzle({ client: sqlite, schema }));
     corpus = corpusContract(drizzle({ client: new Database(CORPUS, { readonly: true }), schema }));
-  }, 120_000);
+  }, 30_000);
 
-  it('holds the hub editions the BSB aligns to, and no token rows', () => {
-    expect(editions).toEqual(['BSB', 'SBLGNT', 'WLC']);
+  it('holds the hub editions, and no token rows', () => {
+    expect(editions).toEqual(['BSB', 'WLC', 'SBLGNT']);
     expect(tables).not.toContain('token');
     expect(tables).not.toContain('block');
   });
@@ -60,7 +61,10 @@ describe.skipIf(!native || !existsSync(CORPUS))('a BSB pack (build/corpus.db)', 
     expect(words.words[0].strongs.length).toBeGreaterThan(0);
   });
 
-  it('knows only the editions it holds', async () => {
+  it('knows only the editions, books and schemes it holds', async () => {
     await expect(pack.chapter('KJV', 'JHN', 3)).rejects.toThrow(/unknown edition "KJV"/);
+    await expect(pack.resolve('BSB', 'PSA 51:1/vul')).rejects.toThrow(/unknown scheme "vul"/);
+    expect((await pack.resolve('BSB', 'PHP 1:16/kjv')).found.map((l) => l.address)).toEqual(['PHP 1:17/bsb']);
+    expect(await pack.chapter('BSB', 'MAT', 1)).toMatchObject({ kind: 'absent', reason: 'text' });
   });
 });

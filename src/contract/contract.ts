@@ -9,6 +9,7 @@
  *     resolve(edition, address)          a stored address, under any scheme
  *     words(edition, address)            a verse's words, or one word, with Strong's numbers
  *     rights(edition)                    what the edition's license allows
+ *     credits()                          the credit each data source in the file asks for
  *
  * An edition is named by its abbreviation (`KJV`, `BSB`). The edition
  * supplies the versification scheme, so app code writes `JHN 3:16`, and every
@@ -227,6 +228,19 @@ export interface ResolveResult {
   readonly found: readonly Lookup[];
 }
 
+/** One data source and the credit its license asks for (`data_source`). */
+export interface Credit {
+  /** `macula-greek`, `clear-bsb`, `tvtms`. */
+  readonly id: string;
+  readonly url: string;
+  /** `CC BY 4.0`, `MIT`. */
+  readonly license: string;
+  /** The credit line to show. */
+  readonly attribution: string;
+  /** What we changed, which CC BY 4.0 asks to state. */
+  readonly changes: string;
+}
+
 /** An original word's own data (ADR-0003, plan step 11). */
 export interface OriginalWordData {
   /** The source's id for the word: OSHB's for Hebrew, MACULA's for Greek. What an alignment points at. */
@@ -349,4 +363,12 @@ export interface BibleContract {
 
   /** The edition's rights record. Throws for an edition with none. */
   rights(edition: string): Promise<RightsRecord>;
+
+  /**
+   * Every data source the file holds data from, besides the edition texts,
+   * whose credits are in `rights`: Strong's numbers, glosses, alignments,
+   * mappings and book names. Show each `attribution` and `changes` on the
+   * app's credits screen (CC BY 4.0 and MIT ask for it).
+   */
+  credits(): Promise<readonly Credit[]>;
 }

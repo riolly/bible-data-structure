@@ -8,6 +8,7 @@ import {
   loadMappings,
   readChapterDoc,
   readChapterStamp,
+  readDataSources,
   readEdition,
   readOriginalWords,
   readSchemes,
@@ -431,6 +432,10 @@ export function corpusContract(db: SyncSqliteDb): BibleContract {
       const r = RIGHTS.get(id);
       if (!r) throw new Error(`rights: no rights record for edition "${id}"`);
       return r;
+    },
+
+    async credits() {
+      return readDataSources(db);
     },
   };
 }

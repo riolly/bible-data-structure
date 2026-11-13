@@ -7,7 +7,7 @@
  * No Node-only import here.
  */
 
-import { MACULA_GREEK, MACULA_HEBREW } from '../ingest/sources';
+import { CLEAR_BSB_ATTRIBUTION, MACULA_GREEK, MACULA_HEBREW } from '../ingest/sources';
 
 /** Where an app gets the edition's text at read time. */
 export type Route =
@@ -74,7 +74,9 @@ export const RIGHTS: ReadonlyMap<string, RightsRecord> = new Map(
     publicDomain('KJV', 'https://ebible.org/eng-kjv/copyright.htm', [
       'Printing in the UK, or importing printed copies into it, needs the Crown\'s permission. An app is not printing.',
     ]),
-    publicDomain('BSB', 'https://berean.bible/licensing.htm'),
+    publicDomain('BSB', 'https://berean.bible/licensing.htm', [
+      `Strong's numbers and original words from \`words\` need the credit "${CLEAR_BSB_ATTRIBUTION}".`,
+    ]),
     {
       ...publicDomain('WLC', 'https://github.com/openscriptures/morphhb/blob/3d15126fb1ef74867fc1434be1942e837932691f/LICENSE.md'),
       license: 'Public Domain (text), CC BY 4.0 (OSHB word ids, lemmas and morphology)',
