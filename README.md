@@ -41,7 +41,7 @@ Started 2026-11-09 from the research in [bible-codex](https://github.com/riolly/
     | `KJV+BSB.db` | KJV, BSB, WLC, SBLGNT | 123.4 MB | 37.6 MB | 3.7 ms, 5.4 ms |
 
     So the KJV adds about 9 MB to the hub and the BSB about 49 MB, 40 MB of it the `word_alignment` rows. The hub's 52.9 MB is `original_word`. Making `verse_text`, `original_word` and `word_alignment` WITHOUT ROWID took the BSB pack from 145.1 MB to 117.6 MB, and leaving out the schemes outside ADR-0008 (LXX, Vulgate, Brenton, RSO, RSC, WEB, RP) saved 3.1 MB more. A chapter read makes three queries (four for chapter 1), and each costs about 1 ms through drizzle, which builds the SQL on every call: the same verse query takes 0.05 ms as a prepared statement. Done.
-14. **Anchor user marks to a verse.** Amend ADR-0005. A mark's truth is the verse address plus the quote, and a word index is a hint. Word anchors exist only on Full editions. A fetched edition reconciles on the device when a refreshed chapter's stamp (step 10) changes. Done when the amendment is written. Apps build the storage.
+14. **Anchor user marks to a verse.** Amend ADR-0005. A mark's truth is the verse address plus the quote, and a word index is a hint. Word anchors exist only on Full editions. A fetched edition reconciles on the device when a refreshed chapter's stamp (step 10) changes. Done when the amendment is written. Apps build the storage. The rules are in ADR-0005's step 14 amendment. No edition is Full yet, so no app can make a word mark until step 12 finishes. Done.
 15. **Decide what stays in the build.** The Brenton, WEB and Robinson-Pierpont tests stay while they pass. When a step above breaks one, delete it instead of fixing it.
 
 Steps only a person can do:
