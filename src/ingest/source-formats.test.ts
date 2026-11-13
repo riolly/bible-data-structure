@@ -131,12 +131,22 @@ describe('the oshb-xml format', () => {
       </chapter>
     </div>
   </osisText></osis>`,
+    'wlc/wlc/Exod.xml': `<osis><osisText osisIDWork="OSHB">
+    <div type="book" osisID="Exod">
+      <chapter osisID="Exod.1">
+        <verse osisID="Exod.1.1">
+          <w lemma="428" morph="HPdxcp" id="02a">אֵ֗לֶּה</w>
+        </verse>
+      </chapter>
+    </div>
+  </osisText></osis>`,
     [MACULA_HEBREW.file]: tsv('xml:id\tref\ttext\tstrongnumberx\tgloss\tenglish', [
       ['o1', 'GEN 8:17!13', 'הָ', '', 'the', ''],
       ['o2', 'GEN 8:17!13', 'אָ֖רֶץ', '776', 'earth', ''],
       ['o3', 'GEN 8:17!15', 'הַיְצֵ֣א', '3318', 'bring.out', ''],
       ['o4', 'GEN 8:17!16', 'אִתָּ֑', '854', 'with', ''],
       ['o5', 'GEN 8:17!16', 'ךְ', '', 'you', ''],
+      ['o6', 'EXO 1:1!1', 'אֵ֗לֶּה', '428', 'these', ''],
     ]),
   });
 
@@ -159,5 +169,16 @@ describe('the oshb-xml format', () => {
       ['o5', { source: 'oshb', owId: '01c', strongs: [] }],
     ]);
     expect(extras.finish()).toEqual(['1 qere readings (ADR-0007)', `4 original words, glosses from ${MACULA_HEBREW.id}: 0 read words have none`]);
+  });
+
+  it("gives a book only its own qere readings and OSHB verses", () => {
+    const { open } = readSource(source('WLC', ['GEN', 'EXO'], { kind: 'oshb-xml', path: 'wlc' }), root, unpinned(root));
+    const { writer, calls } = recorder();
+    const extras = open(new Map());
+    extras.addBook(writer, 'EXO', rows('EXO', 1, 1, ['אֵ֗לֶּה']));
+    expect(calls.map((c) => [c.book, c.readings?.length, c.words?.map((w) => `${w.kind}:${w.owId}`).join()])).toEqual([
+      ['EXO', 0, undefined],
+      ['EXO', undefined, 'word:02a'],
+    ]);
   });
 });
