@@ -6,16 +6,37 @@
  * text (ADR-0005).
  */
 
-import { readdirSync, readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { computeEdition, type SourceFile } from './edition';
 import { OSHB_BOOKS, oshbXmlToUsfm, type OshbReading, type OshbVerse } from './oshb-xml';
 import { SBLGNT_BOOKS, sblgntXmlToUsfm } from './sblgnt-xml';
-import type { SourceDef } from './sources';
+import type { PinnedFile, SourceDef } from './sources';
 import { applyTextFixes } from './text-fixes';
 
 export const SOURCES_ROOT = join(import.meta.dirname, 'sources');
+
+/**
+ * The path of a pinned data file (MACULA, Clear) under `root`, once the file
+ * is there and its sha256 is the pin's. The ingest opens these files only
+ * through here, so an edited or truncated file stops the build (ADR-0005,
+ * step 6 amendment), as `readTvtms` does for TVTMS. The download checks a
+ * file it already has the same way.
+ */
+export function pinnedPath(pin: Pick<PinnedFile, 'id' | 'sha256' | 'file'>, root = SOURCES_ROOT): string {
+  const path = join(root, pin.file);
+  if (!existsSync(path)) throw new Error(`${path} is missing: run \`bun run ingest:download\` first`);
+  const digest = createHash('sha256').update(readFileSync(path)).digest('hex');
+  if (digest !== pin.sha256) {
+    throw new Error(
+      `${pin.id}: ${path} does not match its pin.\n  pinned: ${pin.sha256}\n  file:   ${digest}\n` +
+        '  Delete it and run `bun run ingest:download` to fetch the pinned file again.',
+    );
+  }
+  return path;
+}
 
 /** The upstream files of a source's listed books, in book order, as `{ code, usfm }` (raw text for XML). */
 function readUpstream(src: SourceDef, root: string): SourceFile[] {
