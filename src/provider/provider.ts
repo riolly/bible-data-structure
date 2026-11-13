@@ -21,7 +21,8 @@
  */
 
 import type { BibleContract } from '../contract/contract';
-import { dbReader, readerContract, type CorpusReader } from '../contract/corpus-contract';
+import { readerContract } from '../contract/corpus-contract';
+import { dbReader, type CorpusReader } from '../contract/reader';
 import { LICENSED_EDITIONS, type LicensedEdition } from '../contract/rights';
 import type { SyncSqliteDb } from '../db/corpus-read';
 import type { Mappings } from '../model/mapping';
@@ -102,18 +103,12 @@ export function provider(opts: ProviderOptions): Provider {
       if (!licensed(id)) return db.edition(id);
       return { abbrev: id, scheme: schemeOf(id).id, edition: null, wordsStamp: null, textStamp: null };
     },
-    chapterDoc(id, book, chapter) {
-      if (!licensed(id)) return db.chapterDoc(id, book, chapter);
+    chapter(id, book, chapter) {
+      if (!licensed(id)) return db.chapter(id, book, chapter);
       const r = chapterOf(id, book, chapter);
-      return r && { ...r.doc, stamp: r.stamp };
+      return r && { stamp: r.stamp, verses: r.verses };
     },
-    chapterStamp: (id, book, chapter) => (licensed(id) ? (chapterOf(id, book, chapter)?.stamp ?? null) : db.chapterStamp(id, book, chapter)),
-    verseText: (id, book, chapter) => (licensed(id) ? [...(chapterOf(id, book, chapter)?.verses ?? [])] : db.verseText(id, book, chapter)),
-    verseUnit(id, book, chapter, verse, segment = '') {
-      if (!licensed(id)) return db.verseUnit(id, book, chapter, verse, segment);
-      const units = chapterOf(id, book, chapter)?.verses ?? [];
-      return units.find((u) => u.segment === segment && u.verse <= verse && u.lastVerse >= verse) ?? null;
-    },
+    chapterDoc: (id, book, chapter) => (licensed(id) ? (chapterOf(id, book, chapter)?.doc ?? null) : db.chapterDoc(id, book, chapter)),
     originalWords: (id, ...at) => (licensed(id) ? [] : db.originalWords(id, ...at)),
     wordAlignments: (id, ...at) => (licensed(id) ? [] : db.wordAlignments(id, ...at)),
     dataSources: () => db.dataSources(),

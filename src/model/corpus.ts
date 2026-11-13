@@ -256,6 +256,15 @@ export function verseNumbers(u: { readonly verse: number; readonly lastVerse: nu
 }
 
 /**
+ * Whether a verse unit holds `verse`, whatever its segment: a bridge
+ * `\v 5-6` holds 5 and 6 (ADR-0004 v1.5). Every lookup of a verse number
+ * goes through here.
+ */
+export function holdsVerse(u: { readonly verse: number; readonly lastVerse: number }, verse: number): boolean {
+  return u.verse <= verse && verse <= u.lastVerse;
+}
+
+/**
  * The unit that holds `chapter:verse` (and `segment`), or undefined when the
  * edition has none: `\v 5-6` resolves from both 5 and 6 (ADR-0004 v1.5).
  */
@@ -265,5 +274,5 @@ export function verseUnitOf<U extends Omit<VerseText, 'text'>>(
   verse: number,
   segment = '',
 ): U | undefined {
-  return units.find((u) => u.chapter === chapter && u.segment === segment && u.verse <= verse && verse <= u.lastVerse);
+  return units.find((u) => u.chapter === chapter && u.segment === segment && holdsVerse(u, verse));
 }
