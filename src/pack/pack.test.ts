@@ -171,6 +171,8 @@ describe.skipIf(!native || !existsSync(CORPUS))('a BSB pack (build/corpus.db)', 
   });
 
   it('knows only the editions, books and schemes it holds', async () => {
+    expect((await pack.editions()).map((e) => e.id)).toEqual(['BSB', 'WLC', 'SBLGNT']);
+    expect((await pack.books('BSB')).map((b) => [b.book, b.chapters])).toEqual([['GEN', 50], ['PSA', 150], ['JHN', 21]]);
     await expect(pack.chapter('KJV', 'JHN', 3)).rejects.toThrow(/unknown edition "KJV"/);
     await expect(pack.resolve('BSB', 'PSA 51:1/vul')).rejects.toThrow(/unknown scheme "vul"/);
     expect((await pack.resolve('BSB', 'PHP 1:16/kjv')).found.map((l) => l.address)).toEqual(['PHP 1:17/bsb']);

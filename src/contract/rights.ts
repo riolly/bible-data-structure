@@ -86,6 +86,10 @@ const API_BIBLE_TERMS = 'https://api.bible/terms-and-conditions';
 
 /** An edition read a chapter at a time from a licensed API. */
 export interface LicensedEdition {
+  /** `New Living Translation`. */
+  readonly name: string;
+  /** The text's language, as `translation.language` names it: `english`. */
+  readonly language: string;
   /** The edition's scheme (src/ingest/schemes.ts): every address it returns names it. The DB must hold it. */
   readonly scheme: string;
   /** The edition's test for a Psalm title paragraph, when it isn't `\d` (`NormalizeOptions.isTitle`). */
@@ -184,7 +188,7 @@ const LOCAL: readonly RightsRecord[] = [
 export const LICENSED_EDITIONS: ReadonlyMap<string, ApiBibleEdition> = new Map(
   [
     apiBible(
-      { bibleId: 'b8ee27bcd1cae43a-01', scheme: 'nasb95', isTitle: nasbTitle },
+      { bibleId: 'b8ee27bcd1cae43a-01', name: 'New American Standard Bible 1995', language: 'english', scheme: 'nasb95', isTitle: nasbTitle },
       'NASB95',
       'API.Bible standard license',
       'no-training',
@@ -196,7 +200,7 @@ export const LICENSED_EDITIONS: ReadonlyMap<string, ApiBibleEdition> = new Map(
       1000,
     ),
     apiBible(
-      { bibleId: 'd6e14a625393b4da-01', scheme: 'nlt' },
+      { bibleId: 'd6e14a625393b4da-01', name: 'New Living Translation', language: 'english', scheme: 'nlt' },
       'NLT',
       'API.Bible license',
       'no-training',
@@ -204,7 +208,7 @@ export const LICENSED_EDITIONS: ReadonlyMap<string, ApiBibleEdition> = new Map(
       ['Quote the text exactly, punctuation and capitalization included (Tyndale).'],
     ),
     apiBible(
-      { bibleId: '78a9f6124f344018-01', scheme: 'niv' },
+      { bibleId: '78a9f6124f344018-01', name: 'New International Version', language: 'english', scheme: 'niv' },
       'NIV',
       'Biblica express license through API.Bible',
       // Biblica: no AI features in an app that shows the NIV
