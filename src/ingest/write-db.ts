@@ -18,7 +18,8 @@ import type { Block, ChapterDoc, OriginalWord, Reading, Token, VerseText } from 
 import { PIVOT, type MappingRow } from '../model/mapping';
 import { chapterStamp } from './edition';
 import { LIBPALASO_URL } from './schemes';
-import { MACULA_GREEK, MACULA_HEBREW, OSHB, TVTMS } from './sources';
+import { CLEAR_BSB, MACULA_GREEK, MACULA_HEBREW, OSHB, TVTMS } from './sources';
+import type { WordAlignment } from './alignment';
 import { WORD_TEST_MARGIN } from './tvtms';
 import type { Scheme } from '../model/scheme';
 import * as schema from '../db/corpus-schema';
@@ -190,6 +191,20 @@ CREATE TABLE original_word (
   PRIMARY KEY (source, ow_id)
 );
 CREATE UNIQUE INDEX original_word_verse ON original_word (translation_id, book, chapter, verse, segment, seq);
+CREATE TABLE word_alignment (
+  translation_id INTEGER NOT NULL REFERENCES translation(id),
+  book TEXT NOT NULL REFERENCES book(code),
+  chapter INTEGER NOT NULL,
+  verse INTEGER NOT NULL,
+  segment TEXT NOT NULL DEFAULT '',
+  word_index INTEGER NOT NULL,
+  seq INTEGER NOT NULL,
+  source TEXT NOT NULL REFERENCES data_source(id),
+  ow_id TEXT NOT NULL,
+  strongs TEXT NOT NULL,
+  aligned_by TEXT NOT NULL REFERENCES data_source(id),
+  PRIMARY KEY (translation_id, book, chapter, verse, segment, word_index, seq)
+);
 CREATE TABLE scheme_segment (
   scheme TEXT NOT NULL REFERENCES scheme(id),
   book TEXT NOT NULL REFERENCES book(code),
@@ -452,6 +467,18 @@ export function insertOriginalWords(db: CorpusDb, translationId: number, source:
   }
 }
 
+/** An edition's alignment rows (ADR-0003 step 12 amendment). */
+export function insertWordAlignments(db: CorpusDb, translationId: number, alignedBy: string, rows: readonly WordAlignment[]): void {
+  const sqlite = (db as unknown as { $client: Database.Database }).$client;
+  const stmt = sqlite.prepare(
+    `INSERT INTO word_alignment (translation_id, book, chapter, verse, segment, word_index, seq, source, ow_id, strongs,
+       aligned_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  );
+  for (const r of rows) {
+    stmt.run(translationId, r.book, r.chapter, r.verse, r.segment, r.wordIndex, r.seq, r.source, r.owId, r.strongs.join(' '), alignedBy);
+  }
+}
+
 /** Where seeded data came from, with attribution and a note of changes. */
 export const DATA_SOURCES = [
   {
@@ -508,6 +535,18 @@ export const DATA_SOURCES = [
       'Only xml:id, lemma, strong, morph, gloss and english are kept, in original_word; the gloss is the gloss ' +
       'column, else the english column. Strong\'s numbers are written G plus the number; a compound\'s ' +
       '(5228+1537+4053) are kept as a list, and 0 (no Strong\'s entry) as none.',
+  },
+  {
+    id: CLEAR_BSB.id,
+    url: CLEAR_BSB.url,
+    sha256: null,
+    license: 'CC BY 4.0',
+    attribution: CLEAR_BSB.attribution,
+    changes:
+      'The SBLGNT-BSB and WLCM-BSB manual alignments are kept in word_alignment, one row per BSB word and ' +
+      'original word: a WLC morpheme is stored as the OSHB word that holds it, with the morpheme\'s Strong\'s ' +
+      'number from MACULA Hebrew. Clear aligned the BSB of 2024-09-04; its words are joined to our newer BSB ' +
+      'verse by verse on their longest common sequence of words; words outside it, lone words of it where the verses differ, and words whose Clear group did not join whole are left unaligned.',
   },
   {
     id: 'vrs',

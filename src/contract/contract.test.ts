@@ -327,9 +327,38 @@ describe.skipIf(!native || !existsSync(CORPUS))('the app contract on the corpus 
     ]);
   });
 
-  it("words: a translation's words have addresses and no Strong's numbers yet", async () => {
+  it("words: a BSB word address gives its Strong's numbers and the original words it translates (plan step 12)", async () => {
+    const for_ = await c.words('BSB', 'JHN 3:16!1');
+    expect(for_.words).toEqual([
+      {
+        address: 'JHN 3:16!1/bsb',
+        text: 'For',
+        kind: 'word',
+        strongs: ['G1063'],
+        original: null,
+        originals: [{ edition: 'SBLGNT', address: 'JHN 3:16!2/org', owId: 'n43003016002' }],
+      },
+    ]);
+    // "In the beginning" is one group aligned to the two morphemes of בְּרֵאשִׁית
+    const gen = await c.words('BSB', 'GEN 1:1');
+    expect(gen.words.slice(0, 4).map((x) => [x.text, x.strongs, x.originals.map((o) => o.address)])).toEqual([
+      ['In', ['H871', 'H7225'], ['GEN 1:1!1/org']],
+      ['the', ['H871', 'H7225'], ['GEN 1:1!1/org']],
+      ['beginning', ['H871', 'H7225'], ['GEN 1:1!1/org']],
+      ['God', ['H430'], ['GEN 1:1!3/org']],
+    ]);
+    // a word aligned to a qere points at it with no address (ADR-0007)
+    const rut = await c.words('BSB', 'RUT 3:5!1');
+    expect(rut.words[0].originals.map((o) => [o.address, o.owId])).toEqual([[null, '08k23'], ['RUT 3:5!6/org', '08nxs']]);
+    // a word Clear's 2024 BSB doesn't have, and a Psalm title, which Clear doesn't align
+    expect((await c.words('BSB', 'GEN 2:14')).words.find((x) => x.text === 'Hiddekel')).toMatchObject({ strongs: [], originals: [] });
+    expect((await c.words('BSB', 'PSA 3:0')).words.every((x) => x.strongs.length === 0)).toBe(true);
+    noRowIds(gen);
+  });
+
+  it("words: a KJV word has an address and no Strong's numbers yet", async () => {
     const w = await c.words('KJV', 'JHN 3:16!1');
-    expect(w.words).toEqual([{ address: 'JHN 3:16!1/kjv', text: 'For', kind: 'word', strongs: [], original: null }]);
+    expect(w.words).toEqual([{ address: 'JHN 3:16!1/kjv', text: 'For', kind: 'word', strongs: [], original: null, originals: [] }]);
     expect((await c.words('BSB', 'ACT 8:37')).words).toEqual([]);
     await expect(c.words('KJV', 'JHN 3:16-17')).rejects.toThrow(/range/);
     await expect(c.words('WLC', 'GEN 1:1/kjv')).rejects.toThrow(/Map it first/);
@@ -397,7 +426,7 @@ describe.skipIf(!native)('the app contract on a verse bridge (fixtures/adversari
 
   it('a word address in a bridge counts within the unit, and the bridge\'s own address reads', async () => {
     const w = await c.words('FIX', 'JHN 1:6!2');
-    expect(w.words).toEqual([{ address: 'JHN 1:5!2/kjv', text: 'bridged', kind: 'word', strongs: [], original: null }]);
+    expect(w.words).toEqual([{ address: 'JHN 1:5!2/kjv', text: 'bridged', kind: 'word', strongs: [], original: null, originals: [] }]);
     expect((await c.words('FIX', 'JHN 1:5-6/kjv')).words.map((x) => x.text).slice(0, 2)).toEqual(['A', 'bridged']);
     await expect(c.words('FIX', 'JHN 1:4-6/kjv')).rejects.toThrow(/range/);
   });

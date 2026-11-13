@@ -239,6 +239,15 @@ export interface OriginalWordData {
   readonly gloss: string | null;
 }
 
+/** An original word that a translation's word translates (ADR-0003 step 12 amendment). */
+export interface OriginalRef {
+  /** `WLC` or `SBLGNT`: read the word with `words(edition, address)`. */
+  readonly edition: string;
+  /** The original word's address, `GEN 1:1!1/org`. Null for a qere, which is not written. */
+  readonly address: string | null;
+  readonly owId: string;
+}
+
 /**
  * One word of a verse unit. In WLC and SBLGNT each word is an original word.
  * The Hebrew list is in read order: a ketiv (written, read otherwise) is
@@ -253,11 +262,16 @@ export interface Word {
   /**
    * The word's Strong's numbers (`H7225`, `G3056`). An original word has one,
    * or several for a Greek compound. Empty when there is none: 2 SBLGNT words
-   * Strong's dictionary lacks (`Ἀρνί`, `ἄμωμον`).
+   * Strong's dictionary lacks (`Ἀρνί`, `ἄμωμον`). A BSB word has the numbers
+   * of what its aligned group translates: `In`, `the` and `beginning` in GEN
+   * 1:1 each have `H871 H7225` (the prefix בְּ and רֵאשִׁית). None when the word
+   * has no alignment, as in every Psalm title.
    */
   readonly strongs: readonly string[];
   /** Set on the words of WLC and SBLGNT, null on a translation's. */
   readonly original: OriginalWordData | null;
+  /** The original words a translation's word translates, in order. Empty on WLC and SBLGNT, and on unaligned words. */
+  readonly originals: readonly OriginalRef[];
 }
 
 export interface WordsResult {

@@ -21,7 +21,8 @@ import { loadSchemes } from './schemes';
 import { normalizeChapters, splitChapters } from './normalize';
 import { usjBookCode, type ParseOutcome } from './parse';
 import { createParsePool, type ParsePool } from './parse-pool';
-import { MACULA_GREEK, MACULA_HEBREW, SOURCES, type PinnedFile, type SourceDef } from './sources';
+import { CLEAR_BSB, MACULA_GREEK, MACULA_HEBREW, SOURCES, type PinnedFile, type SourceDef } from './sources';
+import { alignWords, readClearAlignment, readClearWords } from './alignment';
 import { SOURCES_ROOT, readSource } from './source-files';
 import { checkReadings } from './oshb-xml';
 import {
@@ -30,6 +31,7 @@ import {
   greekWords,
   hebrewWords,
   readMacula,
+  type HubPart,
   type MaculaWord,
 } from './original-words';
 import { textStamp, wordsStamp } from './edition';
@@ -56,6 +58,7 @@ import {
   insertReadings,
   insertTranslation,
   insertMappings,
+  insertWordAlignments,
   setStamps,
   seedBooksAndCanons,
   seedSchemes,
@@ -87,6 +90,8 @@ async function main() {
   /** Each scheme's editions, for TVTMS's text tests (ADR-0006 amendment). */
   const texts = new Map<string, EditionText[]>();
   const editions: { scheme: string; text: EditionText }[] = [];
+  /** Every MACULA morpheme and Greek word id, to the original word it is part of: what Clear's alignments point at. */
+  const hubParts = new Map<string, HubPart>();
 
   // Parse one edition ahead: the workers parse the next edition's books while
   // this thread normalizes and writes the current one.
@@ -169,10 +174,14 @@ async function main() {
           checkReadings(file.code, bookReadings, tokens);
           insertReadings(db, translationId, 'oshb', bookReadings);
           if (macula) {
-            const { words: ow, stats } =
+            const { words: ow, stats, morphemes } =
               hub === MACULA_HEBREW
                 ? hebrewWords(file.code, tokens, oshbVerses.filter((v) => v.book === file.code), bookReadings, macula)
-                : greekWords(file.code, tokens, macula, GREEK_EXCEPTIONS, greekUsed);
+                : { ...greekWords(file.code, tokens, macula, GREEK_EXCEPTIONS, greekUsed), morphemes: [] };
+            for (const [id, part] of morphemes) hubParts.set(id, part);
+            if (hub === MACULA_GREEK) {
+              for (const w of ow) hubParts.set(w.owId, { source: 'macula-greek', owId: w.owId, strongs: w.strongs });
+            }
             insertOriginalWords(db, translationId, hub === MACULA_HEBREW ? 'oshb' : MACULA_GREEK.id, ow);
             owTotals.words += ow.length;
             owTotals.noGloss += stats.noGloss;
@@ -204,6 +213,8 @@ async function main() {
     await pool.close();
   }
   console.log(`\nparses: ${pool.counts.parsed} fresh, ${pool.counts.hits} from ${join(OUT_DIR, 'usj-cache')}`);
+
+  alignBsb(db, sqlite, hubParts);
 
   // The licensed editions have no text here, only their committed facts (plan
   // step 10), which give TVTMS's text tests what they read.
@@ -298,6 +309,37 @@ function readMaculaOrExplain(pin: PinnedFile): Map<string, MaculaWord[]> {
   const path = join(SOURCES_ROOT, pin.file);
   if (!existsSync(path)) throw new Error(`${path} is missing: run \`bun run ingest:download\` first`);
   return readMacula(path);
+}
+
+/**
+ * The BSB's alignment to the step 11 words, from Clear Bible (plan step 12).
+ * Runs after the hub texts, which come after the BSB in SOURCES.
+ */
+function alignBsb(db: CorpusDb, sqlite: ReturnType<typeof createCorpusDb>['sqlite'], hubParts: ReadonlyMap<string, HubPart>) {
+  const started = performance.now();
+  const files = [CLEAR_BSB.greek, CLEAR_BSB.hebrew, CLEAR_BSB.ntWords, CLEAR_BSB.otWords].map((f) => join(SOURCES_ROOT, f.file));
+  for (const path of files) if (!existsSync(path)) throw new Error(`${path} is missing: run \`bun run ingest:download\` first`);
+  const { id } = sqlite.prepare(`SELECT id FROM translation WHERE abbrev = 'BSB'`).get() as { id: number };
+  const ours = new Map<string, string[]>();
+  const tokens = sqlite
+    .prepare(
+      `SELECT book, chapter, verse, segment, text FROM token WHERE translation_id = ? AND word_index IS NOT NULL
+       ORDER BY book, chapter, verse, segment, word_index`,
+    )
+    .all(id) as { book: string; chapter: number; verse: number; segment: string; text: string }[];
+  for (const t of tokens) {
+    const key = `${t.book} ${t.chapter}:${t.verse}${t.segment}`;
+    (ours.get(key) ?? ours.set(key, []).get(key)!).push(t.text);
+  }
+  const { rows, stats } = alignWords(ours, readClearWords(files.slice(2)), readClearAlignment(files.slice(0, 2)), hubParts);
+  sqlite.exec('BEGIN');
+  insertWordAlignments(db, id, CLEAR_BSB.id, rows);
+  sqlite.exec('COMMIT');
+  console.log(
+    `\nBSB alignment (${CLEAR_BSB.id}): ${stats.aligned} of ${stats.words} words aligned, ${rows.length} rows; ` +
+      `${stats.unaligned} Clear leaves unaligned, ${stats.changed} not in Clear's revision, ` +
+      `${stats.split} whose Clear group didn't join; ${seconds(started)}`,
+  );
 }
 
 function readTvtmsOrExplain(): TvtmsRow[] {

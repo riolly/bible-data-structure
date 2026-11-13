@@ -354,6 +354,41 @@ export const originalWord = sqliteTable(
 );
 
 /**
+ * One original word an edition's word translates (ADR-0003 and its step 12
+ * amendment): the word's address, the original word's id, and the Strong's
+ * numbers of the parts the word aligns to. `seq` orders one word's rows.
+ * Built for the BSB from Clear Bible's alignments (`aligned_by`).
+ */
+export const wordAlignment = sqliteTable(
+  'word_alignment',
+  {
+    translationId: integer('translation_id')
+      .notNull()
+      .references(() => translation.id),
+    book: text('book')
+      .notNull()
+      .references(() => book.code),
+    chapter: integer('chapter').notNull(),
+    verse: integer('verse').notNull(),
+    segment: text('segment').notNull().default(''),
+    wordIndex: integer('word_index').notNull(),
+    seq: integer('seq').notNull(),
+    /** A data_source id: whose id `ow_id` is (`oshb`, `macula-greek`). */
+    source: text('source')
+      .notNull()
+      .references(() => dataSource.id),
+    owId: text('ow_id').notNull(),
+    /** Space-separated Strong's numbers of the parts of this original word the word's group aligns to: Hebrew morphemes' own (`H871 H7225`), or the Greek word's. */
+    strongs: text('strongs').notNull(),
+    /** A data_source id: whose alignment this is (`clear-bsb`). */
+    alignedBy: text('aligned_by')
+      .notNull()
+      .references(() => dataSource.id),
+  },
+  (t) => [primaryKey({ columns: [t.translationId, t.book, t.chapter, t.verse, t.segment, t.wordIndex, t.seq] })],
+);
+
+/**
  * Where seeded data came from, with the attribution and note of changes each
  * licence asks for: the USFM spec's book names, TVTMS and OSHB's word ids
  * (CC BY 4.0), and the libpalaso `.vrs` files (MIT).

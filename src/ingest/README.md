@@ -8,7 +8,7 @@ schema in `src/db/corpus-schema.ts`, shared by the writer here and the reader in
 `src/db/corpus-read.ts`.
 
 ```
-bun run ingest:download   # once: fetch pinned ebible.org zips, upstream SBLGNT and OSHB, TVTMS and the MACULA word tables, check edition stamps and hashes → sources/ (gitignored)
+bun run ingest:download   # once: fetch pinned ebible.org zips, upstream SBLGNT and OSHB, TVTMS, the MACULA word tables and Clear's BSB alignments, check edition stamps and hashes → sources/ (gitignored)
 bun run ingest            # sources → build/corpus.db, build/mapping-diff.tsv, build/pivot.json (gitignored)
 ```
 
@@ -50,6 +50,10 @@ the `.vrs` files disagree.
 - `original-words.ts`: the original words of WLC and SBLGNT (ADR-0003
   amendment, plan step 11), from OSHB and MACULA, joined to the stored tokens.
   The ingest stops on any verse whose words differ between the sources.
+- `alignment.ts`: the BSB's words to the original words they translate (ADR-0003
+  step 12 amendment), from Clear Bible's manual alignments, joined to our newer
+  BSB verse by verse. The ingest stops on an aligned id that is no original
+  word or morpheme.
 - `edition.ts` — deterministic `translation.edition` stamp (ADR-0005): sha256
   over the source text, immune to zip repackaging.
 - `sources.ts` / `download.ts`: each text source is pinned by its edition
