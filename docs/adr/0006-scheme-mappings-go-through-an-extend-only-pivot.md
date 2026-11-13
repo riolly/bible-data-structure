@@ -55,13 +55,13 @@ A review asked whether Philippians 1:16-17 belongs in schemes at all, since KJV 
 
 ## Amendment: a Psalm title inside verse 1 (2026-11-11, issue #12)
 
-Status: accepted 2026-11-11, not built yet. Findings in [research/psalm-titles-in-hebrew-verse-1.md](../../research/psalm-titles-in-hebrew-verse-1.md).
+Status: accepted 2026-11-11, built 2026-11-13 (`titleInVerse1Rows` in `src/ingest/tvtms.ts`). Findings in [research/psalm-titles-in-hebrew-verse-1.md](../../research/psalm-titles-in-hebrew-verse-1.md).
 
 For 53 Psalms, English numbers a short title as verse 0 and Hebrew prints the same words at the start of verse 1. TVTMS's expanded rows give no relation, so the pivot title has no `org` counterpart and `map` reports it absent.
 
-- **The compiler reads one pattern from TVTMS's short tables.** Where a scheme's column says `Absent [=Psa.N:1]` for `Psa.N:Title`, and the scheme keeps verse 1 as the Standard's verse 1, it adds `PSA N:1a → pivot PSA N:0` and `PSA N:1b → pivot PSA N:1`. These are TVTMS rows with their own `kind`, so `build/mapping-diff.tsv` lists them.
+- **The compiler reads one pattern from TVTMS's short tables.** Where a scheme's column says `Absent [=Psa.N:1]` for `Psa.N:Title`, and the scheme keeps verse 1 as the Standard's verse 1, it adds `PSA N:1a → pivot PSA N:0` and `PSA N:1b → pivot PSA N:1`. These are TVTMS rows with their own `kind` (`Title inside verse 1`), so `build/mapping-diff.tsv` lists them. Each row carries the tests the short table's section header gives the Hebrew column (`Psa.9:30=NotExist & Psa.23:6=Last & Psa.23:TextBeforeV1=NotExist`), so the compiler decides per scheme, as for an expanded row, which schemes keep verse 1 as the Standard's verse 1.
 - The notes column (`Hebrew=23:1a`) says the same for 52 Psalms and is wrong for Psalm 37, so it is not read.
-- The pivot doesn't change. `org` gains about 106 rows. `map` gives `part` for the title and for English verse 1, and `several` for Hebrew verse 1.
+- The pivot doesn't change. `org` gains 159 rows: the 106 part rows, and for each Psalm a row that keeps the whole verse 1 as pivot verse 1, which the compiler adds whenever a verse's part moves. No other scheme passes the Hebrew column's tests. `map` gives `part` for the title and for English verse 1, and `several` for Hebrew verse 1.
 
 ## Amendment: licensed editions (2026-11-12)
 

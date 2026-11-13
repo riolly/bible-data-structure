@@ -22,6 +22,7 @@ import {
   parseStandardRefs,
   parseTvtms,
   readTvtms,
+  TITLE_IN_VERSE_1,
   type EditionText,
   type EditionTextSnapshot,
 } from './tvtms';
@@ -292,6 +293,20 @@ describe.skipIf(!hasTvtms)('the pinned TVTMS file', () => {
 
   it('compiles rows for every scheme', () => {
     for (const [id, c] of compiled as Map<string, ReturnType<typeof compileTvtms>>) expect(c.rows.length, id).toBeGreaterThan(id === 'kjv' ? -1 : 0);
+  });
+
+  it('reads the 53 Psalm titles Hebrew prints inside verse 1 from the short tables (issue #12)', () => {
+    const rows = tvtms.filter((r) => r.action === TITLE_IN_VERSE_1);
+    expect(rows.length).toBe(106);
+    expect(rows.filter((r) => r.source === 'Psa.23:1!a' || r.source === 'Psa.23:1!b').map((r) => [r.source, r.standard])).toEqual([
+      ['Psa.23:1!a', 'Psa.23:Title'],
+      ['Psa.23:1!b', 'Psa.23:1'],
+    ]);
+    expect(rows[0].tests).toMatch(/^Psa\.9:30=NotExist & /);
+    expect(keys(m.map('kjv', 'org', ref('PSA', 23, 0)))).toEqual(['PSA 23:1a']);
+    expect(keys(m.map('org', 'kjv', ref('PSA', 23, 1)))).toEqual(['PSA 23:0', 'PSA 23:1']);
+    // Greek-numbered schemes keep their own titles: their Psalm 23 is Hebrew 24
+    expect(keys(m.map('lxx', 'kjv', ref('PSA', 23, 0)))).toEqual(['PSA 24:0']);
   });
 
   it('agrees with the .vrs witness on the ADR-0006 cases', () => {

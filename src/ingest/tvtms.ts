@@ -56,7 +56,50 @@ function usfm(abbr: string): string {
   return code;
 }
 
-/** Read the expanded section's data rows. */
+/** The `kind` of the rows `titleInVerse1Rows` reads from the short tables. */
+export const TITLE_IN_VERSE_1 = 'Title inside verse 1';
+
+/**
+ * ADR-0006 amendment, issue #12: for 53 Psalms, English numbers a short title
+ * as verse 0 and Hebrew prints it at the start of verse 1. The expanded rows
+ * give no relation, so this reads the short tables, where the Hebrew column
+ * of the title row says `Absent [=Psa.N:1]`. Each such Psalm gives two rows,
+ * `Psa.N:1!a → Psa.N:Title` and `Psa.N:1!b → Psa.N:1`, with the tests the
+ * table's section header gives the Hebrew column, so they compile per scheme
+ * like any expanded row. The notes column is not read: it is wrong for
+ * Psalm 37 (research/psalm-titles-in-hebrew-verse-1.md).
+ */
+function titleInVerse1Rows(lines: readonly string[]): TvtmsRow[] {
+  const start = lines.findIndex((l) => l.startsWith('#DataStart(Condensed)'));
+  const end = lines.findIndex((l) => l.startsWith('#DataEnd(Condensed)'));
+  if (start < 0 || end < start) return [];
+  const rows: TvtmsRow[] = [];
+  let tests = new Map<string, string>(); // a section's column label → its tests
+  let hebrew = -1; // the Hebrew column of the section's table
+  for (let i = start + 1; i < end; i++) {
+    const f = lines[i].split('\t').map((x) => x.trim());
+    if (f[0].startsWith('$')) {
+      tests = new Map();
+      hebrew = -1;
+    } else if (f[0] === 'BIBLES') {
+      hebrew = f.indexOf('Hebrew');
+    } else if (f[1]?.startsWith('&')) {
+      // `Hebrew + EngTitleMerged<tab> & Psa.9:30=NotExist & Psa.23:6=Last & …`
+      for (const label of f[0].split('+')) tests.set(label.trim(), f[1].replace(/^&\s*/, ''));
+    } else {
+      const n = /^Psa\.(\d+):Title$/.exec(f[1] ?? '')?.[1];
+      if (n === undefined || hebrew < 0 || f[hebrew] !== `Absent [=Psa.${n}:1]`) continue;
+      const t = tests.get('Hebrew');
+      if (!t) throw new Error(`TVTMS line ${i + 1}: the section gives the Hebrew column no tests`);
+      const row = { line: i + 1, sourceType: 'Hebrew', action: TITLE_IN_VERSE_1, tests: t };
+      rows.push({ ...row, source: `Psa.${n}:1!a`, standard: `Psa.${n}:Title` });
+      rows.push({ ...row, source: `Psa.${n}:1!b`, standard: `Psa.${n}:1` });
+    }
+  }
+  return rows;
+}
+
+/** Read the expanded section's data rows, and the title rows `titleInVerse1Rows` reads. */
 export function parseTvtms(text: string): TvtmsRow[] {
   const lines = text.split(/\r?\n/);
   const start = lines.findIndex((l) => l.startsWith('#DataStart(Expanded)'));
@@ -75,7 +118,7 @@ export function parseTvtms(text: string): TvtmsRow[] {
       tests: f[8].trim(),
     });
   }
-  return rows;
+  return [...rows, ...titleInVerse1Rows(lines)];
 }
 
 /** Read and parse the pinned file, failing on a checksum mismatch. */
