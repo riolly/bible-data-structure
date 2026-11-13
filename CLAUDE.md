@@ -15,6 +15,7 @@ bun run ingest                        # sources → build/corpus.db, mapping-dif
 bun run pack                          # build/corpus.db → build/packs/: WLC+SBLGNT, KJV, BSB and KJV+BSB, each with WLC and SBLGNT, checked against the corpus DB and measured (several minutes)
 bun run api-bible:chapter NASB95 JHN 3   # fetch one licensed chapter into build/api-bible/, or read the kept copy (30 days)
 bun run api-bible:facts NASB95            # fetch a whole licensed edition (196 calls) and rewrite its counts in src/provider/facts/
+bun run api-bible:check                   # render NASB95 JHN 3 and PSA 119, NLT NUM 1 and NIV JHN 3 through the app contract (plan step 10)
 ```
 
 API.Bible calls read `API_BIBLE_KEY` from `.env`, which git ignores (research/api-bible.md). Starter allows 5,000 calls a month, so fetch through `src/provider/api-bible-cache.ts`.

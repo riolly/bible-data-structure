@@ -52,13 +52,13 @@ _Avoid_: partial edition, lite edition
 An edition the first apps read: the English editions in ADR-0008's support table (BSB, KJV, NASB, NLT, NIV, CSB, NKJV, ESV) and the hub texts WLC and SBLGNT. A model feature lands when a contract call or a fixture from one of them needs it. (ADR-0008)
 
 **Rights record**:
-One record per edition saying what its license allows: the route (provider), offline use (`none`, `cache` or `full`), refresh days, copy limit, AI use and attribution. The type and the seven local editions' records are in `src/contract/rights.ts`. Step 10 adds the licensed editions. (ADR-0008)
+One record per edition saying what its license allows: the route (provider), offline use (`none`, `cache` or `full`), refresh days, copy limit, AI use and attribution. The type and the records of the seven local editions and the three licensed ones are in `src/contract/rights.ts`. (ADR-0008)
 
 **Pack**:
 The file an app ships for a set of editions, built from `build/corpus.db` by `bun run pack` (`src/pack/pack.ts`). It is a SQLite file with the corpus tables, so the app contract reads it the same way. It holds the editions it names, the hub editions WLC and SBLGNT, the schemes of ADR-0008's target editions with their mappings, and no token or block rows: a word address is read from the verse text (ADR-0004, step 13 amendment). Chapter documents are deflated. An app ships one pack with all its local editions, so the hub is in it once. The corpus DB never ships.
 
-**Provider** *(planned)*:
-Where an edition's text comes from at read time: a local pack, or a licensed API such as API.Bible. A fetched chapter carries its own stamp, because the provider can refresh it. (ADR-0008)
+**Provider**:
+Where an edition's text comes from at read time: a local pack, or a licensed API such as API.Bible. A fetched chapter carries its own stamp, because the provider can refresh it. `src/provider/provider.ts` gives both through one app contract: local editions from the DB, licensed ones fetched a chapter at a time and refetched after the rights record's refresh days. (ADR-0008)
 
 ## Addressing
 
