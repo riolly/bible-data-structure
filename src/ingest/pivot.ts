@@ -16,14 +16,12 @@
  * step in Paratext's own data here, never the pivot.
  */
 
-import { PIVOT, Relation, parseRefKey, refExists, refKey, type MappingRow, type Ref } from '../model/mapping';
+import { PIVOT, Relation, parseRefKey, ref, refExists, refKey, type MappingRow, type Ref } from '../model/mapping';
 import type { Scheme } from '../model/scheme';
 import { PROTESTANT, canonBookCodes } from '../model/canon';
 import { DERIVED_SCHEMES, PARATEXT_SCHEMES, readParatextVrs } from './schemes';
 import { TVTMS } from './sources';
 import { parseVrs, type VrsMapping } from './vrs';
-
-const ref = (book: string, chapter: number, verse: number, segment = ''): Ref => ({ book, chapter, verse, segment });
 
 /**
  * Where `eng` (NRSV-style) differs from the pivot: the TVTMS condensed table

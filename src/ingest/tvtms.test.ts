@@ -3,7 +3,7 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { Mappings, PIVOT, checkCoverage, refKey, type Ref } from '../model/mapping';
+import { Mappings, PIVOT, checkCoverage, ref, refKey, type Ref } from '../model/mapping';
 import type { Block, Token } from '../model/corpus';
 import type { Scheme } from '../model/scheme';
 import { buildPivot, checkExtendOnly, pivotSnapshot } from './pivot';
@@ -27,7 +27,6 @@ import {
   type EditionTextSnapshot,
 } from './tvtms';
 
-const ref = (book: string, chapter: number, verse: number, segment = ''): Ref => ({ book, chapter, verse, segment });
 const keys = (refs: Ref[]) => refs.map(refKey);
 
 /** A Joel-only scheme for test evaluation. */
