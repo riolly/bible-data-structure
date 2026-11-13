@@ -97,7 +97,7 @@ API.Bible [terms][ab-terms], updated 2026-09-03:
 
 API.Bible plans ([Express Licensing FAQs][ab-express], updated 2026-10-01, and the [developer FAQ][ab-faq]): Starter is free, non-commercial, three copyrighted Bibles and 5,000 calls a month. Pro for a non-commercial app is $29 a month, all eligible copyrighted Bibles and 150,000 calls a month.
 
-The attribution in each licensed edition's rights record (`src/contract/rights.ts`) is the publisher's standard copyright notice, written from memory on 2026-11-13. Check each against the publisher's page and the `copyright` field API.Bible returns with every chapter before an app ships it.
+The attribution in each licensed edition's rights record (`src/contract/rights.ts`) is the `copyright` field API.Bible returned with NASB 1995 John 3, NLT Numbers 1 and NIV John 3 on 2026-11-13, word for word. API.Bible sends it with every chapter, so an app can also show the field it received.
 
 Open questions:
 

@@ -126,7 +126,7 @@ export const RIGHTS: ReadonlyMap<string, RightsRecord> = new Map(
       'NASB95',
       'API.Bible standard license',
       'no-training',
-      'Scripture quotations taken from the (NASB®) New American Standard Bible®, Copyright © 1960, 1971, 1977, 1995 by The Lockman Foundation. Used by permission. All rights reserved. lockman.org',
+      'NEW AMERICAN STANDARD BIBLE® NASB® Copyright © 1960,1962,1963,1968,1971,1972,1973,1975,1977,1995 by The Lockman Foundation A Corporation Not for Profit La Habra, CA All Rights Reserved www.lockman.org',
       [
         'Without a direct Lockman license, at most 1,000 verses may be quoted or stored in an electronic retrieval system, never a whole book and at most half of the work they appear in (https://www.lockman.org/permission-to-quote-copyright-trademark-information/). Keep a device\'s kept NASB chapters under that.',
       ],
@@ -135,7 +135,7 @@ export const RIGHTS: ReadonlyMap<string, RightsRecord> = new Map(
       'NLT',
       'API.Bible license',
       'no-training',
-      'Scripture quotations are taken from the Holy Bible, New Living Translation, copyright © 1996, 2004, 2015 by Tyndale House Foundation. Used by permission of Tyndale House Publishers, Carol Stream, Illinois 60188. All rights reserved.',
+      'Holy Bible, New Living Translation, copyright © 1996, 2004, 2015 by Tyndale House Foundation. All rights reserved. Used by permission of Tyndale House Publishers, Carol Stream, Illinois 60188. All rights reserved.',
       ['Quote the text exactly, punctuation and capitalization included (Tyndale).'],
     ),
     apiBible(
@@ -143,7 +143,7 @@ export const RIGHTS: ReadonlyMap<string, RightsRecord> = new Map(
       'Biblica express license through API.Bible',
       // Biblica: no AI features in an app that shows the NIV
       'none',
-      'Scripture quotations taken from The Holy Bible, New International Version® NIV®. Copyright © 1973, 1978, 1984, 2011 by Biblica, Inc.™ Used by permission. All rights reserved worldwide.',
+      'The Holy Bible, New International Version® NIV® Copyright © 1973, 1978, 1984, 2011 by Biblica, Inc.® Used by Permission of Biblica, Inc.® All rights reserved worldwide.',
       ['Non-commercial use only, and no unrestricted download (Biblica).'],
     ),
   ].map((r) => [r.edition, r]),

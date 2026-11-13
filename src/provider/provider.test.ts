@@ -169,7 +169,7 @@ describe.skipIf(!native || !existsSync(CORPUS))('the provider: local and license
     const p = provider({ db, fetchChapter: async () => null });
     for (const id of ['NASB95', 'NLT', 'NIV']) {
       expect(await p.rights(id)).toMatchObject({ edition: id, route: 'api.bible', offline: 'cache', refreshDays: 30, copyLimit: 100 });
-      expect((await p.rights(id)).attribution).toMatch(/Used by permission/);
+      expect((await p.rights(id)).attribution).toMatch(/Copyright|copyright/);
     }
     expect((await p.rights('NASB95')).aiUse).toBe('no-training');
     expect((await p.rights('NLT')).aiUse).toBe('no-training');
