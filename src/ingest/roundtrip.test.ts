@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { readChapter, readChapterDoc, readReadings, readVerseText, readVerseUnit } from '../db/corpus-read';
+import { chapterStamp } from './edition';
 import { sqliteLoads } from './native-probe';
 import { normalizeChapters, splitChapters, type UsjDoc } from './normalize';
 
@@ -20,9 +21,8 @@ const native = sqliteLoads();
 
 describe.skipIf(!native)('corpus DB round-trip (write seam ↔ read seam)', () => {
   it('a chapter read returns the exact Token+Block rows the normalizer produced', async () => {
-    const { createCorpusDb, insertBookRows, insertTranslation, seedBooksAndCanons, seedSchemes } = await import(
-      './write-db'
-    );
+    const { createCorpusDb, seedBooksAndCanons, seedSchemes } = await import('./write-db');
+    const { writeEdition } = await import('./edition-writer');
     const usj = JSON.parse(
       readFileSync(join(__dirname, 'fixtures', 'adversarial.usj.json'), 'utf8'),
     ) as UsjDoc;
@@ -31,7 +31,15 @@ describe.skipIf(!native)('corpus DB round-trip (write seam ↔ read seam)', () =
     const { db, sqlite } = createCorpusDb(':memory:');
     seedBooksAndCanons(db);
     seedSchemes(db, (await import('./schemes')).loadSchemes());
-    const translationId = insertTranslation(db, {
+    // readings (ADR-0007) placed among the words of JHN 1:1, as checkReadings wants them
+    const words = tokens.filter((t) => t.chapter === 1 && t.verse === 1 && t.wordIndex !== null).map((t) => t.text);
+    const qere = { book: 'JHN', chapter: 1, verse: 1, segment: '', kind: 'qere' as const, qere: [], verseWords: words };
+    const readings = [
+      { ...qere, wordIndex: 3, wordCount: 0, text: 'פְּרָת', owIds: ['10dp9'], ketiv: [] },
+      { ...qere, wordIndex: 1, wordCount: 2, text: 'הִיא־וָהוּא', owIds: ['11k9N', '111M5'], ketiv: words.slice(1, 3) },
+      { ...qere, wordIndex: 3, wordCount: 1, text: '', owIds: [], ketiv: words.slice(3, 4) },
+    ];
+    const meta = {
       name: 'Fixture',
       abbrev: 'FIX',
       language: 'english',
@@ -39,8 +47,8 @@ describe.skipIf(!native)('corpus DB round-trip (write seam ↔ read seam)', () =
       license: 'Public Domain',
       scheme: 'kjv',
       edition: 'sha256:0000000000000000',
-    });
-    const stamps = insertBookRows(db, { translationId, book: 'JHN' }, { docs, verses, blocks, tokens });
+    };
+    await writeEdition(db, meta, ['JHN'], async (edition) => edition.addBook('JHN', { docs, verses, blocks, tokens }, readings));
 
     // chapter 1 read includes chapter-0 front matter (\mt book title)
     const ch1 = readChapter(db, 'FIX', 'JHN', 1);
@@ -72,7 +80,9 @@ describe.skipIf(!native)('corpus DB round-trip (write seam ↔ read seam)', () =
     // the stored chapter documents come back unchanged, and derive the same rows
     const stored = docs.map((d) => readChapterDoc(db, 'FIX', 'JHN', d.chapter)!);
     expect(stored.map(({ stamp: _, ...d }) => d)).toEqual(docs);
-    expect(stored.map((d) => ({ chapter: d.chapter, stamp: d.stamp }))).toEqual(stamps);
+    for (const d of stored) {
+      expect(d.stamp).toBe(chapterStamp(JSON.stringify(d.content), verses.filter((v) => v.chapter === d.chapter)));
+    }
     const again = normalizeChapters(stored);
     expect(again.tokens).toEqual(tokens);
     expect(again.blocks).toEqual(blocks);
@@ -90,14 +100,7 @@ describe.skipIf(!native)('corpus DB round-trip (write seam ↔ read seam)', () =
     // unknown coordinate reads empty, not throwing
     expect(readChapter(db, 'KJV', 'JHN', 1)).toEqual({ blocks: [], tokens: [] });
 
-    // readings (ADR-0007) come back with their ids split, in word order
-    const { insertReadings } = await import('./write-db');
-    const qere = { book: 'JHN', chapter: 1, verse: 1, segment: '', kind: 'qere' as const };
-    insertReadings(db, translationId, 'oshb', [
-      { ...qere, wordIndex: 3, wordCount: 0, text: 'פְּרָת', owIds: ['10dp9'] },
-      { ...qere, wordIndex: 1, wordCount: 2, text: 'הִיא־וָהוּא', owIds: ['11k9N', '111M5'] },
-      { ...qere, wordIndex: 3, wordCount: 1, text: '', owIds: [] },
-    ]);
+    // the readings come back with their ids split, in word order
     expect(readReadings(db, 'FIX', 'JHN', 1).map((r) => [r.wordIndex, r.wordCount, r.text, r.owIds])).toEqual([
       [1, 2, 'הִיא־וָהוּא', ['11k9N', '111M5']],
       [3, 0, 'פְּרָת', ['10dp9']],

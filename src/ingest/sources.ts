@@ -10,7 +10,7 @@
  */
 
 import { PROTESTANT, canonBookCodes, sectionBookCodes } from '../model/canon';
-import type { TranslationMeta } from './write-db';
+import type { TranslationMeta } from './edition-writer';
 
 /**
  * An exact string replaced in a source before parsing, for a conversion error

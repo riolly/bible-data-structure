@@ -240,7 +240,8 @@ const native = sqliteLoads();
 
 describe.skipIf(!native)('scheme tables', () => {
   it('stores every scheme with its verse counts, and editions must name one', async () => {
-    const { createCorpusDb, insertTranslation, seedBooksAndCanons, seedSchemes } = await import('./write-db');
+    const { createCorpusDb, seedBooksAndCanons, seedSchemes } = await import('./write-db');
+    const { writeEdition } = await import('./edition-writer');
     const { db, sqlite } = createCorpusDb(':memory:');
     seedBooksAndCanons(db);
     seedSchemes(db, schemes);
@@ -257,8 +258,8 @@ describe.skipIf(!native)('scheme tables', () => {
     });
 
     const meta = { name: 'X', abbrev: 'X', language: 'en', year: null, license: null, edition: 'sha256:0' };
-    expect(() => insertTranslation(db, { ...meta, scheme: 'kjv' })).not.toThrow();
-    expect(() => insertTranslation(db, { ...meta, abbrev: 'Y', scheme: 'av11n' })).toThrow(/FOREIGN KEY/);
+    await expect(writeEdition(db, { ...meta, scheme: 'kjv' }, [], async () => {})).resolves.toBeDefined();
+    await expect(writeEdition(db, { ...meta, abbrev: 'Y', scheme: 'av11n' }, [], async () => {})).rejects.toThrow(/FOREIGN KEY/);
     sqlite.close();
   });
 });
