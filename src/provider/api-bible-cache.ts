@@ -14,7 +14,7 @@ import { dirname, join } from 'node:path';
 import { API_BIBLE_EDITIONS, CHAPTER_QUERY, type ApiBibleChapter } from './api-bible';
 import type { FetchChapter } from './provider';
 
-export const API_BASE = 'https://rest.api.bible/v1';
+const API_BASE = 'https://rest.api.bible/v1';
 
 /** A kept response: when it was fetched, and the body exactly as API.Bible sent it. */
 export interface KeptResponse {

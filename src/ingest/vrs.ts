@@ -128,7 +128,7 @@ export interface VrsCounts {
  * Strip a comment, keeping a Paratext 7.3+ `#!` line as a real line, the way
  * libpalaso's Versification.ParseLine does.
  */
-export function vrsLine(raw: string): string {
+function vrsLine(raw: string): string {
   const line = raw.trim();
   if (line.startsWith('#!')) return line.slice(2).trim();
   return line.replace(/#.*$/, '').trim();

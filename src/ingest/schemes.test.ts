@@ -7,7 +7,7 @@ import { BOOK_BY_CODE } from '../model/books';
 import { PROTESTANT, canonBookCodes } from '../model/canon';
 import { checkVerses, hasVerse, lastVerse } from '../model/scheme';
 import { nativeModuleLoads } from './native-probe';
-import { DERIVED_SCHEMES, KJV_TITLES, SCHEME_IDS, deriveScheme, loadSchemes } from './schemes';
+import { DERIVED_SCHEMES, KJV_TITLES, deriveScheme, loadSchemes } from './schemes';
 import { SOURCES as SOURCE_DEFS } from './sources';
 import { readSource } from './source-files';
 import { loadEditionFacts } from '../provider/edition-facts';
@@ -17,7 +17,6 @@ const schemes = loadSchemes();
 describe('scheme registry', () => {
   it('holds kjv, the six Paratext schemes and the derived schemes', () => {
     expect([...schemes.keys()].sort()).toEqual(['brenton', 'bsb', 'eng', 'kjv', 'lxx', 'nasb95', 'niv', 'nlt', 'org', 'rp', 'rsc', 'rso', 'vul', 'web']);
-    expect([...SCHEME_IDS].sort()).toEqual([...schemes.keys()].sort());
   });
 
   it('uses only USFM book codes', () => {

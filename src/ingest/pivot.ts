@@ -130,7 +130,7 @@ function relation(id: string): Relation {
  * read: `renumber` (one to one), `split` (one to several), `merge` (several to
  * one), or `absent` (no counterpart).
  */
-export function vrsPivotRows(
+function vrsPivotRows(
   schemeId: string,
   schemes: ReadonlyMap<string, Scheme>,
   engToPivotRows: readonly { from: Ref; to: Ref | null }[] = ENG_TO_PIVOT,
@@ -206,7 +206,7 @@ export function allVrsPivotRows(
  * wrong. An unmapped verse is reported; a wrong row is not. With `kjv` or
  * `eng` as the source there are no rows to take; TVTMS alone maps those.
  */
-export function derivedVrsPivotRows(paratextRows: readonly MappingRow[]): MappingRow[] {
+function derivedVrsPivotRows(paratextRows: readonly MappingRow[]): MappingRow[] {
   const byScheme = new Map<string, MappingRow[]>();
   for (const r of paratextRows) (byScheme.get(r.scheme) ?? byScheme.set(r.scheme, []).get(r.scheme)!).push(r);
   const out: MappingRow[] = [];
