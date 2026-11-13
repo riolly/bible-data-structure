@@ -46,7 +46,10 @@ export interface RightsRecord {
   readonly licenseUrl: string;
   readonly route: Route;
   readonly offline: Offline;
-  /** Days within which a kept copy must be checked for updates. Null when no license asks. */
+  /**
+   * Days within which a kept copy must be checked for updates. Null when no
+   * license asks. 0 keeps no copy: every read fetches (src/provider/licensed-chapters.ts).
+   */
   readonly refreshDays: number | null;
   /** The most verses an app may let a reader copy, share or print at once. Null for no limit. */
   readonly copyLimit: number | null;

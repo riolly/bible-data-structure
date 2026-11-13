@@ -4,6 +4,7 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { LICENSED_EDITIONS } from '../contract/rights';
 import { cachedChapter } from './api-bible-cache';
 
 /** A stand-in for API.Bible that counts calls. No network. */
@@ -47,6 +48,16 @@ describe('cachedChapter: one call per chapter per 30 days', () => {
       fetchedAt: '2026-12-12T00:00:00.000Z',
     });
     expect(api.urls).toHaveLength(2);
+  });
+
+  it('keeps no copy for a rights record with 0 refresh days, and fetches on every read', async () => {
+    const api = fakeApi();
+    const opts = { key: 'k', dir, fetch: api.fetch, now: at(0) };
+    const rights = { ...LICENSED_EDITIONS.get('NASB95')!.rights, refreshDays: 0 };
+    expect(await cachedChapter('NASB95', 'JHN', 3, opts, rights)).toMatchObject({ fetched: true, data: { id: 'JHN.3' } });
+    expect(await cachedChapter('NASB95', 'JHN', 3, opts, rights)).toMatchObject({ fetched: true });
+    expect(api.urls).toHaveLength(2);
+    await expect(readFile(join(dir, 'b8ee27bcd1cae43a-01', 'JHN.3.json'), 'utf8')).rejects.toThrow();
   });
 
   it('throws on an HTTP error and keeps nothing', async () => {
