@@ -442,27 +442,10 @@ describe.skipIf(!native)('the app contract on a verse bridge (fixtures/adversari
   let c: BibleContract;
 
   beforeAll(async () => {
-    const w = await import('../ingest/write-db');
-    const { writeEdition } = await import('../ingest/edition-writer');
-    const { normalizeChapters, splitChapters } = await import('../ingest/normalize');
-    const { loadSchemes } = await import('../ingest/schemes');
+    const { memoryCorpus } = await import('./test-corpus');
     const { corpusContract } = await import('./corpus-contract');
     const usj = JSON.parse(readFileSync(join(import.meta.dirname, '..', 'ingest', 'fixtures', 'adversarial.usj.json'), 'utf8'));
-    const { docs, blocks, tokens, verses } = normalizeChapters(splitChapters(usj));
-    const { db } = w.createCorpusDb(':memory:');
-    w.seedBooksAndCanons(db);
-    w.seedSchemes(db, loadSchemes());
-    const meta = {
-      name: 'Fixture',
-      abbrev: 'FIX',
-      language: 'english',
-      year: null,
-      license: null,
-      scheme: 'kjv',
-      edition: 'sha256:fixture',
-    };
-    await writeEdition(db, meta, ['JHN'], async (edition) => edition.addBook('JHN', { docs, verses, blocks, tokens }));
-    c = corpusContract(db);
+    c = corpusContract(await memoryCorpus({ abbrev: 'FIX', scheme: 'kjv', book: 'JHN', usj }));
   });
 
   it('a word address in a bridge counts within the unit, and the bridge\'s own address reads', async () => {

@@ -4,7 +4,7 @@
  * fetched a chapter at a time. The DB also gives the schemes, the mappings
  * and the hub's original words, so `map` and `words` work across both.
  *
- * A licensed chapter is held in memory as `readApiBibleChapter` derives it:
+ * A licensed chapter is held in memory as `readLicensedChapter` derives it:
  * its document, its verse units and its chapter stamp. A licensed edition has
  * no edition, words or text stamp (ADR-0005, 2026-11-11 amendment), no
  * original words and no alignment rows.
@@ -22,34 +22,24 @@
 
 import type { BibleContract } from '../contract/contract';
 import { dbReader, readerContract, type CorpusReader } from '../contract/corpus-contract';
-import { RIGHTS, type RightsRecord } from '../contract/rights';
+import { LICENSED_EDITIONS, type LicensedEdition } from '../contract/rights';
 import type { SyncSqliteDb } from '../db/corpus-read';
 import type { Mappings } from '../model/mapping';
-import { hasVerse, lastVerse, titleChapters, type Scheme } from '../model/scheme';
-import { API_BIBLE_EDITIONS, readApiBibleChapter, type ApiBibleChapter, type ApiBibleEdition, type ReadChapter } from './api-bible';
+import { lastVerse, type Scheme } from '../model/scheme';
+import { readLicensedChapter, type ApiBibleChapter, type ReadChapter } from './api-bible';
 
-/** An edition read a chapter at a time. */
-export interface LicensedEdition {
-  /** The edition's scheme, which the DB must hold. */
-  readonly scheme: string;
-  readonly isTitle?: ApiBibleEdition['isTitle'];
-  readonly rights: RightsRecord;
-}
+export type { LicensedEdition } from '../contract/rights';
 
-/** The API.Bible editions, each with its record from rights.ts. */
-const LICENSED_EDITIONS: ReadonlyMap<string, LicensedEdition> = new Map(
-  [...API_BIBLE_EDITIONS].map(([id, e]) => {
-    const rights = RIGHTS.get(id);
-    if (!rights) throw new Error(`${id}: no rights record in src/contract/rights.ts`);
-    return [id, { scheme: e.scheme, isTitle: e.isTitle, rights }];
-  }),
-);
-
-/** One chapter as fetched, with when it was fetched, or null when the edition doesn't print it. */
+/**
+ * One chapter as fetched, with when it was fetched, or null when the edition
+ * doesn't print it. `licensed` is the edition's record: a fetch that keeps
+ * copies keeps them for its rights record's `refreshDays`, as the provider does.
+ */
 export type FetchChapter = (
   edition: string,
   book: string,
   chapter: number,
+  licensed: LicensedEdition,
 ) => Promise<{ readonly data: ApiBibleChapter; readonly fetchedAt: string } | null>;
 
 export interface ProviderOptions {
@@ -139,18 +129,9 @@ export function provider(opts: ProviderOptions): Provider {
     let p = pending.get(key);
     if (p) return p;
     p = (async () => {
-      const got = await opts.fetchChapter(id, book, chapter);
-      if (got && (got.data.bookId !== book || got.data.number !== String(chapter))) {
-        throw new Error(`${key}: the fetch returned ${got.data.id}`);
-      }
-      const s = schemeOf(id);
-      const read = got
-        ? await readApiBibleChapter(got.data, {
-            titleChapters: titleChapters(s, book),
-            hasVerse: (c, v) => hasVerse(s, book, c, v),
-            isTitle: editions.get(id)!.isTitle,
-          })
-        : null;
+      const e = editions.get(id)!;
+      const got = await opts.fetchChapter(id, book, chapter, e);
+      const read = got ? await readLicensedChapter(id, e, schemeOf(id), book, chapter, got.data) : null;
       held.set(key, { read, fetchedAt: got ? Date.parse(got.fetchedAt) : now() });
     })().finally(() => pending.delete(key));
     pending.set(key, p);

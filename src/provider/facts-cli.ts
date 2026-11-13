@@ -9,11 +9,12 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
+import { LICENSED_EDITIONS } from '../contract/rights';
 import { lastVerse } from '../model/scheme';
 import { loadSchemes } from '../ingest/schemes';
 import { TVTMS } from '../ingest/sources';
 import { readTvtms } from '../ingest/tvtms';
-import { API_BIBLE_EDITIONS, type ApiBibleNode } from './api-bible';
+import type { ApiBibleNode } from './api-bible';
 import { ApiBibleHttpError, apiBibleKey, cachedBooks, cachedPassage, type CacheOptions } from './api-bible-cache';
 import { FACTS_DIR, editionFacts, type BookContent } from './edition-facts';
 
@@ -48,7 +49,7 @@ async function bookContent(edition: string, book: string, lastChapter: number, o
 }
 
 async function main(edition: string, key: string) {
-  const entry = API_BIBLE_EDITIONS.get(edition);
+  const entry = LICENSED_EDITIONS.get(edition);
   if (!entry) throw new Error(`no API.Bible edition "${edition}"`);
   const opts: CacheOptions = { key, dir: join('build', 'api-bible') };
   const books = (await cachedBooks(edition, opts)).data;

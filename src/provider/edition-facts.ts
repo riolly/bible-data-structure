@@ -10,10 +10,11 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { LICENSED_EDITIONS } from '../contract/rights';
 import { normalizeChapters, splitChapters, type NormalizeOptions } from '../ingest/normalize';
 import { addBookText, editionText, editionTextSnapshot, type EditionText, type TvtmsRow } from '../ingest/tvtms';
 import { TVTMS } from '../ingest/sources';
-import { API_BIBLE_EDITIONS, adaptApiBibleContent, type ApiBibleNode } from './api-bible';
+import { adaptApiBibleContent, type ApiBibleNode } from './api-bible';
 
 export interface EditionFacts {
   readonly edition: string;
@@ -113,7 +114,7 @@ export const FACTS_DIR = join(import.meta.dirname, 'facts');
  * `bun run api-bible:facts` after a TVTMS update.
  */
 export function loadEditionFacts(): { scheme: string; facts: EditionFacts }[] {
-  return [...API_BIBLE_EDITIONS].map(([edition, e]) => {
+  return [...LICENSED_EDITIONS].map(([edition, e]) => {
     const facts = JSON.parse(readFileSync(join(FACTS_DIR, `${edition}.json`), 'utf8')) as EditionFacts;
     if (facts.tvtms !== TVTMS.sha256) {
       throw new Error(`${edition}: facts were collected for TVTMS ${facts.tvtms}, not the pinned ${TVTMS.sha256}: run \`bun run api-bible:facts ${edition}\``);
