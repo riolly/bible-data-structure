@@ -52,7 +52,7 @@ _Avoid_: partial edition, lite edition
 An edition the first apps read: the English editions in ADR-0008's support table (BSB, KJV, NASB, NLT, NIV, CSB, NKJV, ESV) and the hub texts WLC and SBLGNT. A model feature lands when a contract call or a fixture from one of them needs it. (ADR-0008)
 
 **Rights record**:
-One record per edition saying what its license allows: the route (provider), offline use (`none`, `cache` or `full`), refresh days, copy limit, AI use and attribution. The type and the records of the seven local editions and the three licensed ones are in `src/contract/rights.ts`. (ADR-0008)
+One record per edition saying what its license allows: the route (provider), offline use (`none`, `cache` or `full`), refresh days, copy limit, keep limit, AI use and attribution. The type and the records of the seven local editions and the three licensed ones are in `src/contract/rights.ts`. (ADR-0008)
 
 **Pack**:
 The file an app ships for a set of editions, built from `build/corpus.db` by `bun run pack` (`src/pack/pack.ts`). It is a SQLite file with the corpus tables, so the app contract reads it the same way. It holds the editions it names, the hub editions WLC and SBLGNT, the schemes of ADR-0008's target editions with their mappings, and no token or block rows: a word address is read from the verse text (ADR-0004, step 13 amendment). Chapter documents are deflated. An app ships one pack with all its local editions, so the hub is in it once. The corpus DB never ships.

@@ -61,7 +61,7 @@ async function main(key: string) {
 
   for (const id of LICENSED_EDITIONS.keys()) {
     const r = await c.rights(id);
-    console.log(`rights ${id}: ${r.route}, ${r.offline} ${r.refreshDays} days, copy ${r.copyLimit}, AI ${r.aiUse}`);
+    console.log(`rights ${id}: ${r.route}, ${r.offline} ${r.refreshDays} days, copy ${r.copyLimit}, keep ${r.keepLimit}, AI ${r.aiUse}`);
   }
   const unsupported = c.unsupported();
   console.log(unsupported.size === 0 ? 'unsupported markers: none' : `unsupported markers: ${JSON.stringify(Object.fromEntries(unsupported))}`);

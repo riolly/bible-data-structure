@@ -53,6 +53,14 @@ export interface RightsRecord {
   readonly refreshDays: number | null;
   /** The most verses an app may let a reader copy, share or print at once. Null for no limit. */
   readonly copyLimit: number | null;
+  /**
+   * The most verses of the edition that may be kept at once. Null for no
+   * limit. The provider counts the chapters it holds in memory as kept
+   * (src/provider/licensed-chapters.ts) until API.Bible answers whether they
+   * are (research/licensing.md, open questions). An app that keeps chapters
+   * on a device counts those the same way.
+   */
+  readonly keepLimit: number | null;
   readonly aiUse: AiUse;
   /** The credit an app must show with the text. Null when none is required. */
   readonly attribution: string | null;
@@ -68,6 +76,7 @@ const publicDomain = (edition: string, licenseUrl: string, conditions: string[] 
   offline: 'full',
   refreshDays: null,
   copyLimit: null,
+  keepLimit: null,
   aiUse: 'allowed',
   attribution: null,
   conditions,
@@ -99,6 +108,7 @@ const apiBible = (
   aiUse: AiUse,
   attribution: string,
   conditions: string[],
+  keepLimit: number | null = null,
 ): ApiBibleEdition => ({
   ...api,
   rights: {
@@ -111,6 +121,7 @@ const apiBible = (
     refreshDays: 30,
     // section 12: no printing of more than 100 verses
     copyLimit: 100,
+    keepLimit,
     aiUse,
     attribution,
     conditions: [
@@ -181,6 +192,8 @@ export const LICENSED_EDITIONS: ReadonlyMap<string, ApiBibleEdition> = new Map(
       [
         'Without a direct Lockman license, at most 1,000 verses may be quoted or stored in an electronic retrieval system, never a whole book and at most half of the work they appear in (https://www.lockman.org/permission-to-quote-copyright-trademark-information/). Keep a device\'s kept NASB chapters under that.',
       ],
+      // the 1,000 verses of that condition. Its whole-book and half-of-the-work parts are not counted here
+      1000,
     ),
     apiBible(
       { bibleId: 'd6e14a625393b4da-01', scheme: 'nlt' },

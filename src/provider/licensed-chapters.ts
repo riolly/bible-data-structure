@@ -8,6 +8,10 @@
  * With 0 refresh days nothing is held: every read fetches, and the chapter
  * goes only to the reads that waited for that fetch.
  *
+ * An edition whose rights record has a `keepLimit` never has more verses
+ * held than that. Holding a chapter drops the edition's least recently read
+ * chapters until it fits, and a read of a dropped chapter fetches it again.
+ *
  * Chapter 0, the front matter, and a chapter outside the edition's scheme
  * are never fetched. Reads of one chapter at the same time share one fetch.
  *
@@ -44,7 +48,7 @@ export interface LicensedChaptersOptions {
 export interface LicensedChapters {
   /** The chapter, or a promise when it isn't held or is past its refresh days. Null when the edition doesn't print it. */
   chapter(edition: string, book: string, chapter: number): ChapterRead<ReadChapter>;
-  /** The markers outside the supported list in each held chapter that has any, keyed `NLT NUM 1`. */
+  /** The markers outside the supported list in each held chapter that has any, keyed `NLT NUM 1`. A chapter dropped for a keep limit is not in it. */
   unsupported(): ReadonlyMap<string, Readonly<Record<string, number>>>;
 }
 
@@ -52,6 +56,9 @@ interface Held {
   /** Null when the edition doesn't print the chapter. */
   readonly read: ReadChapter | null;
   readonly fetchedAt: number;
+  readonly edition: string;
+  /** What a keep limit counts: the verses the edition's scheme gives the chapter, or 0 when the edition doesn't print it. */
+  readonly verses: number;
 }
 
 export function licensedChapters(opts: LicensedChaptersOptions): LicensedChapters {
@@ -62,6 +69,29 @@ export function licensedChapters(opts: LicensedChaptersOptions): LicensedChapter
     e.rights.refreshDays === null || opts.now() - fetchedAt < e.rights.refreshDays * 86_400_000;
   /** Whether the edition's chapters are held at all (`RightsRecord.refreshDays`). */
   const keeps = (e: LicensedEdition) => e.rights.refreshDays !== 0;
+
+  /**
+   * Hold a chapter as the most recently read. Under a keep limit, the
+   * edition's least recently read chapters are dropped until its held verses
+   * fit, and a chapter with more verses than the limit is not held.
+   */
+  function hold(key: string, e: LicensedEdition, h: Held): void {
+    held.delete(key);
+    const limit = e.rights.keepLimit;
+    if (limit !== null) {
+      if (h.verses > limit) return;
+      let total = h.verses;
+      for (const other of held.values()) if (other.edition === h.edition) total += other.verses;
+      // a Map lists its keys in the order they were set: the least recently read first
+      for (const [k, other] of held) {
+        if (total <= limit) break;
+        if (other.edition !== h.edition) continue;
+        held.delete(k);
+        total -= other.verses;
+      }
+    }
+    held.set(key, h);
+  }
 
   /** Fetch one chapter, once however many reads ask for it at the same time. */
   function fetchOne(key: string, id: string, e: LicensedEdition, book: string, chapter: number): Promise<ReadChapter | null> {
@@ -76,7 +106,7 @@ export function licensedChapters(opts: LicensedChaptersOptions): LicensedChapter
         throw new Error(`${key} is still missing after its fetch: the fetch gave a copy from ${got.fetchedAt}, older than ${e.rights.refreshDays} days`);
       }
       // a refresh replaces the held chapter here: a changed stamp (held.get(key)?.read?.stamp) would be reported here
-      held.set(key, { read, fetchedAt });
+      hold(key, e, { read, fetchedAt, edition: id, verses: read ? lastVerse(opts.schemeOf(id), book, chapter)! : 0 });
       return read;
     })().finally(() => pending.delete(key));
     pending.set(key, p);
@@ -90,7 +120,12 @@ export function licensedChapters(opts: LicensedChaptersOptions): LicensedChapter
       if (chapter < 1 || lastVerse(opts.schemeOf(id), book, chapter) === undefined) return null;
       const key = `${id} ${book} ${chapter}`;
       const h = held.get(key);
-      if (h && fresh(e, h.fetchedAt)) return h.read;
+      if (h && fresh(e, h.fetchedAt)) {
+        // a read makes the chapter the most recently read
+        held.delete(key);
+        held.set(key, h);
+        return h.read;
+      }
       return fetchOne(key, id, e, book, chapter);
     },
     unsupported: () =>
