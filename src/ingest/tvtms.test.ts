@@ -1,4 +1,5 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
@@ -26,6 +27,7 @@ import {
   type EditionText,
   type EditionTextSnapshot,
 } from './tvtms';
+import { TVTMS } from './sources';
 
 const keys = (refs: Ref[]) => refs.map(refKey);
 
@@ -262,6 +264,20 @@ describe('parseTvtms and compileTvtms on synthetic rows', () => {
     const c = compileTvtms(parseTvtms(t), kjvLike, kjvLike);
     expect(c.rows.map((r) => refKey(r.to!))).toEqual(['SIR 60:1']); // not a protestant book: no bound
     expect(c.skipped.map((x) => x.reason)).toEqual([expect.stringMatching(/past KJV/)]);
+  });
+});
+
+describe('readTvtms opens its file through pinnedPath (#63)', () => {
+  it('names the download command when the file is missing, and the fix when it differs from its pin', () => {
+    const root = mkdtempSync(join(tmpdir(), 'tvtms-'));
+    try {
+      expect(() => readTvtms(root)).toThrow(/is missing: run `bun run ingest:download` first/);
+      mkdirSync(join(root, 'tvtms'));
+      writeFileSync(join(root, TVTMS.file), '#DataStart(Expanded)\n#DataEnd(Expanded)\n');
+      expect(() => readTvtms(root)).toThrow(/does not match its pin[\s\S]*Delete it and run `bun run ingest:download`/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });
 

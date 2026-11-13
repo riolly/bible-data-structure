@@ -16,7 +16,6 @@
  * The file is downloaded, not committed; sources.ts says why.
  */
 
-import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -27,9 +26,10 @@ import { Relation, parseRefKey, refKey, type MappingRow, type Ref } from '../mod
 import { lastVerse, type Scheme } from '../model/scheme';
 import { ENG_TO_PIVOT, allVrsPivotRows, buildPivot } from './pivot';
 import { PARATEXT_SCHEMES } from './schemes';
+import { SOURCES_ROOT, pinnedPath } from './source-files';
 import { TVTMS } from './sources';
 
-export const TVTMS_PATH = join(import.meta.dirname, 'sources', TVTMS.file);
+export const TVTMS_PATH = join(SOURCES_ROOT, TVTMS.file);
 
 export interface TvtmsRow {
   /** 1-based line in the file. */
@@ -121,12 +121,9 @@ export function parseTvtms(text: string): TvtmsRow[] {
   return [...rows, ...titleInVerse1Rows(lines)];
 }
 
-/** Read and parse the pinned file, failing on a checksum mismatch. */
-export function readTvtms(path = TVTMS_PATH): TvtmsRow[] {
-  const buf = readFileSync(path);
-  const digest = createHash('sha256').update(buf).digest('hex');
-  if (digest !== TVTMS.sha256) throw new Error(`TVTMS: sha256 ${digest} does not match the pin ${TVTMS.sha256}`);
-  return parseTvtms(buf.toString('utf8'));
+/** Read and parse the pinned file under `root`, once `pinnedPath` has checked it. */
+export function readTvtms(root = SOURCES_ROOT): TvtmsRow[] {
+  return parseTvtms(readFileSync(pinnedPath(TVTMS, root), 'utf8'));
 }
 
 const PART_RE =
