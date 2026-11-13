@@ -22,7 +22,7 @@ In about 1,260 places the Hebrew Bible's written consonants (the ketiv) differ f
 
 ## Migration from ebible's copy
 
-Measured over every verse by `src/ingest/oshb-xml.test.ts` (it runs where the old ebible copy is still unpacked) and against the previous `corpus.db`:
+Measured over every verse against ebible's copy and against the previous `corpus.db`:
 
 - **The verse list is the same**: 23,213 verses, all under `org`.
 - **10 verses get new word addresses.** ebible's copy leaked markup into the 11 words that have a large, small or suspended letter (`DEU 6:4` שְׁמַע, `JDG 18:30` מְנַשֶּׁה): the corpus stored fragments such as `l`, `s` and `H8085` as words. They go away, 77 word addresses in all, and later words in those verses move down.
