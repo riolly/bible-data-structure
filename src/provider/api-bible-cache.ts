@@ -3,7 +3,8 @@
  * under `build/api-bible/` (plan step 10). Git ignores `build/`, so licensed
  * text is never committed. A kept response is used for its edition's
  * `refreshDays` from the rights record (src/contract/rights.ts), then fetched
- * again. Starter allows 5,000 calls a month, so every read goes through here.
+ * again. With 0 refresh days no response is kept. Starter allows 5,000 calls
+ * a month, so every read goes through here.
  *
  * Node only. The key is `API_BIBLE_KEY` in `.env` (research/api-bible.md).
  */
@@ -65,7 +66,9 @@ async function cachedGet<T>(
   const kept = join(opts.dir, bibleId, file);
   const maxAge = rights.refreshDays === null ? Infinity : rights.refreshDays * 86_400_000;
 
-  const old = await readFile(kept, 'utf8').then((s) => JSON.parse(s) as KeptResponse, () => null);
+  const keeps = rights.refreshDays !== 0;
+
+  const old = keeps ? await readFile(kept, 'utf8').then((s) => JSON.parse(s) as KeptResponse, () => null) : null;
   if (old && now.getTime() - Date.parse(old.fetchedAt) < maxAge) {
     return { data: dataOf<T>(old.body), fetchedAt: old.fetchedAt, fetched: false };
   }
@@ -75,6 +78,7 @@ async function cachedGet<T>(
   const body = await res.text();
   const data = dataOf<T>(body);
   const fresh: KeptResponse = { fetchedAt: now.toISOString(), body };
+  if (!keeps) return { data, fetchedAt: fresh.fetchedAt, fetched: true };
   await mkdir(dirname(kept), { recursive: true });
   await writeFile(`${kept}.tmp`, JSON.stringify(fresh));
   await rename(`${kept}.tmp`, kept);

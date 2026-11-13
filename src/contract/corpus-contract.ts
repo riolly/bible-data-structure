@@ -358,8 +358,8 @@ export function readerContract(read: CorpusReader): BibleContract {
       if (lastVerse(schemeOf(e), book, chapter) === undefined) {
         return { kind: 'absent', edition: e, book, chapter, reason: 'scheme' };
       }
-      let units = await read.chapter(e.id, book, chapter);
-      const doc = units && (await read.chapterDoc(e.id, book, chapter));
+      // both reads start before either is awaited, so a reader that holds nothing fetches the chapter once
+      let [units, doc] = await Promise.all([read.chapter(e.id, book, chapter), read.chapterDoc(e.id, book, chapter)]);
       // the reader may have replaced the chapter between the two reads: take the units of the document's copy
       if (units && doc && units.stamp !== doc.stamp) units = await read.chapter(e.id, book, chapter);
       if (!units || !doc) return { kind: 'absent', edition: e, book, chapter, reason: 'text' };

@@ -33,19 +33,22 @@ const EDITIONS = new Map<string, LicensedEdition>([['KJVAB', { scheme: 'tst', ri
 const day = 86_400_000;
 
 /** Licensed chapters whose fetch logs each call and waits for `serve` when `hold` is set. */
-function make(chapters = new Map([['JHN 3', JHN_3]])) {
+function make(chapters = new Map([['JHN 3', JHN_3]]), editions = EDITIONS) {
   let clock = Date.parse('2026-11-13T00:00:00Z');
   const fetches: string[] = [];
   const waiting: (() => void)[] = [];
-  const state = { hold: false, fail: false };
+  /** `late`: the milliseconds the clock moves between a fetch and its return. */
+  const state = { hold: false, fail: false, late: 0 };
   const fetchChapter: FetchChapter = async (_, book, chapter) => {
     fetches.push(`${book} ${chapter}`);
     if (state.hold) await new Promise<void>((done) => waiting.push(done));
     if (state.fail) throw new Error('stub: network down');
     const data = chapters.get(`${book} ${chapter}`);
-    return data ? { data, fetchedAt: new Date(clock).toISOString() } : null;
+    const fetchedAt = new Date(clock).toISOString();
+    clock += state.late;
+    return data ? { data, fetchedAt } : null;
   };
-  const held = licensedChapters({ editions: EDITIONS, fetchChapter, schemeOf: () => SCHEME, now: () => clock });
+  const held = licensedChapters({ editions, fetchChapter, schemeOf: () => SCHEME, now: () => clock });
   return {
     held,
     fetches,
@@ -118,10 +121,49 @@ describe('licensed chapters: hold, refresh and fetch', () => {
     expect(t.fetches).toEqual(['JHN 4']);
   });
 
-  it('holds a chapter the edition does not print when nothing is kept (0 refresh days)', async () => {
+  it('gives null for a chapter the edition does not print when nothing is kept (0 refresh days)', async () => {
     const editions = new Map<string, LicensedEdition>([['KJVAB', { scheme: 'tst', rights: { ...rights, refreshDays: 0 } }]]);
     const held = licensedChapters({ editions, fetchChapter: async () => null, schemeOf: () => SCHEME, now: () => 0 });
     expect(await held.chapter('KJVAB', 'JHN', 4)).toBeNull();
+  });
+
+  it('0 refresh days keeps nothing: each read fetches, and the read that fetched gets the chapter', async () => {
+    const editions = new Map<string, LicensedEdition>([['KJVAB', { scheme: 'tst', rights: { ...rights, refreshDays: 0 } }]]);
+    const t = make(undefined, editions);
+    expect((await t.held.chapter('KJVAB', 'JHN', 3))?.verses).toHaveLength(36);
+    expect(t.held.chapter('KJVAB', 'JHN', 3)).toBeInstanceOf(Promise);
+    expect([...t.held.unsupported()]).toEqual([]);
+    expect(t.fetches).toEqual(['JHN 3', 'JHN 3']);
+    // a real clock moves between the fetch and the read
+    t.state.late = 5;
+    expect((await t.held.chapter('KJVAB', 'JHN', 3))?.verses).toHaveLength(36);
+  });
+
+  it('0 refresh days: one `chapter` call of the contract fetches the chapter once', async () => {
+    const editions = new Map<string, LicensedEdition>([['KJVAB', { scheme: 'tst', rights: { ...rights, refreshDays: 0 } }]]);
+    const t = make(undefined, editions);
+    const reader: CorpusReader = {
+      edition: (abbrev) => ({ abbrev, scheme: 'tst', edition: null, wordsStamp: null, textStamp: null }),
+      chapter: (id, book, chapter) => t.held.chapter(id, book, chapter),
+      chapterDoc: (id, book, chapter) => {
+        const r = t.held.chapter(id, book, chapter);
+        return r instanceof Promise ? r.then((x) => x && { ...x.doc, stamp: x.stamp }) : r && { ...r.doc, stamp: r.stamp };
+      },
+      originalWords: () => [],
+      wordAlignments: () => [],
+      dataSources: () => [],
+      schemes: () => new Map([['tst', SCHEME]]),
+      mappings: () => {
+        throw new Error('no mappings');
+      },
+    };
+    const contract = readerContract(reader);
+    const got = await contract.chapter('KJVAB', 'JHN', 3);
+    if (got.kind !== 'chapter') throw new Error('absent');
+    expect(got.verses).toHaveLength(36);
+    expect(t.fetches).toEqual(['JHN 3']);
+    await contract.chapter('KJVAB', 'JHN', 3);
+    expect(t.fetches).toEqual(['JHN 3', 'JHN 3']);
   });
 
   it('the contract gives one copy of a chapter that is replaced between its two reads', async () => {

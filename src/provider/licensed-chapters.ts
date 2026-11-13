@@ -5,6 +5,9 @@
  * `refreshDays`. A read of a chapter not held is a promise
  * (`ChapterRead` in src/contract/reader.ts), so the contract awaits it.
  *
+ * With 0 refresh days nothing is held: every read fetches, and the chapter
+ * goes only to the reads that waited for that fetch.
+ *
  * Chapter 0, the front matter, and a chapter outside the edition's scheme
  * are never fetched. Reads of one chapter at the same time share one fetch.
  *
@@ -57,6 +60,8 @@ export function licensedChapters(opts: LicensedChaptersOptions): LicensedChapter
 
   const fresh = (e: LicensedEdition, fetchedAt: number) =>
     e.rights.refreshDays === null || opts.now() - fetchedAt < e.rights.refreshDays * 86_400_000;
+  /** Whether the edition's chapters are held at all (`RightsRecord.refreshDays`). */
+  const keeps = (e: LicensedEdition) => e.rights.refreshDays !== 0;
 
   /** Fetch one chapter, once however many reads ask for it at the same time. */
   function fetchOne(key: string, id: string, e: LicensedEdition, book: string, chapter: number): Promise<ReadChapter | null> {
@@ -66,6 +71,7 @@ export function licensedChapters(opts: LicensedChaptersOptions): LicensedChapter
       const got = await opts.fetchChapter(id, book, chapter, e);
       const read = got ? await readLicensedChapter(id, e, opts.schemeOf(id), book, chapter, got.data) : null;
       const fetchedAt = got ? Date.parse(got.fetchedAt) : opts.now();
+      if (!keeps(e)) return read;
       if (got && !fresh(e, fetchedAt)) {
         throw new Error(`${key} is still missing after its fetch: the fetch gave a copy from ${got.fetchedAt}, older than ${e.rights.refreshDays} days`);
       }
