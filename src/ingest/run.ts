@@ -20,19 +20,13 @@ import { loadSchemes } from './schemes';
 import { checkBook } from './book-check';
 import type { ParseOutcome } from './parse';
 import { createParsePool, type ParsePool } from './parse-pool';
-import { CLEAR_BSB, KJV_TAGS, MACULA_GREEK, MACULA_HEBREW, SOURCES, type SourceDef } from './sources';
+import { CLEAR_BSB, KJV_TAGS, SOURCES, type SourceDef } from './sources';
 import { alignWords, readClearAlignment, readClearWords } from './alignment';
 import { linkVerseTags, type HubWord, type TagStats } from './kjv-tags';
 import { loadMappings } from '../db/corpus-read';
 import { pinnedPath, readSource } from './source-files';
-import {
-  GREEK_EXCEPTIONS,
-  checkExceptionsUsed,
-  greekWords,
-  hebrewWords,
-  readMacula,
-  type HubPart,
-} from './original-words';
+import type { HubIndex } from './source-formats';
+import type { HubPart } from './original-words';
 import { writeEdition } from './edition-writer';
 import { RIGHTS } from '../contract/rights';
 import { factsText, loadEditionFacts } from '../provider/edition-facts';
@@ -84,8 +78,8 @@ async function main() {
   /** Each scheme's editions, for TVTMS's text tests (ADR-0006 amendment). */
   const texts = new Map<string, EditionText[]>();
   const editions: { scheme: string; text: EditionText }[] = [];
-  /** Every MACULA morpheme and Greek word id, to the original word it is part of: what Clear's alignments point at. */
-  const hubParts = new Map<string, HubPart>();
+  /** What Clear's alignments point at, filled by the hub texts' format adapters. */
+  const hubParts: HubIndex = new Map();
   /** The KJV's `\w strong=` tags by book, for `alignKjv`. */
   const kjvTags = new Map<string, WordTag[]>();
 
@@ -102,14 +96,12 @@ async function main() {
       const started = performance.now();
       const scheme = schemes.get(src.meta.scheme);
       if (!scheme) throw new Error(`${src.meta.abbrev}: unknown scheme "${src.meta.scheme}"`);
-      const { edition, files, readings, oshbVerses, outcomes } = prepare(i);
+      const { edition, files, open, outcomes } = prepare(i);
       // A source that fails to prepare throws again when its turn comes, so errors keep source order.
       if (i + 1 < SOURCES.length) try { prepare(i + 1); } catch {}
-      // The hub texts get their original words (plan step 11): OSHB's own for WLC, MACULA's for SBLGNT.
-      const hub = src.format?.kind === 'oshb-xml' ? MACULA_HEBREW : src.format?.kind === 'sblgnt-xml' ? MACULA_GREEK : null;
-      const macula = hub ? readMacula(pinnedPath(hub)) : null;
-      const owTotals = { words: 0, noGloss: 0 };
-      const greekUsed = new Set<string>();
+      // The format's by-products: the hub texts' readings and original words (plan step 11).
+      const extras = open(hubParts);
+      let summary: string[] = [];
       const rights = RIGHTS.get(src.meta.abbrev);
       if (!rights) throw new Error(`${src.meta.abbrev}: no rights record in src/contract/rights.ts`);
       const text = editionText(src.meta.abbrev);
@@ -133,35 +125,18 @@ async function main() {
           if (!checked.ok) throw checked.error;
           const { docs, blocks, tokens, verses, stats } = checked.rows;
           if (checked.rows.wordTags.length > 0) kjvTags.set(file.code, checked.rows.wordTags);
-          const bookReadings = readings.filter((r) => r.book === file.code);
-          writer.addBook(file.code, checked.rows, bookReadings);
-          if (macula) {
-            const { words: ow, stats, morphemes } =
-              hub === MACULA_HEBREW
-                ? hebrewWords(file.code, tokens, oshbVerses.filter((v) => v.book === file.code), bookReadings, macula)
-                : { ...greekWords(file.code, tokens, macula, GREEK_EXCEPTIONS, greekUsed), morphemes: [] };
-            for (const [id, part] of morphemes) hubParts.set(id, part);
-            if (hub === MACULA_GREEK) {
-              for (const w of ow) hubParts.set(w.owId, { source: 'macula-greek', owId: w.owId, strongs: w.strongs });
-            }
-            writer.addOriginalWords(file.code, hub === MACULA_HEBREW ? 'oshb' : MACULA_GREEK.id, ow);
-            owTotals.words += ow.length;
-            owTotals.noGloss += stats.noGloss;
-          }
+          extras.addBook(writer, file.code, checked.rows);
           addBookText(text, file.code, blocks, tokens, verses);
           addStats(totals, stats);
           blockCount += blocks.length;
           tokenCount += tokens.length;
           chapterCount += docs.length;
         }
-        if (hub === MACULA_GREEK) checkExceptionsUsed(GREEK_EXCEPTIONS, greekUsed);
+        summary = extras.finish();
       });
       prepared.delete(i); // free this edition's parse results
       console.log(`  ${blockCount} blocks, ${tokenCount} tokens, words stamp ${stamps.words}, text stamp ${stamps.text}`);
-      if (readings.length > 0) console.log(`  ${readings.length} qere readings (ADR-0007)`);
-      if (hub) {
-        console.log(`  ${owTotals.words} original words, glosses from ${hub.id}: ${owTotals.noGloss} read words have none`);
-      }
+      for (const line of summary) console.log(`  ${line}`);
       console.log(`  ${chapterCount} chapter documents; counted in them: ${JSON.stringify(totals)}`);
       console.log(`  ${seconds(started)}`);
     }
@@ -203,13 +178,13 @@ const seconds = (since: number) => `${((performance.now() - since) / 1000).toFix
  * still stop the ingest in book order.
  */
 function prepareSource(src: SourceDef, pool: ParsePool) {
-  const { edition, files, readings, oshbVerses } = readSource(src);
+  const { edition, files, open } = readSource(src);
   if (edition !== src.edition) {
     throw new Error(`${src.meta.abbrev}: the files give edition ${edition}, not the pinned ${src.edition}; run bun run ingest:download`);
   }
   const outcomes = files.map((f) => pool.parse(f.usfm, { rewriteVersifiedD: src.rewriteVersifiedD }));
   for (const o of outcomes) o.catch(() => {}); // awaited later; keep an early rejection from counting as unhandled
-  return { edition, files, readings, oshbVerses, outcomes };
+  return { edition, files, open, outcomes };
 }
 
 /**
