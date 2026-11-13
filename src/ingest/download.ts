@@ -1,5 +1,5 @@
 /**
- * Fetch the pinned source zips, the TVTMS file and the MACULA word tables into src/ingest/sources/
+ * Fetch the pinned source zips, the TVTMS file, the MACULA word tables and Clear's BSB alignments into src/ingest/sources/
  * (gitignored). Run once before `bun run ingest`:
  *
  *   bun run ingest:download
@@ -21,7 +21,7 @@ import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 
 import { sourceEdition } from './source-files';
-import { MACULA_GREEK, MACULA_HEBREW, MIRROR, SOURCES, TVTMS, mirrorAsset, mirrorLabel, type SourceDef } from './sources';
+import { CLEAR_BSB, MACULA_GREEK, MACULA_HEBREW, MIRROR, SOURCES, TVTMS, mirrorAsset, mirrorLabel, type SourceDef } from './sources';
 
 const SOURCES_ROOT = join(import.meta.dirname, 'sources');
 const STAGING = join(SOURCES_ROOT, '.staging');
@@ -30,7 +30,9 @@ const MIRROR_DIR = join(SOURCES_ROOT, 'mirror');
 async function main() {
   await mkdir(MIRROR_DIR, { recursive: true });
   for (const src of SOURCES) await fetchSource(src);
-  for (const file of [{ id: 'TVTMS', ...TVTMS }, MACULA_HEBREW, MACULA_GREEK]) await fetchPinnedFile(file);
+  for (const file of [{ id: 'TVTMS', ...TVTMS }, MACULA_HEBREW, MACULA_GREEK, CLEAR_BSB.greek, CLEAR_BSB.hebrew, CLEAR_BSB.ntWords, CLEAR_BSB.otWords]) {
+    await fetchPinnedFile(file);
+  }
 }
 
 async function fetchSource(src: SourceDef) {
@@ -96,7 +98,7 @@ function fetchMirror(src: SourceDef, path: string) {
   });
 }
 
-/** A file pinned by its URL at a git commit and its sha256 (TVTMS, MACULA). Its bytes can't change. */
+/** A file pinned by its URL at a git commit and its sha256 (TVTMS, MACULA, Clear). Its bytes can't change. */
 async function fetchPinnedFile(pin: { id: string; url: string; sha256: string; file: string }) {
   const path = join(SOURCES_ROOT, pin.file);
   if (existsSync(path)) {

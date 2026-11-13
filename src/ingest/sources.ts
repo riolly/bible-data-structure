@@ -312,3 +312,33 @@ export const MACULA_GREEK: PinnedFile = {
     'Interlinear Bible (public domain) and Cherith Glosses for the Greek New Testament by Andi Wu, ' +
     '© 2023 Cherith Analytics, CC BY 4.0',
 };
+
+const CLEAR_ALIGNMENTS = 'https://raw.githubusercontent.com/Clear-Bible/Alignments/c99bd0ae6946775f932517656308ca19fc706921/data';
+
+export const CLEAR_BSB_ATTRIBUTION =
+  'BSB word alignments from Bible Word Alignments, © 2022 Clear Bible, Inc., CC BY 4.0, ' +
+  'https://github.com/Clear-Bible/Alignments';
+
+const clearFile = (id: string, path: string, sha256: string): PinnedFile => ({
+  id,
+  url: `${CLEAR_ALIGNMENTS}/${path}`,
+  sha256,
+  file: `clear/${path.split('/').pop()}`,
+  license: 'CC BY 4.0',
+  attribution: CLEAR_BSB_ATTRIBUTION,
+});
+
+/**
+ * Clear Bible's manual alignments of the BSB (CC BY 4.0, plan step 12): which
+ * SBLGNT words and WLC morphemes each BSB word translates, with Clear's own
+ * tokens of the BSB they point at (research/word-tags.md).
+ */
+export const CLEAR_BSB = {
+  id: 'clear-bsb',
+  url: 'https://github.com/Clear-Bible/Alignments/tree/c99bd0ae6946775f932517656308ca19fc706921/data/eng/alignments/BSB',
+  attribution: CLEAR_BSB_ATTRIBUTION,
+  greek: clearFile('clear-bsb-greek', 'eng/alignments/BSB/SBLGNT-BSB-manual.json', '5c94608d672d89c25057c6339176be13e3946634afe125e1539e8c87f2dcb164'),
+  hebrew: clearFile('clear-bsb-hebrew', 'eng/alignments/BSB/WLCM-BSB-manual.json', '3a7619681cebe2d0768681215456e9ee4701aef72a82af5fc851b31148aa3c1f'),
+  ntWords: clearFile('clear-bsb-nt', 'eng/targets/BSB/nt_BSB.tsv', 'd388c73f52361968eb96761098e983699fdd0dd37272b1d701efebd61a5a36df'),
+  otWords: clearFile('clear-bsb-ot', 'eng/targets/BSB/ot_BSB.tsv', 'f06c76205f30e3e4a95f884a013c2e65a6df2e0acea3435ad3f2d77f71d003da'),
+} as const;

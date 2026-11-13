@@ -10,7 +10,7 @@ Phase: v0.0.x since 2026-11-09. Research and prototyping: no CI gates, no review
 CXXFLAGS='-std=gnu++20' bun install   # Node 24 (.node-version): Node 20 fails in node-gyp. The flag is for tree-sitter's native build
 bun run test                          # vitest, runs under Node
 bun run typecheck
-bun run ingest:download               # fetch pinned ebible.org zips, upstream SBLGNT, OSHB, TVTMS and MACULA, check edition stamps (mirror if upstream changed) → src/ingest/sources/
+bun run ingest:download               # fetch pinned ebible.org zips, upstream SBLGNT, OSHB, TVTMS, MACULA and Clear's BSB alignments, check edition stamps (mirror if upstream changed) → src/ingest/sources/
 bun run ingest                        # sources → build/corpus.db, mapping-diff.tsv, pivot.json (about 20 s; 13 s when build/usj-cache has the parses)
 bun run api-bible:chapter NASB95 JHN 3   # fetch one licensed chapter into build/api-bible/, or read the kept copy (30 days)
 bun run api-bible:facts NASB95            # fetch a whole licensed edition (196 calls) and rewrite its counts in src/provider/facts/
