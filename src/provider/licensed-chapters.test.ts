@@ -202,7 +202,10 @@ describe('licensed chapters: hold, refresh and fetch', () => {
     expect(isHeld(t, 'KJVAB', 3)).toBe(true);
     expect(isHeld(t, 'KJVAB', 4)).toBe(true);
     expect(t.fetches).toHaveLength(5);
-    expect(isHeld(t, 'KJVAB', 1)).toBe(false);
+    // John 1 is not held, so its read is a fetch
+    const dropped = t.held.chapter('KJVAB', 'JHN', 1);
+    expect(dropped).toBeInstanceOf(Promise);
+    await dropped;
   });
 
   it('a chapter with more verses than the keep limit is read and not held', async () => {
