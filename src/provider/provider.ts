@@ -41,6 +41,8 @@ export interface ProviderOptions {
   readonly editions?: ReadonlyMap<string, LicensedEdition>;
   /** Milliseconds since the epoch. Default: `Date.now`. */
   readonly now?: () => number;
+  /** Milliseconds a fetch may take before the calls waiting for it fail. Default: 60,000. */
+  readonly fetchTimeoutMs?: number;
 }
 
 export interface Provider extends BibleContract {
@@ -69,7 +71,13 @@ export function provider(opts: ProviderOptions): Provider {
     return s;
   }
 
-  const held = licensedChapters({ editions, fetchChapter: opts.fetchChapter, schemeOf, now: opts.now ?? Date.now });
+  const held = licensedChapters({
+    editions,
+    fetchChapter: opts.fetchChapter,
+    schemeOf,
+    now: opts.now ?? Date.now,
+    fetchTimeoutMs: opts.fetchTimeoutMs,
+  });
   const licensed = (id: string) => editions.has(id);
   const reader: CorpusReader = {
     edition(id) {

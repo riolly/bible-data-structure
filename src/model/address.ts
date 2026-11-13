@@ -98,12 +98,15 @@ export function formatAddress(a: Address): string {
 
 function point(text: string, book: string, c: string, v: string, seg: string, w?: string): VerseRef {
   const ref: VerseRef = { book, chapter: Number(c), verse: Number(v), segment: seg };
+  // a longer number would not format back as the digits that were read
+  if (!Number.isSafeInteger(ref.chapter) || !Number.isSafeInteger(ref.verse)) throw new Error(`address "${text}": number too large`);
   return w === undefined ? ref : { ...ref, wordIndex: wordIndex(text, w) };
 }
 
 function wordIndex(text: string, n: string): number {
   const num = Number(n);
   if (num < 1) throw new Error(`address "${text}": word numbers count from 1`);
+  if (!Number.isSafeInteger(num)) throw new Error(`address "${text}": number too large`);
   return num - 1;
 }
 

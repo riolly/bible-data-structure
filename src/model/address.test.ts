@@ -77,6 +77,14 @@ describe('parseAddress', () => {
   });
 });
 
+describe('parseAddress on a number too large to keep', () => {
+  it('refuses a chapter, verse or word number that would not format back as written', () => {
+    expect(() => parseAddress('JHN 9999999999999999999999:1/kjv')).toThrow(/too large/);
+    expect(() => parseAddress('JHN 3:9999999999999999999999/kjv')).toThrow(/too large/);
+    expect(() => parseAddress('JHN 3:16!9999999999999999999999/kjv')).toThrow(/too large/);
+  });
+});
+
 describe('formatAddress', () => {
   it('writes a 0-based word index as a 1-based word number', () => {
     const a: Address = {

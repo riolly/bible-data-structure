@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -63,6 +63,40 @@ describe('cachedChapter: one call per chapter per 30 days', () => {
   it('throws on an HTTP error and keeps nothing', async () => {
     const api = fakeApi(403);
     await expect(cachedChapter('NASB95', 'JHN', 3, { key: 'k', dir, fetch: api.fetch })).rejects.toThrow(/HTTP 403/);
+    await expect(readFile(join(dir, 'b8ee27bcd1cae43a-01', 'JHN.3.json'), 'utf8')).rejects.toThrow();
+  });
+
+  it('fetches again when the kept file does not parse, and keeps a whole one', async () => {
+    const api = fakeApi();
+    const file = join(dir, 'b8ee27bcd1cae43a-01', 'JHN.3.json');
+    await mkdir(join(dir, 'b8ee27bcd1cae43a-01'), { recursive: true });
+    for (const cut of ['{"fetchedAt":"2026-11-12T00:00:00.000Z","bo', JSON.stringify({ fetchedAt: '2026-11-12T00:00:00.000Z', body: '{"data":{"id":"JH' })]) {
+      await writeFile(file, cut);
+      expect(await cachedChapter('NASB95', 'JHN', 3, { key: 'k', dir, fetch: api.fetch, now: at(day) })).toMatchObject({ fetched: true, data: { id: 'JHN.3' } });
+      expect(JSON.parse(await readFile(file, 'utf8')).body).toBe(api.body);
+    }
+    expect(api.urls).toHaveLength(2);
+  });
+
+  it('fetches again when the kept copy is stamped after now', async () => {
+    const api = fakeApi();
+    const opts = { key: 'k', dir, fetch: api.fetch };
+    await cachedChapter('NASB95', 'JHN', 3, { ...opts, now: at(400 * day) });
+    expect(await cachedChapter('NASB95', 'JHN', 3, { ...opts, now: at(0) })).toMatchObject({ fetched: true });
+    expect(api.urls).toHaveLength(2);
+  });
+
+  it('two reads of one chapter at once both succeed', async () => {
+    const api = fakeApi();
+    const opts = { key: 'k', dir, fetch: api.fetch, now: at(0) };
+    const all = await Promise.all([1, 2, 3].map(() => cachedChapter('NASB95', 'JHN', 3, opts)));
+    expect(all.map((r) => r.data.id)).toEqual(['JHN.3', 'JHN.3', 'JHN.3']);
+    expect(JSON.parse(await readFile(join(dir, 'b8ee27bcd1cae43a-01', 'JHN.3.json'), 'utf8')).body).toBe(api.body);
+  });
+
+  it('refuses a response with no data, and keeps nothing', async () => {
+    const fetch = (async () => new Response('{"meta":{}}')) as typeof globalThis.fetch;
+    await expect(cachedChapter('NASB95', 'JHN', 3, { key: 'k', dir, fetch })).rejects.toThrow(/no data/);
     await expect(readFile(join(dir, 'b8ee27bcd1cae43a-01', 'JHN.3.json'), 'utf8')).rejects.toThrow();
   });
 

@@ -336,7 +336,9 @@ export interface BibleContract {
   /**
    * Where one verse of the `from` edition is in the `to` edition, through the
    * pivot. The address takes the `from` edition's scheme. Throws when that
-   * scheme has no such verse. See `MapKind` for the display rules.
+   * scheme has no such verse, and on a range, except a bridge's own address
+   * (`JHN 1:5-6/kjv`), which gives the units for every verse in it. See
+   * `MapKind` for the display rules.
    */
   map(from: string, address: string, to: string): Promise<MapResult>;
 
@@ -366,7 +368,7 @@ export interface BibleContract {
    */
   words(edition: string, address: string): Promise<WordsResult>;
 
-  /** The edition's rights record. Throws for an edition with none. */
+  /** The edition's rights record. Throws for an edition with none, and for one this contract doesn't read. */
   rights(edition: string): Promise<RightsRecord>;
 
   /**
