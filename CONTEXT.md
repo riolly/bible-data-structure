@@ -55,7 +55,7 @@ An edition the first apps read: the English editions in ADR-0008's support table
 One record per edition saying what its license allows: the route (provider), offline use (`none`, `cache` or `full`), refresh days, copy limit, AI use and attribution. The type and the seven local editions' records are in `src/contract/rights.ts`. Step 10 adds the licensed editions. (ADR-0008)
 
 **Pack**:
-The file an app ships for a set of editions, built from `build/corpus.db` by `bun run pack` (`src/pack/pack.ts`). It is a SQLite file with the corpus tables, so the app contract reads it the same way. It holds the editions it names and the hub editions their alignments point at, every scheme and mapping, and no token or block rows: a word address is read from the verse text (ADR-0004, step 13 amendment). Chapter documents are deflated. The corpus DB never ships.
+The file an app ships for a set of editions, built from `build/corpus.db` by `bun run pack` (`src/pack/pack.ts`). It is a SQLite file with the corpus tables, so the app contract reads it the same way. It holds the editions it names, the hub editions WLC and SBLGNT, the schemes of ADR-0008's target editions with their mappings, and no token or block rows: a word address is read from the verse text (ADR-0004, step 13 amendment). Chapter documents are deflated. An app ships one pack with all its local editions, so the hub is in it once. The corpus DB never ships.
 
 **Provider** *(planned)*:
 Where an edition's text comes from at read time: a local pack, or a licensed API such as API.Bible. A fetched chapter carries its own stamp, because the provider can refresh it. (ADR-0008)
@@ -155,7 +155,7 @@ An editorial link between two passages (for example from the Treasury of Scriptu
 ## App contract
 
 **App contract**:
-The calls an app makes to read the model: `chapter`, `passage`, `verseText`, `map`, `resolve`, `words` and `rights` (`src/contract/contract.ts`). An app names an edition, and the edition supplies the scheme, so app code writes `JHN 3:16`. Every result carries the edition stamps, and never a row id. An app stores the addresses a result carries, with their scheme, and reads them back with `resolve`, which takes any scheme. A pack (plan step 13) or a provider (step 10) implements the same interface.
+The calls an app makes to read the model: `chapter`, `passage`, `verseText`, `map`, `resolve`, `words`, `rights` and `credits` (`src/contract/contract.ts`). An app names an edition, and the edition supplies the scheme, so app code writes `JHN 3:16`. Every result carries the edition stamps, and never a row id. An app stores the addresses a result carries, with their scheme, and reads them back with `resolve`, which takes any scheme. A pack (plan step 13) or a provider (step 10) implements the same interface.
 
 **Reference**:
 A human-written string such as "1 Cor 13:4-7" or "Ps 23". `passage` resolves it to addresses under the edition's scheme with bible-passage-reference-parser, English only. A caller whose reader writes English numbers on a Hebrew or Greek edition passes the scheme the numbers follow (`kjv`). (ADR-0008)

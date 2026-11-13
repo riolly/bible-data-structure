@@ -1,9 +1,9 @@
 /**
- * `bun run pack [KJV BSB WLC+SBLGNT]`: build a pack per argument in
- * build/packs/ and measure it (plan step 13). For each pack it prints the file
+ * `bun run pack [WLC+SBLGNT KJV BSB KJV+BSB]`: build a pack per argument in
+ * build/packs/ and measure it (plan step 13). Every pack holds the hubs. For each pack it prints the file
  * size, gzipped and by table, and the time `chapter` takes for every chapter
- * of its first edition. Every chapter, and every verse's words in each book's
- * first chapter, must read the same from the pack as from build/corpus.db, or
+ * of its first edition. Every chapter, and every verse's words and map to the
+ * hubs in each book's first chapter, must read the same from the pack as from build/corpus.db, or
  * it stops.
  */
 
@@ -17,7 +17,7 @@ import { drizzle } from 'drizzle-orm/better-sqlite3';
 import type { BibleContract } from '../contract/contract';
 import { corpusContract } from '../contract/corpus-contract';
 import * as schema from '../db/corpus-schema';
-import { buildPack } from './pack';
+import { HUBS, buildPack } from './pack';
 
 const BUILD = join(import.meta.dirname, '..', '..', 'build');
 const CORPUS = join(BUILD, 'corpus.db');
@@ -71,13 +71,18 @@ async function measure(names: readonly string[], corpus: BibleContract) {
       const [a, b] = await Promise.all([contract.words(edition, v.address), corpus.words(edition, v.address)]);
       if (JSON.stringify(a) !== JSON.stringify(b)) throw new Error(`${v.address}: the pack's words differ from the corpus DB's`);
       words += a.words.length;
+      if (v.kind === 'bridge' || (HUBS as readonly string[]).includes(edition)) continue;
+      for (const hub of HUBS) {
+        const [m, n] = await Promise.all([contract.map(edition, v.address, hub), corpus.map(edition, v.address, hub)]);
+        if (JSON.stringify(m) !== JSON.stringify(n)) throw new Error(`${v.address}: the pack maps it to ${hub} differently from the corpus DB`);
+      }
     }
   }
   sqlite.close();
   const first = ms[0];
   const sorted = ms.slice(1).sort((x, y) => x - y);
   const at = (q: number) => sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))].toFixed(2);
-  console.log(`  ${chapters.length} ${edition} chapters, and the ${words} words of each book's first chapter, read the same as from the corpus DB`);
+  console.log(`  ${chapters.length} ${edition} chapters, and the ${words} words of each book's first chapter and its map to the hubs, read the same as from the corpus DB`);
   console.log(`  chapter read: first ${first.toFixed(1)} ms, then median ${at(0.5)} ms, p95 ${at(0.95)} ms, max ${at(1)} ms`);
 }
 
@@ -85,7 +90,7 @@ async function main() {
   mkdirSync(OUT, { recursive: true });
   const corpus = open(CORPUS);
   // a pack per argument, editions joined by `+`; the first edition's chapters are timed
-  for (const pack of process.argv.slice(2).length > 0 ? process.argv.slice(2) : ['KJV', 'BSB', 'WLC+SBLGNT']) {
+  for (const pack of process.argv.slice(2).length > 0 ? process.argv.slice(2) : ['WLC+SBLGNT', 'KJV', 'BSB', 'KJV+BSB']) {
     await measure(pack.split('+'), corpus.contract);
   }
   corpus.sqlite.close();

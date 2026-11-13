@@ -347,6 +347,16 @@ export function readWordAlignments(
     .map((row) => ({ ...row, strongs: row.strongs ? row.strongs.split(' ') : [] }));
 }
 
+/** Every data source and its credit, by id. */
+export function readDataSources(db: SyncSqliteDb): { id: string; url: string; license: string; attribution: string; changes: string }[] {
+  const d = schema.dataSource;
+  return db
+    .select({ id: d.id, url: d.url, license: d.license, attribution: d.attribution, changes: d.changes })
+    .from(d)
+    .orderBy(asc(d.id))
+    .all();
+}
+
 /** Every scheme in the corpus, the pivot included, rebuilt from its tables. */
 export function readSchemes(db: SyncSqliteDb): Map<string, Scheme> {
   interface Parts {
