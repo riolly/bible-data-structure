@@ -197,63 +197,19 @@ Verdict: the code list (USFM, CC BY 4.0) and the canon facts are free to use. Bo
 
 ## Recommendation
 
-This section is opinion built on the findings above.
+Adopted in ADR-0002 (Canon shape): the canon tables, order and status on the entry, sections as a tree, book names per language with a canon-specific override, and a per-source code override where a file's `\id` line names the wrong book. What that ADR leaves out:
 
-### Data shape for a canon
-
-Four tables. A canon is rows, as ADR-0002 says.
-
-```
-book            code PK ('GEN', 'ESG', '1MQ')      -- the USFM spec's definition of the content
-                usfm_number                         -- spec sort key, for stable file order only
-
-canon           id PK ('protestant', 'catholic', 'orthodox-greek', 'orthodox-slavonic',
-                       'tanakh', 'ethiopian-narrow', ...)
-                tradition, source_url, note
-
-canon_section   canon_id, section_id, parent_section_id NULL, ordinal, label_key
-                -- 'ot' > 'pentateuch'; 'tanakh' > 'torah' | 'neviim' | 'ketuvim';
-                -- 'appendix' for Vulgate appendix and Greek 4 Maccabees
-
-canon_entry     canon_id, entry_id, section_id, ordinal,
-                status ('canonical' | 'readable' | 'appendix'), label_key
-
-canon_entry_book canon_id, entry_id, ordinal, book_code
-```
-
-Why each part:
-
-- **Order lives on the entry**, so Catholic (CCC order and Nova Vulgata order), Greek and Slavonic Orthodox can each have their own. Two official Catholic orders exist, so the canon id must name a specific list, for example `catholic-ccc` and `catholic-nova-vulgata`, or one is picked and the other noted.
-- **Sections are a tree**, not a `testament` enum. Tanakh has three groups, the Vulgate has an appendix after Revelation, and the Greek Bible has 4 Maccabees in an appendix.
-- **An entry holds one or more book codes.** Tanakh "Samuel" is `1SA`+`2SA` and "The Twelve" is twelve codes. The EOTC list has "I and II Samuel" and "Ezra and Nehemia" as single entries. Counting "books in this canon" counts entries, which is how the traditions count (24 in the Tanakh, 81 in the EOTC list).
-- **Status per entry** carries the Orthodox *anagignoskomena* and the appendix books without inventing a separate canon for each.
-
-### When content differs: the code describes the content
-
-Pick the code by what the text is, using the spec's definitions, not by what the file's `\id` line says.
-
-- Catholic and Orthodox "Esther" is the entry `esther` → `ESG`. Catholic "Daniel" → `DAG`. Protestant Esther → `EST`.
-- The ingest needs a per-source code override, because real files disagree: ebible.org Douay-Rheims stores Greek Esther as `\id EST` (16 chapters) and Greek Daniel as `\id DAN` (14 chapters), while WEB Catholic uses `ESG` and `DAG`. Put the override in `src/ingest/sources.ts` next to the pin (`codeOverrides: { EST: 'ESG', DAN: 'DAG' }`) and check it with a chapter count test (Hebrew Esther has 10 chapters with no additions, Hebrew Daniel 12).
+- Two official Catholic orders exist, so a canon id must name a specific list, for example `catholic-ccc` and `catholic-nova-vulgata`.
 - Where the spec uses one code with a variable extent (`BAR` with 5 or 6 chapters, `PSA` with 150, 151 or 155), keep one code. The extent belongs to the edition's versification scheme, which is the versification research's job.
 - Where a tradition keeps a part as its own book (`LJE`, `PS2`, `S3Y`, `SUS`, `BEL`, `MAN`), the canon entry points at that code. Whether an edition can hold the same text under two layouts (Psalm 151 as `PSA` 151 and as `PS2`) needs a mapping, again in versification.
 - Books with no USFM code (Ethiopian broader NT, Josippon, 3 Corinthians) get a code only when an edition needs one. Prefer a code already used in Paratext practice (`3CO`, `1CL` from the CrossWire table) over inventing one, and record the source.
-
-### Book names per language
-
-```
-book_name   book_code, lang (BCP 47), canon_id NULL, long, short, abbr, source
-```
-
-- `canon_id` NULL is the default name. A canon-specific row overrides it: Russian `1ES` is "2 Ezra", Vulgate `EZR` is "1 Esdras", Orthodox `1KI` is "3 Kingdoms". This is the only safe way to show and parse "1 Esdras".
-- Seed English defaults from the USFM spec (CC BY 4.0). Seed other languages from public-domain editions' `\toc1`, `\toc2`, `\toc3`. Keep each edition's own `\toc` values as edition data, separate from this table.
-- Parsing a human reference ("Esd 3:1") must take a canon (and a language) as input.
+- Seed English names from the USFM spec (CC BY 4.0) and other languages from public-domain editions' `\toc1`, `\toc2`, `\toc3`. Keep each edition's own `\toc` values as edition data, separate from `book_name`.
 
 ### What to decide next
 
-1. **Canon ids and the first set to ship.** Protestant only, or Protestant plus one Catholic list so the ADR-0002 fixture runs against real canon data. Pick which Catholic order is the default.
-2. **The code-override rule at ingest.** Per-source config (recommended) or detection from content.
-3. **Whether `book` keeps any display column.** The recommendation moves names out entirely. `src/ingest/books.ts` and `book.slug`, `book.testament`, `book.position` go away, as ADR-0002 already says.
-4. **Status values.** Is `canonical | readable | appendix` enough, or does the Ethiopian narrower and broader split need a fourth value instead of two canons?
-5. **With the versification research:** schemes for the three Esther layouts (Vulgate chapters 11-16, Nova Vulgata lettered verses, WEB Catholic merged verses), Daniel 13-14 versus `SUS`/`BEL`, Baruch 6 versus `LJE`, and Psalm 151 inside `PSA` versus `PS2`.
-6. **Primary checks still open:** Oriental Orthodox lists (Coptic, Armenian, Syriac), the OSIS 2.1.1 manual's book appendix, and the Russian Longer Catechism text.
+Decided in ADR-0002: only the `protestant` canon is filled in, the code override is per-source config, and `book` keeps no display column. Still open:
+
+1. **Status values.** Is `canonical | readable | appendix` enough, or does the Ethiopian narrower and broader split need a fourth value instead of two canons?
+2. **With the versification research:** schemes for the three Esther layouts (Vulgate chapters 11-16, Nova Vulgata lettered verses, WEB Catholic merged verses), Daniel 13-14 versus `SUS`/`BEL`, Baruch 6 versus `LJE`, and Psalm 151 inside `PSA` versus `PS2`.
+3. **Primary checks still open:** Oriental Orthodox lists (Coptic, Armenian, Syriac), the OSIS 2.1.1 manual's book appendix, and the Russian Longer Catechism text.
 [tvtms]: https://github.com/STEPBible/STEPBible-Data/tree/5de0a47f35f0fc13dfe1430d104e5db8a4285f9c/Versification
