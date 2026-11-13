@@ -126,6 +126,26 @@ describe('licensed chapters: hold, refresh and fetch', () => {
     expect(calls).toBe(2);
   });
 
+  it('an answer that comes after the timeout does not replace the copy a later read holds', async () => {
+    const newer: ApiBibleChapter = { ...JHN_3, content: [...JHN_3.content, { type: 'text', text: ' ' }] };
+    let calls = 0;
+    let answerLate = () => {};
+    const fetchChapter: FetchChapter = async () => {
+      if (++calls === 1) {
+        await new Promise<void>((done) => (answerLate = done));
+        return { data: JHN_3, fetchedAt: '2026-11-13T00:00:00Z' };
+      }
+      return { data: newer, fetchedAt: '2026-11-13T00:00:00Z' };
+    };
+    const held = licensedChapters({ editions: EDITIONS, fetchChapter, schemeOf: () => SCHEME, now: () => Date.parse('2026-11-13T00:00:00Z'), fetchTimeoutMs: 20 });
+    await expect(held.chapter('KJVAB', 'JHN', 3)).rejects.toThrow(/gave no answer/);
+    const second = await held.chapter('KJVAB', 'JHN', 3);
+    answerLate();
+    await new Promise((done) => setTimeout(done, 5));
+    expect(held.chapter('KJVAB', 'JHN', 3)).toBe(second);
+    expect(calls).toBe(2);
+  });
+
   it('a copy stamped after now is held from now, and refreshed once its days pass', async () => {
     let clock = Date.parse('2026-11-13T00:00:00Z');
     let calls = 0;

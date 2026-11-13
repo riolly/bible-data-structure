@@ -104,12 +104,14 @@ export function licensedChapters(opts: LicensedChaptersOptions): LicensedChapter
   function fetchOne(key: string, id: string, e: LicensedEdition, book: string, chapter: number): Promise<ReadChapter | null> {
     const waiting = pending.get(key);
     if (waiting) return waiting;
+    let timedOut = false;
     const work = (async () => {
       const got = await opts.fetchChapter(id, book, chapter, e);
       const read = got ? await readLicensedChapter(id, e, opts.schemeOf(id), book, chapter, got.data) : null;
       // a copy stamped after now (the fetch's clock is ahead of ours) counts as fetched now
       const fetchedAt = got ? Math.min(Date.parse(got.fetchedAt), opts.now()) : opts.now();
-      if (!keeps(e)) return read;
+      // an answer after the timeout is not held: a later read may hold a newer copy by now
+      if (!keeps(e) || timedOut) return read;
       if (got && !fresh(e, fetchedAt)) {
         throw new Error(`${key} is still missing after its fetch: the fetch gave a copy from ${got.fetchedAt}, older than ${e.rights.refreshDays} days`);
       }
@@ -120,7 +122,10 @@ export function licensedChapters(opts: LicensedChaptersOptions): LicensedChapter
     // a fetch that never settles must not block the chapter: after the timeout the next read fetches again
     let timer: ReturnType<typeof setTimeout>;
     const timeout = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => reject(new Error(`${key}: the fetch gave no answer in ${timeoutMs} ms`)), timeoutMs);
+      timer = setTimeout(() => {
+        timedOut = true;
+        reject(new Error(`${key}: the fetch gave no answer in ${timeoutMs} ms`));
+      }, timeoutMs);
     });
     const p: Promise<ReadChapter | null> = Promise.race([work, timeout]).finally(() => {
       clearTimeout(timer);
