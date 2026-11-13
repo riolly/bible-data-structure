@@ -1,0 +1,95 @@
+/**
+ * The licensed chapters a provider holds (plan step 10): each chapter of a
+ * licensed edition as `readLicensedChapter` derives it, fetched when a read
+ * asks for it and fetched again once it is older than the rights record's
+ * `refreshDays`. A read of a chapter not held is a promise
+ * (`ChapterRead` in src/contract/reader.ts), so the contract awaits it.
+ *
+ * Chapter 0, the front matter, and a chapter outside the edition's scheme
+ * are never fetched. Reads of one chapter at the same time share one fetch.
+ *
+ * No Node-only import here: the fetch is injected (`chapterFetcher` in
+ * api-bible-cache.ts on Node).
+ */
+
+import type { ChapterRead } from '../contract/reader';
+import type { LicensedEdition } from '../contract/rights';
+import { lastVerse, type Scheme } from '../model/scheme';
+import { readLicensedChapter, type ApiBibleChapter, type ReadChapter } from './api-bible';
+
+/**
+ * One chapter as fetched, with when it was fetched, or null when the edition
+ * doesn't print it. `licensed` is the edition's record: a fetch that keeps
+ * copies keeps them for its rights record's `refreshDays`, as the provider does.
+ */
+export type FetchChapter = (
+  edition: string,
+  book: string,
+  chapter: number,
+  licensed: LicensedEdition,
+) => Promise<{ readonly data: ApiBibleChapter; readonly fetchedAt: string } | null>;
+
+export interface LicensedChaptersOptions {
+  readonly editions: ReadonlyMap<string, LicensedEdition>;
+  readonly fetchChapter: FetchChapter;
+  /** The edition's scheme. */
+  readonly schemeOf: (edition: string) => Scheme;
+  /** Milliseconds since the epoch. */
+  readonly now: () => number;
+}
+
+export interface LicensedChapters {
+  /** The chapter, or a promise when it isn't held or is past its refresh days. Null when the edition doesn't print it. */
+  chapter(edition: string, book: string, chapter: number): ChapterRead<ReadChapter>;
+  /** The markers outside the supported list in each held chapter that has any, keyed `NLT NUM 1`. */
+  unsupported(): ReadonlyMap<string, Readonly<Record<string, number>>>;
+}
+
+interface Held {
+  /** Null when the edition doesn't print the chapter. */
+  readonly read: ReadChapter | null;
+  readonly fetchedAt: number;
+}
+
+export function licensedChapters(opts: LicensedChaptersOptions): LicensedChapters {
+  const held = new Map<string, Held>();
+  const pending = new Map<string, Promise<ReadChapter | null>>();
+
+  const fresh = (e: LicensedEdition, fetchedAt: number) =>
+    e.rights.refreshDays === null || opts.now() - fetchedAt < e.rights.refreshDays * 86_400_000;
+
+  /** Fetch one chapter, once however many reads ask for it at the same time. */
+  function fetchOne(key: string, id: string, e: LicensedEdition, book: string, chapter: number): Promise<ReadChapter | null> {
+    let p = pending.get(key);
+    if (p) return p;
+    p = (async () => {
+      const got = await opts.fetchChapter(id, book, chapter, e);
+      const read = got ? await readLicensedChapter(id, e, opts.schemeOf(id), book, chapter, got.data) : null;
+      const fetchedAt = got ? Date.parse(got.fetchedAt) : opts.now();
+      if (got && !fresh(e, fetchedAt)) {
+        throw new Error(`${key} is still missing after its fetch: the fetch gave a copy from ${got.fetchedAt}, older than ${e.rights.refreshDays} days`);
+      }
+      // a refresh replaces the held chapter here: a changed stamp (held.get(key)?.read?.stamp) would be reported here
+      held.set(key, { read, fetchedAt });
+      return read;
+    })().finally(() => pending.delete(key));
+    pending.set(key, p);
+    return p;
+  }
+
+  return {
+    chapter(id, book, chapter) {
+      const e = opts.editions.get(id);
+      if (!e) throw new Error(`${id} is not a licensed edition`);
+      if (chapter < 1 || lastVerse(opts.schemeOf(id), book, chapter) === undefined) return null;
+      const key = `${id} ${book} ${chapter}`;
+      const h = held.get(key);
+      if (h && fresh(e, h.fetchedAt)) return h.read;
+      return fetchOne(key, id, e, book, chapter);
+    },
+    unsupported: () =>
+      new Map(
+        [...held].flatMap(([key, h]) => (h.read && Object.keys(h.read.unsupported).length > 0 ? [[key, h.read.unsupported] as const] : [])),
+      ),
+  };
+}

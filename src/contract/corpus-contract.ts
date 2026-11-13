@@ -42,8 +42,10 @@ export function corpusContract(db: SyncSqliteDb): BibleContract {
 }
 
 /**
- * The contract over any reader. Every call reads synchronously before its
- * first `await` (it has none), which the provider's refetch loop relies on.
+ * The contract over any reader. A call first reads every chapter it needs,
+ * at once, and awaits the ones the reader doesn't hold yet. It keeps no
+ * chapter between calls, so the next call sees a chapter the reader has
+ * refreshed.
  */
 export function readerContract(read: CorpusReader): BibleContract {
   const schemes = read.schemes();
@@ -83,8 +85,32 @@ export function readerContract(read: CorpusReader): BibleContract {
 
   const absent = (address: string, reason: AbsentReason): Absent => ({ kind: 'absent', address, reason });
 
+  /** The chapters one call has read, keyed `KJV JHN 3`. */
+  type Read = Map<string, ChapterUnits>;
   const noUnits: ChapterUnits = { stamp: '', verses: [] };
-  const unitsOf = (e: EditionStamp, book: string, chapter: number): ChapterUnits => read.chapter(e.id, book, chapter) ?? noUnits;
+  const chapterKey = (e: EditionStamp, book: string, chapter: number) => `${e.id} ${book} ${chapter}`;
+
+  /**
+   * Read the chapters of the refs the edition's scheme has, each once and all
+   * at once, into `got`. A ref the scheme lacks reads nothing.
+   */
+  async function load(e: EditionStamp, refs: Iterable<Ref>, got: Read = new Map()): Promise<Read> {
+    const reads: Promise<unknown>[] = [];
+    for (const r of refs) {
+      const key = chapterKey(e, r.book, r.chapter);
+      if (got.has(key) || !refExists(schemeOf(e), r)) continue;
+      got.set(key, noUnits);
+      reads.push(Promise.resolve(read.chapter(e.id, r.book, r.chapter)).then((u) => got.set(key, u ?? noUnits)));
+    }
+    await Promise.all(reads);
+    return got;
+  }
+
+  function unitsOf(got: Read, e: EditionStamp, book: string, chapter: number): ChapterUnits {
+    const units = got.get(chapterKey(e, book, chapter));
+    if (!units) throw new Error(`${chapterKey(e, book, chapter)} was not read before its lookup`);
+    return units;
+  }
 
   function toVerse(e: EditionStamp, book: string, u: VerseText, chapterStamp: string, part?: string): Verse {
     const start = { book, chapter: u.chapter, verse: u.verse, segment: u.segment };
@@ -106,9 +132,9 @@ export function readerContract(read: CorpusReader): BibleContract {
   }
 
   /** One address in one edition: the verse, the bridge that holds it, its parts, or absent. */
-  function lookup(e: EditionStamp, r: Ref): Lookup | Parts {
+  function lookup(e: EditionStamp, r: Ref, got: Read): Lookup | Parts {
     if (!refExists(schemeOf(e), r)) return absent(point(e, r), 'scheme');
-    const { stamp, verses } = unitsOf(e, r.book, r.chapter);
+    const { stamp, verses } = unitsOf(got, e, r.book, r.chapter);
     const unit = verseUnitOf(verses, r.chapter, r.verse, r.segment);
     if (unit) return toVerse(e, r.book, unit, stamp);
     if (r.segment !== '') {
@@ -124,8 +150,8 @@ export function readerContract(read: CorpusReader): BibleContract {
   }
 
   /** Every unit that holds each verse number of one chapter, in print order: a bridge under each of its numbers, a whole verse before its parts. */
-  function unitsByVerse(e: EditionStamp, book: string, chapter: number): { stamp: string; byVerse: Map<number, VerseText[]> } {
-    const { stamp, verses } = unitsOf(e, book, chapter);
+  function unitsByVerse(units: ChapterUnits): { stamp: string; byVerse: Map<number, VerseText[]> } {
+    const { stamp, verses } = units;
     const byVerse = new Map<number, VerseText[]>();
     for (const u of verses) {
       for (const v of verseNumbers(u)) {
@@ -181,7 +207,8 @@ export function readerContract(read: CorpusReader): BibleContract {
   }
 
   /** The edition's units for steps under its own scheme, one read per chapter. A bridge appears once. */
-  function ownSteps(e: EditionStamp, steps: readonly Step[]): Lookup[] {
+  async function ownSteps(e: EditionStamp, steps: readonly Step[]): Promise<Lookup[]> {
+    const got = await load(e, steps.map((step) => step.r));
     const chapters = new Map<number, ReturnType<typeof unitsByVerse>>();
     const found: Lookup[] = [];
     const seen = new Set<string>();
@@ -191,7 +218,7 @@ export function readerContract(read: CorpusReader): BibleContract {
         continue;
       }
       let units = chapters.get(r.chapter);
-      if (!units) chapters.set(r.chapter, (units = unitsByVerse(e, r.book, r.chapter)));
+      if (!units) chapters.set(r.chapter, (units = unitsByVerse(unitsOf(got, e, r.book, r.chapter))));
       const held = units.byVerse.get(r.verse);
       if (!held) {
         found.push(absent(point(e, r), 'text'));
@@ -213,10 +240,10 @@ export function readerContract(read: CorpusReader): BibleContract {
     readonly l: Lookup;
   }
 
-  /** Add the edition's units for target refs under its scheme, merging the parts of one unit. */
-  function place(e: EditionStamp, targets: readonly Ref[], out: Placed[]) {
+  /** Add the edition's units for target refs under its scheme, merging the parts of one unit. `got` holds their chapters. */
+  function place(e: EditionStamp, targets: readonly Ref[], out: Placed[], got: Read) {
     for (const t of targets) {
-      const l = lookup(e, t);
+      const l = lookup(e, t, got);
       if (l.kind === 'absent') {
         if (!out.some((p) => p.l.address === l.address)) out.push({ at: t, l });
         continue;
@@ -258,12 +285,13 @@ export function readerContract(read: CorpusReader): BibleContract {
   }
 
   /** The edition's units for steps under another scheme, each verse moved through the pivot. */
-  function otherSteps(e: EditionStamp, scheme: string, steps: readonly Step[]): Lookup[] {
-    mappings ??= read.mappings(schemes);
+  async function otherSteps(e: EditionStamp, scheme: string, steps: readonly Step[]): Promise<Lookup[]> {
+    const m = (mappings ??= read.mappings(schemes));
+    const moved = steps.map(({ r, exists }) => ({ r, targets: exists ? m.map(scheme, e.scheme, r) : [] }));
+    const got = await load(e, moved.flatMap((step) => step.targets));
     const placed: Placed[] = [];
-    for (const { r, exists } of steps) {
-      const targets = exists ? mappings.map(scheme, e.scheme, r) : [];
-      if (targets.length > 0) place(e, targets, placed);
+    for (const { r, targets } of moved) {
+      if (targets.length > 0) place(e, targets, placed, got);
       else placed.push({ at: null, l: absent(formatAddress({ scheme, start: r }), 'scheme') });
     }
     return inOrder(placed).map((p) => p.l);
@@ -330,9 +358,13 @@ export function readerContract(read: CorpusReader): BibleContract {
       if (lastVerse(schemeOf(e), book, chapter) === undefined) {
         return { kind: 'absent', edition: e, book, chapter, reason: 'scheme' };
       }
-      const doc = read.chapterDoc(e.id, book, chapter);
-      if (!doc) return { kind: 'absent', edition: e, book, chapter, reason: 'text' };
-      const { stamp, verses } = unitsOf(e, book, chapter);
+      let units = await read.chapter(e.id, book, chapter);
+      const doc = units && (await read.chapterDoc(e.id, book, chapter));
+      // the reader may have replaced the chapter between the two reads: take the units of the document's copy
+      if (units && doc && units.stamp !== doc.stamp) units = await read.chapter(e.id, book, chapter);
+      if (!units || !doc) return { kind: 'absent', edition: e, book, chapter, reason: 'text' };
+      if (units.stamp !== doc.stamp) throw new Error(`chapter: ${e.id} ${book} ${chapter} changed while it was read`);
+      const { stamp, verses } = units;
       return {
         kind: 'chapter',
         edition: e,
@@ -340,7 +372,7 @@ export function readerContract(read: CorpusReader): BibleContract {
         chapter,
         stamp,
         content: doc.content,
-        front: chapter === 1 ? (read.chapterDoc(e.id, book, 0)?.content ?? null) : null,
+        front: chapter === 1 ? ((await read.chapterDoc(e.id, book, 0))?.content ?? null) : null,
         verses: verses.map((u) => toVerse(e, book, u, stamp)),
       };
     },
@@ -349,17 +381,19 @@ export function readerContract(read: CorpusReader): BibleContract {
       const e = edition(id);
       const scheme = options.scheme ?? e.scheme;
       const s = schemeById(scheme, 'passage');
-      const parts = parseReference(reference).map((range): PassagePart => {
-        const { address, steps } = walk(s, range);
-        return { address, found: scheme === e.scheme ? ownSteps(e, steps) : otherSteps(e, scheme, steps) };
-      });
+      const parts = await Promise.all(
+        parseReference(reference).map(async (range): Promise<PassagePart> => {
+          const { address, steps } = walk(s, range);
+          return { address, found: await (scheme === e.scheme ? ownSteps(e, steps) : otherSteps(e, scheme, steps)) };
+        }),
+      );
       return { edition: e, reference, parts };
     },
 
     async verseText(id, address): Promise<VerseTextResult> {
       const e = edition(id);
       const r = verseRef(e, address, 'verseText');
-      return { edition: e, asked: point(e, r), found: lookup(e, r) };
+      return { edition: e, asked: point(e, r), found: lookup(e, r, await load(e, [r])) };
     },
 
     async map(fromId, address, toId): Promise<MapResult> {
@@ -369,8 +403,9 @@ export function readerContract(read: CorpusReader): BibleContract {
       const asked = point(from, r);
       if (!refExists(schemeOf(from), r)) throw new Error(`map: ${from.scheme} has no ${asked}`);
       mappings ??= read.mappings(schemes);
+      const targets = mappings.map(from.scheme, to.scheme, r);
       const placed: Placed[] = [];
-      place(to, mappings.map(from.scheme, to.scheme, r), placed);
+      place(to, targets, placed, await load(to, targets));
       const ordered = inOrder(placed).map((p) => p.l);
       const verses = ordered.filter((l): l is Verse => l.kind !== 'absent');
       const missing = ordered.filter((l): l is Absent => l.kind === 'absent');
@@ -392,12 +427,12 @@ export function readerContract(read: CorpusReader): BibleContract {
         // a bridge or a range: whole verses, as passage reads them
         const end = { chapter: a.end.chapter, verse: a.end.verse };
         const { steps } = walk(s, { book: r.book, start: { chapter: r.chapter, verse: r.verse }, end });
-        found = a.scheme === e.scheme ? ownSteps(e, steps) : otherSteps(e, a.scheme, steps);
+        found = await (a.scheme === e.scheme ? ownSteps(e, steps) : otherSteps(e, a.scheme, steps));
       } else if (a.scheme === e.scheme) {
-        const l = lookup(e, r);
+        const l = lookup(e, r, await load(e, [r]));
         found = l.kind === 'parts' ? [...l.parts] : [l];
       } else {
-        found = otherSteps(e, a.scheme, [{ r, exists: refExists(s, r) }]);
+        found = await otherSteps(e, a.scheme, [{ r, exists: refExists(s, r) }]);
       }
       return { edition: e, asked: address, found };
     },
@@ -409,7 +444,7 @@ export function readerContract(read: CorpusReader): BibleContract {
         throw new Error(`words: "${address}" names scheme ${a.scheme}, but ${e.id} uses ${e.scheme}. Map it first`);
       }
       const { wordIndex, ...r } = a.start;
-      const found = lookup(e, r);
+      const found = lookup(e, r, await load(e, [r]));
       // a range is allowed only as a bridge's own address, `JHN 1:5-6/kjv`
       if (a.end && (found.kind !== 'bridge' || formatAddress(a) !== found.address)) {
         throw new Error(`words: "${address}" is a range`);

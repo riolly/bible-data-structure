@@ -21,17 +21,29 @@ export interface ChapterUnits {
 }
 
 /**
- * The reads the contract makes, all sync. Each takes an edition's
- * abbreviation, and each read of one chapter returns null when the edition
- * doesn't hold it. A hub read takes a verse unit's first verse and segment.
- * An edition fetched a chapter at a time has no edition stamp, words stamp or
- * text stamp (ADR-0005, 2026-11-11 amendment).
+ * A read of one chapter: the chapter, null when the edition has no such
+ * chapter, or a promise when the reader doesn't hold it yet. The promise
+ * settles once the reader holds the chapter, or rejects when it can't get it.
+ * A chapter printed with no text is held, with no verse units.
+ */
+export type ChapterRead<T> = T | null | Promise<T | null>;
+
+/**
+ * The reads the contract makes. Each takes an edition's abbreviation. Only a
+ * chapter read may wait (`ChapterRead`); the others are sync. A hub read
+ * takes a verse unit's first verse and segment. An edition fetched a chapter
+ * at a time has no edition stamp, words stamp or text stamp (ADR-0005,
+ * 2026-11-11 amendment).
  */
 export interface CorpusReader {
   edition(abbrev: string): { abbrev: string; scheme: string; edition: string | null; wordsStamp: string | null; textStamp: string | null } | null;
-  chapter(abbrev: string, book: string, chapter: number): ChapterUnits | null;
-  /** Chapter 0 is the book's front matter. */
-  chapterDoc(abbrev: string, book: string, chapter: number): ChapterDoc | null;
+  chapter(abbrev: string, book: string, chapter: number): ChapterRead<ChapterUnits>;
+  /**
+   * The chapter's document, with the stamp of the copy it is from: a reader
+   * that fetches can replace a chapter between this read and `chapter`.
+   * Chapter 0 is the book's front matter.
+   */
+  chapterDoc(abbrev: string, book: string, chapter: number): ChapterRead<ChapterDoc & { readonly stamp: string }>;
   originalWords(abbrev: string, book: string, chapter: number, verse: number, segment: string): OriginalWord[];
   wordAlignments(abbrev: string, book: string, chapter: number, verse: number, segment: string): AlignedOriginal[];
   dataSources(): Credit[];
