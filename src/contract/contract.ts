@@ -281,8 +281,10 @@ export interface Word {
    * or several for a Greek compound. Empty when there is none: 2 SBLGNT words
    * Strong's dictionary lacks (`Ἀρνί`, `ἄμωμον`). A BSB word has the numbers
    * of what its aligned group translates: `In`, `the` and `beginning` in GEN
-   * 1:1 each have `H871 H7225` (the prefix בְּ and רֵאשִׁית). None when the word
-   * has no alignment, as in every Psalm title.
+   * 1:1 each have `H871 H7225` (the prefix בְּ and רֵאשִׁית). A KJV word has
+   * the number of its own `\w` tag, when the tag passed the check against the
+   * original words: `beginning` has `H7225`, and `In the` none. None when the
+   * word has no alignment, as in every BSB Psalm title.
    */
   readonly strongs: readonly string[];
   /** Set on the words of WLC and SBLGNT, null on a translation's. */

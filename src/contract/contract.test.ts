@@ -356,9 +356,28 @@ describe.skipIf(!native || !existsSync(CORPUS))('the app contract on the corpus 
     noRowIds(gen);
   });
 
-  it("words: a KJV word has an address and no Strong's numbers yet", async () => {
-    const w = await c.words('KJV', 'JHN 3:16!1');
-    expect(w.words).toEqual([{ address: 'JHN 3:16!1/kjv', text: 'For', kind: 'word', strongs: [], original: null, originals: [] }]);
+  it("words: a KJV word has the number of its own checked tag, linked to one original word (plan step 12)", async () => {
+    const gen = await c.words('KJV', 'GEN 1:1');
+    expect(gen.words.map((x) => [x.text, x.strongs, x.originals.map((o) => o.address)])).toEqual([
+      ['In', [], []],
+      ['the', [], []],
+      ['beginning', ['H7225'], ['GEN 1:1!1/org']],
+      ['God', ['H430'], ['GEN 1:1!3/org']],
+      ['created', ['H1254'], ['GEN 1:1!2/org']],
+      ['the', [], []],
+      ['heaven', ['H8064'], ['GEN 1:1!5/org']],
+      // tagged H0853, the second אֵת: וְאֵת, nearest its place in the verse
+      ['and', ['H853'], ['GEN 1:1!6/org']],
+      ['the', [], []],
+      ['earth', ['H776'], ['GEN 1:1!7/org']],
+    ]);
+    // a tag whose number no word of the mapped verse has is not stored (GEN 6:4 men|H0582, OSHB H376)
+    expect((await c.words('KJV', 'GEN 6:4')).words.filter((x) => x.text === 'men').at(-1)).toMatchObject({ strongs: [], originals: [] });
+    // a New Testament tag links to the SBLGNT word
+    expect((await c.words('KJV', 'JHN 3:16')).words.find((x) => x.text === 'God')?.originals).toEqual([
+      { edition: 'SBLGNT', address: 'JHN 3:16!5/org', owId: 'n43003016005' },
+    ]);
+    noRowIds(gen);
     expect((await c.words('BSB', 'ACT 8:37')).words).toEqual([]);
     await expect(c.words('KJV', 'JHN 3:16-17')).rejects.toThrow(/range/);
     await expect(c.words('WLC', 'GEN 1:1/kjv')).rejects.toThrow(/Map it first/);
@@ -401,7 +420,7 @@ describe.skipIf(!native || !existsSync(CORPUS))('the app contract on the corpus 
 
   it('credits: every data source with its license and credit', async () => {
     const credits = await c.credits();
-    expect(credits.map((r) => r.id)).toEqual(['clear-bsb', 'macula-greek', 'macula-hebrew', 'oshb', 'tvtms', 'usfm-spec', 'vrs']);
+    expect(credits.map((r) => r.id)).toEqual(['clear-bsb', 'kjv-strongs', 'macula-greek', 'macula-hebrew', 'oshb', 'tvtms', 'usfm-spec', 'vrs']);
     for (const r of credits) expect(r.attribution.length && r.license.length && r.url.length).toBeTruthy();
     expect(credits.find((r) => r.id === 'vrs')).toMatchObject({ license: 'MIT' });
   });

@@ -66,5 +66,9 @@ The New Testament misses are mostly the KJV's Greek text (the Textus Receptus) h
 
 Since the KJV tags leave words like `In the` untagged, and don't mark them as having no counterpart, the KJV can't be Full on these tags alone (ADR-0008).
 
+### The result
+
+After `bun run ingest` on 2026-11-13, 342,948 of the KJV's 349,308 tags pass and are stored in `word_alignment` (ADR-0003, KJV amendment). 6,043 name no word of their mapped verse, and 317 are in verses that map to no WLC or SBLGNT verse. The counts are per tag and verse unit, so they differ a little from the table above. A tag names a number, not a word, so the ingest picks one original word for it: the n-th word with the number when the counts match, else the word nearest the tag's place in the verse. 354,694 of the KJV's 790,676 words have a row.
+
 [clear]: https://github.com/Clear-Bible/Alignments/tree/c99bd0ae6946775f932517656308ca19fc706921
 [berean-tables]: https://bereanbible.com/bsb_tables.xlsx

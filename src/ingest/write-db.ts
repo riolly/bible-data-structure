@@ -18,7 +18,7 @@ import type { Block, ChapterDoc, OriginalWord, Reading, Token, VerseText } from 
 import { PIVOT, type MappingRow } from '../model/mapping';
 import { chapterStamp } from './edition';
 import { LIBPALASO_URL } from './schemes';
-import { CLEAR_BSB, MACULA_GREEK, MACULA_HEBREW, OSHB, TVTMS } from './sources';
+import { CLEAR_BSB, KJV_TAGS, MACULA_GREEK, MACULA_HEBREW, OSHB, TVTMS } from './sources';
 import type { WordAlignment } from './alignment';
 import { WORD_TEST_MARGIN } from './tvtms';
 import type { Scheme } from '../model/scheme';
@@ -551,6 +551,17 @@ export const DATA_SOURCES = [
       'original word: a WLC morpheme is stored as the OSHB word that holds it, with the morpheme\'s Strong\'s ' +
       'number from MACULA Hebrew. Clear aligned the BSB of 2024-09-04; its words are joined to our newer BSB ' +
       'verse by verse on their longest common sequence of words; words outside it, lone words of it where the verses differ, and words whose Clear group did not join whole are left unaligned.',
+  },
+  {
+    id: KJV_TAGS.id,
+    url: KJV_TAGS.url,
+    sha256: null,
+    license: 'Public domain',
+    attribution: KJV_TAGS.attribution,
+    changes:
+      "Only tags whose number is the Strong's number of a word in the WLC or SBLGNT verse the KJV verse maps to " +
+      "are kept, in word_alignment, each linked to one such word: the n-th tag with a number in a verse takes the " +
+      'n-th original word with that number, or the last. Leading zeros are dropped (H0430 is H430).',
   },
   {
     id: 'vrs',
