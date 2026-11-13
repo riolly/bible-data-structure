@@ -5,6 +5,7 @@ import { join } from 'node:path';
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
+import { dbReader } from '../contract/reader';
 import { LICENSED_EDITIONS, type LicensedEdition } from '../contract/rights';
 import type { SyncSqliteDb } from '../db/corpus-read';
 import { sqliteLoads } from '../ingest/native-probe';
@@ -46,7 +47,7 @@ describe.skipIf(!sqliteLoads())('a licensed edition through the cache and the pr
       return new Response(JSON.stringify({ data: JHN_3 }));
     }) as typeof globalThis.fetch;
     const p = provider({
-      db,
+      local: dbReader(db),
       fetchChapter: chapterFetcher({ key: 'k', dir, fetch, now: () => new Date(clock) }),
       editions: new Map([['NASB95', weekly]]),
       now: () => clock,
@@ -65,7 +66,7 @@ describe.skipIf(!sqliteLoads())('a licensed edition through the cache and the pr
       ['PSA 3', PSA_3],
     ]);
     const p = provider({
-      db,
+      local: dbReader(db),
       fetchChapter: async (_, book, chapter) => ({ data: chapters.get(`${book} ${chapter}`)!, fetchedAt: '2026-11-13T00:00:00Z' }),
     });
     for (const [at, data] of chapters) {

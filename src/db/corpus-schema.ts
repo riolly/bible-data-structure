@@ -176,7 +176,10 @@ export const chapterDoc = sqliteTable(
       .notNull()
       .references(() => book.code),
     chapter: integer('chapter').notNull(),
-    /** JSON array of the chapter's USJ nodes, with word attributes dropped (ADR-0001 amendment). */
+    /**
+     * JSON array of the chapter's USJ nodes, with word attributes dropped
+     * (ADR-0001 amendment). A pack stores it deflated, as a BLOB (src/pack/format.ts).
+     */
     usj: text('usj').notNull(),
     /**
      * The chapter stamp (ADR-0005 amendment, 2026-11-11): sha256 over `usj`

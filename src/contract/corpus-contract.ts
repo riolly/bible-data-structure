@@ -316,7 +316,7 @@ export function readerContract(read: CorpusReader): BibleContract {
         originals: [],
       }));
     }
-    // a translation's words come from the verse text, so a pack needs no token rows
+    // a translation's words are its verse text's words (ADR-0004, step 13 amendment)
     const tokens = verseWords(u.text).map((text, wordIndex) => ({ wordIndex, text }));
     const aligned = new Map<number, AlignedOriginal[]>();
     for (const r of read.wordAlignments(e.id, u.book, u.chapter, u.verse, u.segment)) {

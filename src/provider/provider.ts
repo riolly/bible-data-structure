@@ -20,9 +20,8 @@
 
 import type { BibleContract } from '../contract/contract';
 import { readerContract } from '../contract/corpus-contract';
-import { dbReader, type CorpusReader } from '../contract/reader';
+import type { CorpusReader } from '../contract/reader';
 import { LICENSED_EDITIONS, type LicensedEdition } from '../contract/rights';
-import type { SyncSqliteDb } from '../db/corpus-read';
 import type { Mappings } from '../model/mapping';
 import type { Scheme } from '../model/scheme';
 import type { ReadChapter } from './api-bible';
@@ -32,8 +31,11 @@ export type { LicensedEdition } from '../contract/rights';
 export type { FetchChapter } from './licensed-chapters';
 
 export interface ProviderOptions {
-  /** The corpus DB or a pack: the local editions, the schemes and the mappings. */
-  readonly db: SyncSqliteDb;
+  /**
+   * The reader over the corpus DB (`dbReader`) or a pack (`packReader` in
+   * src/pack/format.ts): the local editions, the schemes and the mappings.
+   */
+  readonly local: CorpusReader;
   readonly fetchChapter: FetchChapter;
   /** Default: `LICENSED_EDITIONS`. */
   readonly editions?: ReadonlyMap<string, LicensedEdition>;
@@ -56,13 +58,13 @@ const thenRead = <T, U>(r: T | null | Promise<T | null>, f: (x: T) => U): U | nu
 
 export function provider(opts: ProviderOptions): Provider {
   const editions = opts.editions ?? LICENSED_EDITIONS;
-  const db = dbReader(opts.db);
+  const local = opts.local;
   let schemes: Map<string, Scheme> | undefined;
   let mappings: Mappings | undefined;
 
   function schemeOf(id: string): Scheme {
     const name = editions.get(id)!.scheme;
-    const s = (schemes ??= db.schemes()).get(name);
+    const s = (schemes ??= local.schemes()).get(name);
     if (!s) throw new Error(`${id}: the DB has no scheme "${name}"`);
     return s;
   }
@@ -71,17 +73,17 @@ export function provider(opts: ProviderOptions): Provider {
   const licensed = (id: string) => editions.has(id);
   const reader: CorpusReader = {
     edition(id) {
-      if (!licensed(id)) return db.edition(id);
+      if (!licensed(id)) return local.edition(id);
       return { abbrev: id, scheme: schemeOf(id).id, edition: null, wordsStamp: null, textStamp: null };
     },
-    chapter: (id, book, chapter) => (licensed(id) ? held.chapter(id, book, chapter) : db.chapter(id, book, chapter)),
+    chapter: (id, book, chapter) => (licensed(id) ? held.chapter(id, book, chapter) : local.chapter(id, book, chapter)),
     chapterDoc: (id, book, chapter) =>
-      licensed(id) ? thenRead(held.chapter(id, book, chapter), (r: ReadChapter) => ({ ...r.doc, stamp: r.stamp })) : db.chapterDoc(id, book, chapter),
-    originalWords: (id, ...at) => (licensed(id) ? [] : db.originalWords(id, ...at)),
-    wordAlignments: (id, ...at) => (licensed(id) ? [] : db.wordAlignments(id, ...at)),
-    dataSources: () => db.dataSources(),
-    schemes: () => (schemes ??= db.schemes()),
-    mappings: (s) => (mappings ??= db.mappings(s)),
+      licensed(id) ? thenRead(held.chapter(id, book, chapter), (r: ReadChapter) => ({ ...r.doc, stamp: r.stamp })) : local.chapterDoc(id, book, chapter),
+    originalWords: (id, ...at) => (licensed(id) ? [] : local.originalWords(id, ...at)),
+    wordAlignments: (id, ...at) => (licensed(id) ? [] : local.wordAlignments(id, ...at)),
+    dataSources: () => local.dataSources(),
+    schemes: () => (schemes ??= local.schemes()),
+    mappings: (s) => (mappings ??= local.mappings(s)),
   };
   const contract = readerContract(reader);
 

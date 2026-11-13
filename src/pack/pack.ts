@@ -1,8 +1,10 @@
 /**
  * A pack (plan step 13): the file an app ships, built from `build/corpus.db`,
- * which never ships. It is a SQLite file with the corpus tables, so
- * `corpusContract` reads it unchanged, and it differs from the corpus DB in
- * three ways:
+ * which never ships. `buildPack` writes it, `openPack` reads it through the
+ * app contract, and `checkPack` stops unless a pack reads the same as the
+ * corpus DB. format.ts holds what differs from the corpus DB on disk and the
+ * reader that undoes it. A pack is a SQLite file with the corpus tables, and
+ * it differs from the corpus DB in these ways:
  *
  * - It holds only the editions it names, plus the hub editions WLC and
  *   SBLGNT: every edition maps a verse to its Hebrew or Greek words (ADR-0008),
@@ -12,21 +14,27 @@
  * - It holds only the schemes of ADR-0008's target editions and of its own
  *   editions, with their mappings. `resolve` throws on an address under
  *   another scheme (`lxx`, `vul`).
- * - It has no `token` or `block` rows. A unit's words are its verse text's
- *   words (`verseWords`), which the ingest checks against the tokens.
- * - Each chapter document is deflated (`usj` holds a BLOB), which
- *   `readChapterDoc` inflates.
+ * - It drops the `token` and `block` tables (`DROPPED`). A unit's words are
+ *   its verse text's words (`verseWords`), which the ingest checks against
+ *   the tokens.
+ * - Each chapter document is deflated: `usj`, declared TEXT, holds a BLOB,
+ *   which `packReader` (format.ts) inflates.
  *
  * Row ids are the corpus DB's: a pack is read alone, never merged with another.
  */
 
 import { existsSync, rmSync } from 'node:fs';
 
-import { deflateSync, strToU8 } from 'fflate';
+import Database from 'better-sqlite3';
+import { drizzle } from 'drizzle-orm/better-sqlite3';
 
+import type { BibleContract } from '../contract/contract';
+import { readerContract } from '../contract/corpus-contract';
 import { LICENSED_EDITIONS } from '../contract/rights';
+import * as schema from '../db/corpus-schema';
 import { PIVOT } from '../model/mapping';
 import { createCorpusDb, createIndexes } from '../ingest/write-db';
+import { DROPPED, deflateDoc, packReader } from './format';
 
 /** The hub texts (ADR-0003), in every pack. */
 export const HUBS = ['WLC', 'SBLGNT'] as const;
@@ -104,14 +112,14 @@ export function buildPack(
       `SELECT translation_id, book, chapter, usj, stamp FROM src.chapter_doc WHERE translation_id IN ${inList}${ofBooks}`,
     );
     for (const d of docs.all()) {
-      doc.run(d.translation_id, d.book, d.chapter, Buffer.from(deflateSync(strToU8(d.usj), { level: 9 })), d.stamp);
+      doc.run(d.translation_id, d.book, d.chapter, Buffer.from(deflateDoc(d.usj)), d.stamp);
     }
     for (const t of PER_EDITION) sqlite.exec(`INSERT INTO main.${t} SELECT * FROM src.${t} WHERE translation_id IN ${inList}${ofBooks}`);
     sqlite.exec('COMMIT');
     sqlite.exec('DETACH DATABASE src');
 
     createIndexes(sqlite);
-    sqlite.exec('DROP TABLE token; DROP TABLE block');
+    sqlite.exec(DROPPED.map((t) => `DROP TABLE ${t}`).join('; '));
     const broken = sqlite.pragma('foreign_key_check') as unknown[];
     if (broken.length > 0) throw new Error(`pack: ${broken.length} rows point at rows the pack lacks`);
     sqlite.exec('ANALYZE; VACUUM');
@@ -119,4 +127,63 @@ export function buildPack(
   } finally {
     sqlite.close();
   }
+}
+
+/** A pack opened read-only: the app contract over it, and its SQLite handle for measuring the file. */
+export interface OpenPack {
+  readonly sqlite: Database.Database;
+  readonly contract: BibleContract;
+}
+
+/** Open the pack at `path` read-only. Close it with `sqlite.close()`. */
+export function openPack(path: string): OpenPack {
+  const sqlite = new Database(path, { readonly: true });
+  return { sqlite, contract: readerContract(packReader(drizzle({ client: sqlite, schema }))) };
+}
+
+/** What `checkPack` read: the chapters and words it compared, and the time each pack chapter read took, in read order. */
+export interface PackCheck {
+  readonly chapters: number;
+  readonly words: number;
+  readonly ms: readonly number[];
+}
+
+/**
+ * Check that `pack` reads the same as the corpus DB for `edition`: every
+ * chapter the pack holds, and every verse's words and map to each hub in each
+ * book's first chapter. Throws at the first difference. Every verse's words
+ * take about 3 ms a call on each side, so the words check stops at a book's
+ * first chapter.
+ */
+export async function checkPack(pack: OpenPack, corpus: BibleContract, edition: string): Promise<PackCheck> {
+  const chapters = pack.sqlite
+    .prepare<[string], { book: string; chapter: number }>(
+      `SELECT d.book, d.chapter FROM chapter_doc d JOIN translation t ON t.id = d.translation_id
+       JOIN book b ON b.code = d.book WHERE t.abbrev = ? AND d.chapter > 0 ORDER BY b.usfm_number, d.chapter`,
+    )
+    .all(edition);
+  const ms: number[] = [];
+  let words = 0;
+  let lastBook = '';
+  for (const { book, chapter } of chapters) {
+    const t = performance.now();
+    const got = await pack.contract.chapter(edition, book, chapter);
+    ms.push(performance.now() - t);
+    if (JSON.stringify(got) !== JSON.stringify(await corpus.chapter(edition, book, chapter))) {
+      throw new Error(`${edition} ${book} ${chapter}: the pack's chapter differs from the corpus DB's`);
+    }
+    if (got.kind !== 'chapter' || book === lastBook) continue;
+    lastBook = book;
+    for (const v of got.verses) {
+      const [a, b] = await Promise.all([pack.contract.words(edition, v.address), corpus.words(edition, v.address)]);
+      if (JSON.stringify(a) !== JSON.stringify(b)) throw new Error(`${v.address}: the pack's words differ from the corpus DB's`);
+      words += a.words.length;
+      if (v.kind === 'bridge' || (HUBS as readonly string[]).includes(edition)) continue;
+      for (const hub of HUBS) {
+        const [m, n] = await Promise.all([pack.contract.map(edition, v.address, hub), corpus.map(edition, v.address, hub)]);
+        if (JSON.stringify(m) !== JSON.stringify(n)) throw new Error(`${v.address}: the pack maps it to ${hub} differently from the corpus DB`);
+      }
+    }
+  }
+  return { chapters: chapters.length, words, ms };
 }

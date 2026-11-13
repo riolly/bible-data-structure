@@ -3,6 +3,7 @@ import { join } from 'node:path';
 
 import { beforeAll, describe, expect, it } from 'vitest';
 
+import { dbReader } from '../contract/reader';
 import type { RightsRecord } from '../contract/rights';
 import type { SyncSqliteDb } from '../db/corpus-read';
 import { sqliteLoads } from '../ingest/native-probe';
@@ -79,7 +80,7 @@ describe.skipIf(!native || !existsSync(CORPUS))('the provider: local and license
       const data = CHAPTERS.get(key);
       return data ? { data, fetchedAt: new Date(clock).toISOString() } : null;
     };
-    return { p: provider({ db, fetchChapter, editions: EDITIONS, now: () => clock }), fetches };
+    return { p: provider({ local: dbReader(db), fetchChapter, editions: EDITIONS, now: () => clock }), fetches };
   };
 
   beforeAll(async () => {
@@ -165,7 +166,7 @@ describe.skipIf(!native || !existsSync(CORPUS))('the provider: local and license
   });
 
   it('rights: the licensed records, and the local ones from rights.ts', async () => {
-    const p = provider({ db, fetchChapter: async () => null });
+    const p = provider({ local: dbReader(db), fetchChapter: async () => null });
     for (const id of ['NASB95', 'NLT', 'NIV']) {
       expect(await p.rights(id)).toMatchObject({ edition: id, route: 'api.bible', offline: 'cache', refreshDays: 30, copyLimit: 100 });
       expect((await p.rights(id)).attribution).toMatch(/Copyright|copyright/);
