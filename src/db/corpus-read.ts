@@ -1,8 +1,8 @@
-import { and, asc, eq, gte, inArray, isNull, lte, or } from 'drizzle-orm';
-import { alias, type BaseSQLiteDatabase } from 'drizzle-orm/sqlite-core';
+import { and, asc, eq, inArray, isNull, or } from 'drizzle-orm';
+import type { BaseSQLiteDatabase } from 'drizzle-orm/sqlite-core';
 import { inflateSync, strFromU8 } from 'fflate';
 
-import type { Block, ChapterDoc, OriginalWord, Reading, Token, VerseText } from '../model/corpus';
+import type { Block, ChapterDoc, Reading, Token, VerseText } from '../model/corpus';
 import { Mappings, type MappingRow } from '../model/mapping';
 import type { Scheme } from '../model/scheme';
 import * as schema from './corpus-schema';
@@ -63,20 +63,6 @@ export function canonBooks(db: SyncSqliteDb, canonId: string, lang: string): Can
     if (specific || !names.get(n.code)?.specific) names.set(n.code, { name: n.name, specific });
   }
   return rows.map((r) => ({ code: r.code, name: names.get(r.code)?.name ?? r.code, section: r.section }));
-}
-
-/** One edition's scheme and stamps (ADR-0002, ADR-0005), or null when the corpus has no such edition. */
-export function readEdition(
-  db: SyncSqliteDb,
-  translationAbbrev: string,
-): { abbrev: string; scheme: string; edition: string; wordsStamp: string | null; textStamp: string | null } | null {
-  const t = schema.translation;
-  const [row] = db
-    .select({ abbrev: t.abbrev, scheme: t.scheme, edition: t.edition, wordsStamp: t.wordsStamp, textStamp: t.textStamp })
-    .from(t)
-    .where(eq(t.abbrev, translationAbbrev))
-    .all();
-  return row ?? null;
 }
 
 /**
@@ -160,18 +146,6 @@ export function readChapterDoc(
   return { chapter, content: JSON.parse(json), stamp: row.stamp };
 }
 
-/** One chapter's stamp, without its document, or null when the edition has no such chapter. */
-export function readChapterStamp(db: SyncSqliteDb, translationAbbrev: string, bookCode: string, chapter: number): string | null {
-  const d = schema.chapterDoc;
-  const [row] = db
-    .select({ stamp: d.stamp })
-    .from(d)
-    .innerJoin(schema.translation, eq(d.translationId, schema.translation.id))
-    .where(and(eq(schema.translation.abbrev, translationAbbrev), eq(d.book, bookCode), eq(d.chapter, chapter)))
-    .all();
-  return row?.stamp ?? null;
-}
-
 const verseUnitColumns = {
   chapter: schema.verseText.chapter,
   verse: schema.verseText.verse,
@@ -190,38 +164,6 @@ export function readVerseText(db: SyncSqliteDb, translationAbbrev: string, bookC
     .where(and(eq(schema.translation.abbrev, translationAbbrev), eq(v.book, bookCode), eq(v.chapter, chapter)))
     .orderBy(asc(v.verse), asc(v.segment))
     .all();
-}
-
-/**
- * The verse unit that holds `chapter:verse` in one edition, or null when the
- * edition has none. A bridge `\v 20-21` is found from 20 and from 21, and its
- * words are the tokens of verse 20 (ADR-0004 v1.5).
- */
-export function readVerseUnit(
-  db: SyncSqliteDb,
-  translationAbbrev: string,
-  bookCode: string,
-  chapter: number,
-  verse: number,
-  segment = '',
-): VerseText | null {
-  const v = schema.verseText;
-  const [row] = db
-    .select(verseUnitColumns)
-    .from(v)
-    .innerJoin(schema.translation, eq(v.translationId, schema.translation.id))
-    .where(
-      and(
-        eq(schema.translation.abbrev, translationAbbrev),
-        eq(v.book, bookCode),
-        eq(v.chapter, chapter),
-        eq(v.segment, segment),
-        lte(v.verse, verse),
-        gte(v.lastVerse, verse),
-      ),
-    )
-    .all();
-  return row ?? null;
 }
 
 /** One chapter's readings (ADR-0007), in word order. The ketiv they cover are the chapter's tokens. */
@@ -245,116 +187,6 @@ export function readReadings(db: SyncSqliteDb, translationAbbrev: string, bookCo
     .orderBy(asc(r.verse), asc(r.segment), asc(r.wordIndex), asc(r.wordCount))
     .all()
     .map((row) => ({ ...row, owIds: row.owIds ? row.owIds.split(' ') : [] }));
-}
-
-/** The original words of one verse unit of WLC or SBLGNT (plan step 11), in read order. Empty for other editions. */
-export function readOriginalWords(
-  db: SyncSqliteDb,
-  translationAbbrev: string,
-  bookCode: string,
-  chapter: number,
-  verse: number,
-  segment: string,
-): OriginalWord[] {
-  const w = schema.originalWord;
-  return db
-    .select({
-      owId: w.owId,
-      book: w.book,
-      chapter: w.chapter,
-      verse: w.verse,
-      segment: w.segment,
-      wordIndex: w.wordIndex,
-      seq: w.seq,
-      kind: w.kind,
-      text: w.text,
-      lemma: w.lemma,
-      strongs: w.strongs,
-      morph: w.morph,
-      gloss: w.gloss,
-    })
-    .from(w)
-    .innerJoin(schema.translation, eq(w.translationId, schema.translation.id))
-    .where(
-      and(
-        eq(schema.translation.abbrev, translationAbbrev),
-        eq(w.book, bookCode),
-        eq(w.chapter, chapter),
-        eq(w.verse, verse),
-        eq(w.segment, segment),
-      ),
-    )
-    .orderBy(asc(w.seq))
-    .all()
-    .map((row) => ({ ...row, strongs: row.strongs ? row.strongs.split(' ') : [] }));
-}
-
-/** One alignment row of a word: the original word it translates and the Strong's numbers it carries (plan step 12). */
-export interface AlignedOriginal {
-  readonly wordIndex: number;
-  readonly strongs: readonly string[];
-  readonly owId: string;
-  /** Where the original word is: its edition and scheme, and its word index (null for a qere). */
-  readonly edition: string;
-  readonly scheme: string;
-  readonly book: string;
-  readonly chapter: number;
-  readonly verse: number;
-  readonly segment: string;
-  readonly owWordIndex: number | null;
-}
-
-/** The alignment rows of one verse unit's words, by word index and then `seq`. Empty for an edition with none. */
-export function readWordAlignments(
-  db: SyncSqliteDb,
-  translationAbbrev: string,
-  bookCode: string,
-  chapter: number,
-  verse: number,
-  segment: string,
-): AlignedOriginal[] {
-  const a = schema.wordAlignment;
-  const o = schema.originalWord;
-  const hub = alias(schema.translation, 'hub');
-  return db
-    .select({
-      wordIndex: a.wordIndex,
-      strongs: a.strongs,
-      owId: a.owId,
-      edition: hub.abbrev,
-      scheme: hub.scheme,
-      book: o.book,
-      chapter: o.chapter,
-      verse: o.verse,
-      segment: o.segment,
-      owWordIndex: o.wordIndex,
-    })
-    .from(a)
-    .innerJoin(schema.translation, eq(a.translationId, schema.translation.id))
-    .innerJoin(o, and(eq(o.source, a.source), eq(o.owId, a.owId)))
-    .innerJoin(hub, eq(o.translationId, hub.id))
-    .where(
-      and(
-        eq(schema.translation.abbrev, translationAbbrev),
-        eq(a.book, bookCode),
-        eq(a.chapter, chapter),
-        eq(a.verse, verse),
-        eq(a.segment, segment),
-      ),
-    )
-    .orderBy(asc(a.wordIndex), asc(a.seq))
-    .all()
-    .map((row) => ({ ...row, strongs: row.strongs ? row.strongs.split(' ') : [] }));
-}
-
-/** Every data source and its credit, by id. */
-export function readDataSources(db: SyncSqliteDb): { id: string; url: string; license: string; attribution: string; changes: string }[] {
-  const d = schema.dataSource;
-  return db
-    .select({ id: d.id, url: d.url, license: d.license, attribution: d.attribution, changes: d.changes })
-    .from(d)
-    .orderBy(asc(d.id))
-    .all();
 }
 
 /** Every scheme in the corpus, the pivot included, rebuilt from its tables. */
