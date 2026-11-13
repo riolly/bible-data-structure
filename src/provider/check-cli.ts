@@ -11,6 +11,7 @@ import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 
+import { dbReader } from '../contract/reader';
 import { LICENSED_EDITIONS } from '../contract/rights';
 import * as schema from '../db/corpus-schema';
 import { apiBibleKey, chapterFetcher } from './api-bible-cache';
@@ -32,7 +33,7 @@ const CHAPTERS: [edition: string, book: string, chapter: number][] = [
 
 async function main(key: string) {
   const db = drizzle({ client: new Database(CORPUS, { readonly: true }), schema });
-  const c = provider({ db, fetchChapter: chapterFetcher({ key, dir: join('build', 'api-bible') }) });
+  const c = provider({ local: dbReader(db), fetchChapter: chapterFetcher({ key, dir: join('build', 'api-bible') }) });
   let failed = false;
   const check = (ok: boolean, what: string) => {
     console.log(`${ok ? 'ok  ' : 'FAIL'} ${what}`);

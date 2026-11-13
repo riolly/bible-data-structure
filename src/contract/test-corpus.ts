@@ -17,14 +17,19 @@ export interface FixtureEdition {
 }
 
 export async function memoryCorpus(fixture?: FixtureEdition): Promise<SyncSqliteDb> {
+  return testCorpus(':memory:', fixture ? [fixture] : []);
+}
+
+/** The same corpus at `path`, a file `buildPack` can attach, with an edition per fixture. */
+export async function testCorpus(path: string, fixtures: readonly FixtureEdition[]): Promise<SyncSqliteDb> {
   const w = await import('../ingest/write-db');
   const { writeEdition } = await import('../ingest/edition-writer');
   const { normalizeChapters, splitChapters } = await import('../ingest/normalize');
   const { loadSchemes } = await import('../ingest/schemes');
-  const { db } = w.createCorpusDb(':memory:');
+  const { db } = w.createCorpusDb(path);
   w.seedBooksAndCanons(db);
   w.seedSchemes(db, loadSchemes());
-  if (fixture) {
+  for (const fixture of fixtures) {
     const { docs, blocks, tokens, verses } = normalizeChapters(splitChapters(fixture.usj as Parameters<typeof splitChapters>[0]));
     const meta = {
       name: 'Fixture',

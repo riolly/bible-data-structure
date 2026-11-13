@@ -1,6 +1,6 @@
 /**
- * The reads the contract makes (`CorpusReader`), and the reader over one DB,
- * the corpus or a pack, with the queries only it makes. Reads that other code
+ * The reads the contract makes (`CorpusReader`), and the reader over one DB
+ * with the corpus tables, with the queries only it makes. Reads that other code
  * shares stay in src/db/corpus-read.ts.
  */
 
@@ -55,9 +55,10 @@ export interface CorpusReader {
 const KEPT_CHAPTERS = 16;
 
 /**
- * The reader over one DB: the corpus or a pack, which nothing writes while it
- * is read. It keeps the chapters it read last, so the verse lookups of one
- * chapter read its units once.
+ * The reader over one DB with the corpus tables, which nothing writes while
+ * it is read. A pack reads through `packReader` (src/pack/format.ts), which
+ * inflates its chapter documents. It keeps the chapters it read last, so the
+ * verse lookups of one chapter read its units once.
  */
 export function dbReader(db: SyncSqliteDb): CorpusReader {
   const kept = new Map<string, ChapterUnits | null>();

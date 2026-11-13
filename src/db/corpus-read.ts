@@ -1,6 +1,5 @@
 import { and, asc, eq, inArray, isNull, or } from 'drizzle-orm';
 import type { BaseSQLiteDatabase } from 'drizzle-orm/sqlite-core';
-import { inflateSync, strFromU8 } from 'fflate';
 
 import type { Block, ChapterDoc, Reading, Token, VerseText } from '../model/corpus';
 import { Mappings, type MappingRow } from '../model/mapping';
@@ -140,10 +139,7 @@ export function readChapterDoc(
     .where(and(eq(schema.translation.abbrev, translationAbbrev), eq(d.book, bookCode), eq(d.chapter, chapter)))
     .all();
   if (!row) return null;
-  // a pack stores the document deflated (src/pack/pack.ts)
-  const usj: string | Uint8Array = row.usj;
-  const json = typeof usj === 'string' ? usj : strFromU8(inflateSync(usj));
-  return { chapter, content: JSON.parse(json), stamp: row.stamp };
+  return { chapter, content: JSON.parse(row.usj), stamp: row.stamp };
 }
 
 const verseUnitColumns = {
