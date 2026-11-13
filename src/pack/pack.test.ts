@@ -1,8 +1,8 @@
-import { copyFileSync, existsSync, mkdtempSync, readFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import type { BibleContract } from '../contract/contract';
 import { sqliteLoads } from '../ingest/native-probe';
@@ -31,6 +31,8 @@ describe.skipIf(!native)('checkPack on a small corpus (fixtures/adversarial.usj.
     buildPack(join(dir, 'corpus.db'), join(dir, 'FIX.db'), ['FIX']);
   });
 
+  afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
   it('reads the same as the corpus DB, with every document deflated and no token or block rows', async () => {
     const { checkPack, openPack } = await import('./pack');
     const pack = openPack(join(dir, 'FIX.db'));
@@ -55,7 +57,8 @@ describe.skipIf(!native)('checkPack on a small corpus (fixtures/adversarial.usj.
     const p = provider({ local: packReader(drizzle({ client: pack.sqlite, schema })), fetchChapter: async () => null });
     const got = await p.chapter('FIX', 'JHN', 1);
     expect(got).toEqual(await corpus.chapter('FIX', 'JHN', 1));
-    expect(got.kind === 'chapter' && got.front).not.toBeNull();
+    expect(got.kind).toBe('chapter');
+    if (got.kind === 'chapter') expect(got.front).not.toBeNull();
     pack.sqlite.close();
   });
 
