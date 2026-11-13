@@ -30,7 +30,7 @@ export interface Scheme {
   readonly textDecisions?: ReadonlyMap<string, boolean>;
 }
 
-export const verseKey = (book: string, chapter: number, verse: number): string =>
+const verseKey = (book: string, chapter: number, verse: number): string =>
   `${book} ${chapter}:${verse}`;
 
 /** The last verse of a chapter, or undefined if the scheme lacks the chapter. */

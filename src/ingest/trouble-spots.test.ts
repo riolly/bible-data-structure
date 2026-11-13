@@ -5,7 +5,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 
 import type { Token } from '../model/corpus';
 import type { Mappings, Ref } from '../model/mapping';
-import { PIVOT } from '../model/mapping';
+import { PIVOT, ref } from '../model/mapping';
 import { checkVerses, titleChapters } from '../model/scheme';
 import { nativeModuleLoads } from './native-probe';
 import { loadSchemes } from './schemes';
@@ -36,7 +36,6 @@ const native = nativeModuleLoads(
 );
 const hasTvtms = existsSync(TVTMS_PATH);
 
-const ref = (book: string, chapter: number, verse: number, segment = ''): Ref => ({ book, chapter, verse, segment });
 const fmt = (r: Ref) => `${r.book} ${r.chapter}:${r.verse}${r.segment}`;
 
 describe.skipIf(!native || !hasTvtms)('trouble spots (research/README.md)', () => {

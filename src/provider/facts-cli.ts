@@ -6,7 +6,6 @@
  * `build/api-bible/` for 30 days, so a rerun makes no call.
  */
 
-import { existsSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
@@ -15,7 +14,7 @@ import { loadSchemes } from '../ingest/schemes';
 import { TVTMS } from '../ingest/sources';
 import { readTvtms } from '../ingest/tvtms';
 import { API_BIBLE_EDITIONS, type ApiBibleNode } from './api-bible';
-import { ApiBibleHttpError, cachedBooks, cachedPassage, type CacheOptions } from './api-bible-cache';
+import { ApiBibleHttpError, apiBibleKey, cachedBooks, cachedPassage, type CacheOptions } from './api-bible-cache';
 import { FACTS_DIR, editionFacts, type BookContent } from './edition-facts';
 
 const PASSAGE_ID = /^([0-9A-Z]{3})\.(\d+)\.(\d+)-\1\.(\d+)\.(\d+)$/;
@@ -99,12 +98,7 @@ if (!edition) {
   console.error('usage: bun run api-bible:facts <edition>');
   process.exit(2);
 }
-if (existsSync('.env')) process.loadEnvFile('.env');
-const key = process.env.API_BIBLE_KEY;
-if (!key) {
-  console.error('API_BIBLE_KEY is not set: put it in .env (research/api-bible.md)');
-  process.exit(2);
-}
+const key = apiBibleKey();
 main(edition, key).catch((e) => {
   console.error(e);
   process.exit(1);

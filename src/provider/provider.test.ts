@@ -5,7 +5,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 
 import type { RightsRecord } from '../contract/rights';
 import type { SyncSqliteDb } from '../db/corpus-read';
-import { nativeModuleLoads } from '../ingest/native-probe';
+import { sqliteLoads } from '../ingest/native-probe';
 import type { ApiBibleChapter, ApiBibleNode } from './api-bible';
 import { provider, type FetchChapter, type LicensedEdition } from './provider';
 
@@ -18,9 +18,7 @@ import { provider, type FetchChapter, type LicensedEdition } from './provider';
  */
 
 const CORPUS = join(import.meta.dirname, '..', '..', 'build', 'corpus.db');
-const native = nativeModuleLoads(
-  "import('better-sqlite3').then(({ default: D }) => { new D(':memory:').close(); process.exit(0); }, () => process.exit(1));",
-);
+const native = sqliteLoads();
 
 const fixture = (name: string) =>
   (JSON.parse(readFileSync(join(import.meta.dirname, 'fixtures', name), 'utf8')) as { data: ApiBibleChapter }).data;

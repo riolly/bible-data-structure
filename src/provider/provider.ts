@@ -37,7 +37,7 @@ export interface LicensedEdition {
 }
 
 /** The API.Bible editions, each with its record from rights.ts. */
-export const LICENSED_EDITIONS: ReadonlyMap<string, LicensedEdition> = new Map(
+const LICENSED_EDITIONS: ReadonlyMap<string, LicensedEdition> = new Map(
   [...API_BIBLE_EDITIONS].map(([id, e]) => {
     const rights = RIGHTS.get(id);
     if (!rights) throw new Error(`${id}: no rights record in src/contract/rights.ts`);
