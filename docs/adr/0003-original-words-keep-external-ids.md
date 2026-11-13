@@ -26,7 +26,7 @@ The **Original Word** hub is the word-level link between translations: a transla
 - With ADR-0002, the hub's address names the scheme it uses. Original-language editions have their own native schemes (Masoretic, Septuagint), which is one more reason the old single-scheme model had to go.
 - The validation pass must also check `token.ow_id ∈ interlinear_alignment(token)`, because the head can't be derived from the bare junction.
 - "Lemma is the spine" depends on the source supplying a lemma id per occurrence. If it doesn't, `lemma_id` is null and statistics hang off `strong_id` until a lemma source arrives.
-- A translation's own inline `\w strong=` tags can't bootstrap the hub. The old prototype found WEB's Hebrew tags systematically shifted. The hub needs a dedicated aligned corpus (`research/interlinear-corpus-sourcing.md`).
+- A translation's own inline `\w strong=` tags can't bootstrap the hub. The old prototype found WEB's Hebrew tags systematically shifted. The hub needs a dedicated aligned corpus (`research/word-tags.md`).
 - Sourcing and licensing are the open risk, not the schema.
 
 ## Amendment: the hub at word grain, from OSHB and MACULA (2026-11-13, plan step 11)

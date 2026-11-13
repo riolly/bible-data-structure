@@ -554,7 +554,7 @@ const segmentCount = (to: readonly Ref[]) => to.filter((r) => r.segment !== '').
  * and new ones are appended, so no id is removed. References past KJV's
  * extent in the 66 protestant books are left out (see checkKjvExtent).
  */
-export function extendPivot(pivot: Scheme, all: readonly TvtmsRow[], seed: Scheme = pivot): Scheme {
+function extendPivot(pivot: Scheme, all: readonly TvtmsRow[], seed: Scheme = pivot): Scheme {
   const verseCounts = new Map([...pivot.verseCounts].map(([b, c]) => [b, [...c]]));
   const segments = new Map([...pivot.segments].map(([k, v]) => [k, [...v]]));
   const titles = new Set(pivot.titles);
@@ -588,7 +588,7 @@ export function extendPivot(pivot: Scheme, all: readonly TvtmsRow[], seed: Schem
  * self-row), and ENG_TO_PIVOT for the rest. Without this, pivot 2ES 7:36 would
  * mean NRSV 7:36 in `.vrs` rows and KJV 7:36 (NRSV 7:106) in TVTMS rows.
  */
-export function engToPivotRows(eng: Compiled): { from: Ref; to: Ref | null }[] {
+function engToPivotRows(eng: Compiled): { from: Ref; to: Ref | null }[] {
   const out: { from: Ref; to: Ref | null }[] = eng.rows.map((r) => ({ from: r.from, to: r.to }));
   const moved = new Set(eng.rows.map((r) => refKey(r.from)));
   for (const key of eng.decided) {
@@ -605,7 +605,7 @@ export function engToPivotRows(eng: Compiled): { from: Ref; to: Ref | null }[] {
  * settled, and `.vrs` rows for the rest (references TVTMS never names, or
  * names only with tests that need an edition's text).
  */
-export function mergeWitnesses(
+function mergeWitnesses(
   compiled: ReadonlyMap<string, Compiled>,
   vrsRows: readonly MappingRow[],
 ): MappingRow[] {
@@ -628,7 +628,7 @@ export function mergeWitnesses(
  * (`kjv`, `rp`) are left out of the map. `web` has one through the eng rows
  * it takes for its deuterocanon.
  */
-export function diffWitnesses(
+function diffWitnesses(
   compiled: ReadonlyMap<string, Compiled>,
   vrsRows: readonly MappingRow[],
 ): Map<string, string[]> {

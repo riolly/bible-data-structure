@@ -3,7 +3,7 @@ import { join } from 'node:path';
 
 import { beforeAll, describe, expect, it } from 'vitest';
 
-import { nativeModuleLoads } from '../ingest/native-probe';
+import { sqliteLoads } from '../ingest/native-probe';
 import type { BibleContract, Lookup } from './contract';
 import { parseReference } from './reference';
 
@@ -14,9 +14,7 @@ import { parseReference } from './reference';
  */
 
 const CORPUS = join(import.meta.dirname, '..', '..', 'build', 'corpus.db');
-const native = nativeModuleLoads(
-  "import('better-sqlite3').then(({ default: D }) => { new D(':memory:').close(); process.exit(0); }, () => process.exit(1));",
-);
+const native = sqliteLoads();
 
 /** No storage id in a result: an `id` key may only hold an edition abbreviation. */
 const ROW_IDS = ['id', 'blockId', 'translationId', 'rowid'];

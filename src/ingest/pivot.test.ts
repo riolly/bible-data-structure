@@ -3,8 +3,8 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { Mappings, PIVOT, checkCoverage, refKey, type Ref } from '../model/mapping';
-import { nativeModuleLoads } from './native-probe';
+import { Mappings, PIVOT, checkCoverage, ref, refKey, type Ref } from '../model/mapping';
+import { sqliteLoads } from './native-probe';
 import {
   allVrsPivotRows,
   buildPivot,
@@ -15,7 +15,6 @@ import {
 import { PARATEXT_SCHEMES, loadSchemes, readParatextVrs } from './schemes';
 import { parseVrs } from './vrs';
 
-const ref = (book: string, chapter: number, verse: number, segment = ''): Ref => ({ book, chapter, verse, segment });
 const keys = (refs: Ref[]) => refs.map(refKey);
 
 const schemes = loadSchemes();
@@ -123,9 +122,7 @@ describe('.vrs lines Paratext reads lossily', () => {
   });
 });
 
-const native = nativeModuleLoads(
-  "import('better-sqlite3').then(({ default: Database }) => { new Database(':memory:').close(); process.exit(0); }, () => process.exit(1));",
-);
+const native = sqliteLoads();
 
 describe.skipIf(!native)('mapping rows in the corpus DB', () => {
   it('read back into the same mappings', { timeout: 30_000 }, async () => {

@@ -484,7 +484,7 @@ export function insertWordAlignments(db: CorpusDb, translationId: number, aligne
 }
 
 /** Where seeded data came from, with attribution and a note of changes. */
-export const DATA_SOURCES = [
+const DATA_SOURCES = [
   {
     id: 'usfm-spec',
     url: USFM_SPEC_URL,

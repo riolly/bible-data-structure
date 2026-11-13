@@ -47,7 +47,7 @@ The contract tells a caller to store the verse text as its quote. The words stam
 
 ## Amendment: a user mark is a verse address and a quote (2026-11-13, step 14)
 
-Apps will keep a reader's highlights, notes and bookmarks on the device, and sync and export them (old-repo ADR-0006 and ADR-0011 in `docs/prior-art/`). Rules 2 and 3 don't say which part of a mark wins when its parts disagree, what a mark on a licensed edition may keep, or when a fetched edition reconciles. This amendment decides those. Apps build the storage.
+Apps will keep a reader's highlights, notes and bookmarks on the device, and sync and export them (old-repo ADR-0006 and ADR-0011). Rules 2 and 3 don't say which part of a mark wins when its parts disagree, what a mark on a licensed edition may keep, or when a fetched edition reconciles. This amendment decides those. Apps build the storage.
 
 - **A mark's truth is its verse address and its quote.** A mark stores the edition's abbreviation, the address of each unit as the contract returns it with its scheme (`JHN 3:16/kjv`), the quote witness and the stamp it was made against. A word index is a hint. When the words at the hint no longer match the quote, the quote wins.
 - **A verse mark** covers whole verse units. For each unit it keeps the unit's `text` as its quote and the unit's `chapterStamp`, so a mark over several chapters reconciles a chapter at a time.

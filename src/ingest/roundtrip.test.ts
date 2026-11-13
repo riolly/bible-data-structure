@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { readChapter, readChapterDoc, readReadings, readVerseText, readVerseUnit } from '../db/corpus-read';
-import { nativeModuleLoads } from './native-probe';
+import { sqliteLoads } from './native-probe';
 import { normalizeChapters, splitChapters, type UsjDoc } from './normalize';
 
 /**
@@ -16,9 +16,7 @@ import { normalizeChapters, splitChapters, type UsjDoc } from './normalize';
  * when the binding is unbuilt; only construction touches the .node file.
  */
 
-const native = nativeModuleLoads(
-  "import('better-sqlite3').then(({ default: Database }) => { new Database(':memory:').close(); process.exit(0); }, () => process.exit(1));",
-);
+const native = sqliteLoads();
 
 describe.skipIf(!native)('corpus DB round-trip (write seam ↔ read seam)', () => {
   it('a chapter read returns the exact Token+Block rows the normalizer produced', async () => {
