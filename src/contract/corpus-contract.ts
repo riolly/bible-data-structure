@@ -12,6 +12,8 @@ import {
   readOriginalWords,
   readSchemes,
   readUnitWords,
+  readWordAlignments,
+  type AlignedOriginal,
   readVerseText,
   readVerseUnit,
   type SyncSqliteDb,
@@ -286,16 +288,35 @@ export function corpusContract(db: SyncSqliteDb): BibleContract {
         kind: w.kind,
         strongs: w.strongs,
         original: { owId: w.owId, lemma: w.lemma, morph: w.morph, gloss: w.gloss },
+        originals: [],
       }));
     }
     const tokens = readUnitWords(db, e.id, u.book, u.chapter, u.verse, u.segment);
-    return tokens.filter((t) => only === undefined || t.wordIndex === only).map((t) => ({
-      address: at(t.wordIndex),
-      text: t.text,
-      kind: 'word',
-      strongs: [],
-      original: null,
-    }));
+    const aligned = new Map<number, AlignedOriginal[]>();
+    for (const r of readWordAlignments(db, e.id, u.book, u.chapter, u.verse, u.segment)) {
+      (aligned.get(r.wordIndex) ?? aligned.set(r.wordIndex, []).get(r.wordIndex)!).push(r);
+    }
+    return tokens.filter((t) => only === undefined || t.wordIndex === only).map((t) => {
+      const rows = aligned.get(t.wordIndex) ?? [];
+      return {
+        address: at(t.wordIndex),
+        text: t.text,
+        kind: 'word',
+        strongs: [...new Set(rows.flatMap((r) => r.strongs))],
+        original: null,
+        originals: rows.map((r) => ({
+          edition: r.edition,
+          address:
+            r.owWordIndex === null
+              ? null
+              : formatAddress({
+                  scheme: r.scheme,
+                  start: { book: r.book, chapter: r.chapter, verse: r.verse, segment: r.segment, wordIndex: r.owWordIndex },
+                }),
+          owId: r.owId,
+        })),
+      };
+    });
   }
 
   function schemeById(id: string, call: string): Scheme {
