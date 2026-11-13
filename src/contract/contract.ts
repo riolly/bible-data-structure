@@ -21,6 +21,9 @@
  * verse's chapter stamp (ADR-0005 quote witness and its 2026-11-11
  * amendment), all of which every `Verse` carries, and reads it back with
  * `resolve`. A changed chapter stamp means the quote must be checked again.
+ * A mark on part of a verse also stores the words stamp, and is checked
+ * again when that changes. A mark on a licensed edition stores the quote's
+ * sha256, not its text (ADR-0005, step 14 amendment).
  *
  * The calls return promises and take no storage types, so `build/corpus.db`
  * (`corpus-contract.ts`), a pack (plan step 13) and a licensed provider

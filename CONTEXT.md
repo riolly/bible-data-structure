@@ -95,7 +95,7 @@ What one verse marker covers: one verse, or a range for a verse bridge. It has a
 A USFM verse marker covering several verses (`\v 17-18`): one verse unit with a range. Every number in the range resolves to the unit, so NLT's Numbers 1:20-21 is found from 20 and from 21. Its tokens carry the first number, and its word indexes count across the whole unit. (ADR-0004 v1.5)
 
 **Quote witness**:
-The surface text of the words an outside reference points at, plus the chapter stamp it was made against. Stored beside the address as proof, used to detect and repair drift after a revision. (ADR-0005)
+The surface text of the words an outside reference points at, or its sha256 where the edition's license doesn't let an app keep the text, plus the stamp it was made against. Stored beside the address. The address and the quote together are the reference's truth, and a word index is only a hint. Used to detect and repair drift after a revision. (ADR-0005 and its step 14 amendment)
 
 ## Text units
 
