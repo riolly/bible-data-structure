@@ -56,3 +56,15 @@ export function tokenize(run: string, opts: TokenizeOptions = {}): RawToken[] {
   }
   return out;
 }
+
+/**
+ * A verse unit's words, in word order, from its verse text: what `word_index`
+ * counts (ADR-0004). The ingest stops unless they equal the unit's word
+ * tokens, so a reader without the token rows (a pack, plan step 13) gets the
+ * same word addresses. A standalone פ or ס in verse text is a paragraph mark (rule 6).
+ */
+export function verseWords(text: string): string[] {
+  return tokenize(text, { paragraphMarks: true })
+    .filter((t) => t.kind === 'word')
+    .map((t) => t.text);
+}

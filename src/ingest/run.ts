@@ -19,6 +19,7 @@ import { PIVOT, checkCoverage } from '../model/mapping';
 import { checkVerses, hasVerse, titleChapters, type Scheme } from '../model/scheme';
 import { loadSchemes } from './schemes';
 import { normalizeChapters, splitChapters } from './normalize';
+import { verseWords } from './tokenize';
 import { usjBookCode, type ParseOutcome } from './parse';
 import { createParsePool, type ParsePool } from './parse-pool';
 import { CLEAR_BSB, MACULA_GREEK, MACULA_HEBREW, SOURCES, type PinnedFile, type SourceDef } from './sources';
@@ -166,6 +167,7 @@ async function main() {
             console.warn(`  ⚠ ${file.code} ${v.chapter}:${v.verse}: printed with no words and not in scheme ${scheme.id}, no verse text`);
           }
           validate(file.code, blocks, tokens);
+          checkVerseWords(file.code, tokens, verses);
           warnVerseGaps(file.code, tokens, verses);
           // Every token's verse has a verse-text row, so the rows alone cover the check.
           checkScheme(scheme, file.code, verses.flatMap(unitVerses));
@@ -378,6 +380,27 @@ function checkScheme(scheme: Scheme, code: string, rows: readonly { chapter: num
   }
   for (const s of short) {
     console.warn(`  ⚠ ${code} ${s.chapter}: ends at verse ${s.last}, scheme ${scheme.id} has ${s.expected}`);
+  }
+}
+
+/**
+ * Each verse unit's word tokens are its verse text's words (`verseWords`): a
+ * pack reads a word address from the verse text alone (plan step 13).
+ */
+function checkVerseWords(code: string, tokens: readonly Token[], units: readonly VerseText[]) {
+  const words = new Map<string, string[]>();
+  for (const t of tokens) {
+    if (t.wordIndex === null) continue;
+    const key = `${t.chapter}:${t.verse}${t.segment}`;
+    (words.get(key) ?? words.set(key, []).get(key)!).push(t.text);
+  }
+  for (const u of units) {
+    const key = `${u.chapter}:${u.verse}${u.segment}`;
+    const fromText = verseWords(u.text);
+    const stored = words.get(key) ?? [];
+    if (fromText.join(' ') !== stored.join(' ')) {
+      throw new Error(`${code} ${key}: the verse text's words differ from its word tokens (${fromText.length} and ${stored.length} words)`);
+    }
   }
 }
 

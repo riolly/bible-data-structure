@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit",
     "ingest:download": "tsx src/ingest/download.ts",
     "ingest": "tsx src/ingest/run.ts",
+    "pack": "tsx src/pack/cli.ts",
     "api-bible:chapter": "tsx src/provider/chapter-cli.ts",
     "api-bible:facts": "tsx src/provider/facts-cli.ts"
   },
@@ -18,6 +19,7 @@
     "better-sqlite3": "12.11.1",
     "bible-passage-reference-parser": "4.0.0",
     "drizzle-orm": "1.0.0-rc.4-5d5b77c",
+    "fflate": "0.8.2",
     "usfm-grammar": "3.2.0"
   },
   "devDependencies": {
