@@ -242,7 +242,7 @@ const native = nativeModuleLoads(
 );
 
 describe.skipIf(!native)('scheme tables', () => {
-  it('stores every scheme with its verse counts, and editions must name one', { timeout: 30_000 }, async () => {
+  it('stores every scheme with its verse counts, and editions must name one', async () => {
     const { createCorpusDb, insertTranslation, seedBooksAndCanons, seedSchemes } = await import('./write-db');
     const { db, sqlite } = createCorpusDb(':memory:');
     seedBooksAndCanons(db);
