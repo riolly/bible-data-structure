@@ -100,7 +100,7 @@ export const SOURCES: readonly SourceDef[] = [
     },
     // Upstream OSHB, not ebible's hboWLC: ebible's copy dropped every qere and
     // leaked markup into 11 words (ADR-0007). The converter keeps the text and
-    // the qere words' ids, and drops OSHB's lemma and morphology (CC BY 4.0).
+    // returns each word's OSHB id, lemma and morphology beside it (CC BY 4.0).
     url: 'https://github.com/openscriptures/morphhb/archive/3d15126fb1ef74867fc1434be1942e837932691f.zip',
     edition: 'sha256:b15b041bc282f9b8',
     dir: 'wlc-oshb',

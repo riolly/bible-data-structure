@@ -7,8 +7,7 @@ import { nativeModuleLoads } from './native-probe';
 
 /**
  * USFM → USJ drift guard. usfm-grammar loads a NATIVE tree-sitter binding, so
- * this suite runs only where build scripts ran (local dev); CI installs with
- * ignore-scripts and skips it. The committed fixtures/adversarial.usj.json is
+ * this suite runs only where the binding is built. The committed fixtures/adversarial.usj.json is
  * what the pure-TS golden tests (normalize.test.ts) run against — this test
  * proves that committed USJ is still exactly what the parser produces from
  * the committed USFM, so the two can never drift apart silently.

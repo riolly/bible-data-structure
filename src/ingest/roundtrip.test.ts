@@ -9,9 +9,8 @@ import { normalizeChapters, splitChapters, type UsjDoc } from './normalize';
 
 /**
  * DB round-trip across the old-repo ADR-0009 seam: normalized rows written through
- * drizzle(better-sqlite3) and read back with the SAME readChapter query the
- * app runs through drizzle(expo-sqlite). Skipped where the better-sqlite3
- * native module is unbuilt (CI installs with ignore-scripts) or built for a
+ * drizzle(better-sqlite3) and read back through corpus-read.ts. Skipped where
+ * the better-sqlite3 native module is unbuilt or built for a
  * different Node ABI — probed in a subprocess so a hard crash cannot take
  * down the vitest worker (see native-probe). The import alone succeeds even
  * when the binding is unbuilt; only construction touches the .node file.
@@ -114,9 +113,8 @@ describe.skipIf(!native)('corpus DB round-trip (write seam ↔ read seam)', () =
 
 /**
  * The write-db.ts DDL string hand-mirrors src/db/corpus-schema.ts (no
- * generator connects them — drizzle-kit only owns the user DB). This guard
- * makes one-sided edits fail here instead of shipping a corpus the app reads
- * with silent NULLs (issue #20). Tables are discovered from the schema module,
+ * generator connects them). This guard makes one-sided edits fail here
+ * instead of writing a corpus that reads back with silent NULLs. Tables are discovered from the schema module,
  * so a table added there without DDL also fails.
  */
 describe.skipIf(!native)('DDL ↔ drizzle schema parity (write-db.ts hand-mirrors corpus-schema.ts)', () => {

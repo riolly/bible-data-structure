@@ -15,7 +15,7 @@ import { spawnSync } from 'node:child_process';
 export function nativeModuleLoads(script: string): boolean {
   return (
     spawnSync(process.execPath, ['-e', script], {
-      cwd: __dirname, // resolve modules against app/node_modules
+      cwd: __dirname, // resolve modules against this repo's node_modules
       stdio: 'ignore',
       timeout: 30_000,
     }).status === 0

@@ -9,8 +9,7 @@ import { blockGenre, normalizeUsj, splitChapters, type UsjDoc } from './normaliz
 /**
  * GOLDEN FIXTURE (ADR-0001/ADR-0004): committed USJ in → expected Token
  * stream + Block overlays. The USJ is generated from fixtures/adversarial.usfm
- * by usfm-grammar and committed so this test stays pure TS (CI installs with
- * ignore-scripts and has no native tree-sitter); parse.test.ts guards
+ * by usfm-grammar and committed so this test stays pure TS; parse.test.ts guards
  * USFM→USJ drift where the native parser is available.
  */
 const usj = JSON.parse(
@@ -233,7 +232,7 @@ describe('stats bag — what the documents hold beyond the tokens is counted', (
   });
 });
 
-describe('Unicode NFC normalization at ingest (#25)', () => {
+describe('Unicode NFC normalization at ingest', () => {
   const doc = (content: UsjDoc['content']): UsjDoc => ({ type: 'USJ', version: '3.1', content });
   const verse = (text: string): UsjDoc =>
     doc([

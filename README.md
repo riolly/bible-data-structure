@@ -46,8 +46,8 @@ Started 2026-11-09 from the research in [bible-codex](https://github.com/riolly/
 
 Steps only a person can do:
 
-- Upload our copy of the pinned sources (step 6). Delete `src/ingest/sources/` and run `bun run ingest:download`, so `sources/mirror/` gets every zip (the download keeps a zip only when it unpacks a source). Then run `gh release create sources --repo riolly/bible-data-structure --title "Pinned sources" --notes-file <notes> src/ingest/sources/mirror/*.zip`. The notes must carry the SBLGNT and OSHB attributions from research/licensing.md. Upload the zip of every later new edition with `gh release upload sources`.
-- Ask API.Bible in writing whether converting its JSON content to our own chapter document for display counts as a change under section 4.1 of its terms (blocks step 10).
+- Upload the zip of every new edition to our copy of the pinned sources (step 6) with `gh release upload sources`. The download keeps each zip in `src/ingest/sources/mirror/`. The `sources` release holds the seven current editions.
+- Ask API.Bible in writing whether converting its JSON content to our own chapter document for display counts as a change under section 4.1 of its terms. Until it answers, converted licensed chapters stay on this machine (step 10).
 - Ask API.Bible in writing whether NASB and NLT may be stored whole on a device, and whether our server may cache chapters for our app.
 - Ask the Lockman Foundation for terms on NASB files with Strong's numbers. That license moves NASB from Reading to Full.
 
@@ -58,7 +58,7 @@ Steps only a person can do:
 | Token stream with Block overlays (old ADR-0001, 0010) | ADR-0001 | Keep |
 | Single fixed KJV versification as the hub (old ADR-0001) | ADR-0002 | Replaced: addresses name their scheme |
 | `book` with English slug id, `testament`, fixed `position` | `src/db/corpus-schema.ts`, `src/model/books.ts`, `src/model/canon.ts` | Replaced: USFM codes, canon as data (ADR-0002) |
-| Original Word hub, morpheme grain, external ids (old ADR-0007) | ADR-0003 | Keep, not built |
+| Original Word hub, morpheme grain, external ids (old ADR-0007) | ADR-0003 | Keep, built in step 11 |
 | Registered tokenizer policy (old ADR-0014) | ADR-0004 | Keep. Verse bridges decided in v1.5. Scripts without spaces still open |
 | Edition stamp and quote witness (old ADR-0013) | ADR-0005 | Keep |
 | Headings not addressable | ADR-0001 | Revisit in structure research |

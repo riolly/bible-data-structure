@@ -11,12 +11,12 @@ One file per topic, written from primary sources with links. A finding that chan
 | Editions and revisions | `editions.md` | not started | How publishers revise texts (BSB revision notes, ebible.org republishing). How to tell a text change from repackaging. |
 | Textual variants | `variants.md` | not started | The 2026-11-09 BSB ingest has no text for Matthew 17:21, 18:11, 23:14, Mark 7:16, 9:44, 9:46, 11:26, 15:28, Luke 17:36, 23:17, John 5:4, Acts 8:37, 15:34, 24:7, 28:29 and Romans 16:24 (see `bun run ingest` warnings). Also Mark 16:9-20, John 7:53-8:11, Romans 16:25-27. How critical texts and translations mark them. Present, absent, bracketed or moved. |
 | Original-language texts and alignment | `interlinear-corpus-sourcing.md` | carried (old issue #2) | MACULA, STEPBible TAHOT/TAGNT, OSHB, MorphGNT, Robinson-Pierpont. Lemma id per occurrence? Alignment to KJV and BSB? Licenses. |
-| Hebrew written and read forms | `hebrew-ketiv-qere.md` | noted 2026-11-09 | ebible's WLC keeps only the ketiv. Move to upstream OSHB? How to store a qere without moving word indexes? |
+| Hebrew written and read forms | `hebrew-ketiv-qere.md` | decided 2026-11-10, ADR-0007 | ebible's WLC keeps only the ketiv. Move to upstream OSHB? How to store a qere without moving word indexes? |
 | Lexicons and morphology | `lexicons.md` | not started | Strong's, BDB, Thayer, Louw-Nida. Morphology code systems per source. Licenses. |
 | Structure | `structure.md` | not started | Paragraphing and section headings across editions. Pericope systems. Literary units that cross chapters. |
 | Markup in the pinned sources | `source-markup.md` | noted 2026-11-10 | Which USFM markers the sources use. Verse markers with no words, and verses with no marker. |
 | Notes and cross-references | `apparatus.md` | not started | USFM footnotes (`\f`), cross-references (`\x`), the Treasury of Scripture Knowledge, OpenBible.info. |
-| Tokenization beyond English | `tokenization.md` | not started | Rules for Greek, Hebrew and other scripts. Verse bridges (ADR-0004 open item). |
+| Tokenization beyond English | `tokenization.md` | not started | Rules for scripts without spaces between words. |
 | API.Bible | `api-bible.md` | noted 2026-11-12 | Which Bibles the key reaches. The chapter JSON and how it maps to our chapter document. |
 | Licensing | `licensing.md` | done 2026-11-09 for the step 3 sources | Per source, whether it can be redistributed in an app, its attribution, and whether raw files may be committed. |
 | Psalm titles inside Hebrew verse 1 | `psalm-titles-in-hebrew-verse-1.md` | done 2026-11-13, issue #12 | Where TVTMS records the 53 Psalms whose English title is part of Hebrew verse 1. |
