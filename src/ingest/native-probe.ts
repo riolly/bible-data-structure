@@ -21,3 +21,7 @@ export function nativeModuleLoads(script: string): boolean {
     }).status === 0
   );
 }
+
+/** Whether better-sqlite3 loads and opens a database. */
+export const sqliteLoads = (): boolean =>
+  nativeModuleLoads("import('better-sqlite3').then(({ default: D }) => { new D(':memory:').close(); process.exit(0); }, () => process.exit(1));");

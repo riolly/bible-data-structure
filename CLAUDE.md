@@ -44,8 +44,8 @@ Each fact has one home. Don't restate it elsewhere, link to it.
 | Proof | fixtures and tests in `src/**/*.test.ts` and `src/ingest/fixtures/` |
 | Findings from sources | `research/<topic>.md`, with links to primary sources |
 | Decisions that are hard to reverse | `docs/adr/`, short. Only when the reason isn't obvious from the code |
-| Old repo material | `docs/prior-art/`, read-only |
+| Old repo material | github.com/riolly/bible-codex at commit `c2643a2`, not copied here |
 
 Workflow for a model change: research file, then the ADR or CONTEXT.md edit, then a failing fixture, then the code.
 
-Code comments that cite "old-repo ADR-00xx" refer to github.com/riolly/bible-codex at commit `c2643a2`.
+Code comments that cite "old-repo ADR-00xx" refer to that commit.

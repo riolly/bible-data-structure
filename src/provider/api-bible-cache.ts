@@ -8,13 +8,14 @@
  * Node only. The key is `API_BIBLE_KEY` in `.env` (research/api-bible.md).
  */
 
+import { existsSync } from 'node:fs';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 
 import { API_BIBLE_EDITIONS, CHAPTER_QUERY, type ApiBibleChapter } from './api-bible';
 import type { FetchChapter } from './provider';
 
-export const API_BASE = 'https://rest.api.bible/v1';
+const API_BASE = 'https://rest.api.bible/v1';
 
 /** A kept response: when it was fetched, and the body exactly as API.Bible sent it. */
 export interface KeptResponse {
@@ -123,3 +124,14 @@ export interface ApiBibleBook {
 }
 
 const dataOf = <T>(body: string) => (JSON.parse(body) as { data: T }).data;
+
+/** The key for a CLI: `API_BIBLE_KEY` from `.env` or the environment. Exits with code 2 when it is not set. */
+export function apiBibleKey(): string {
+  if (existsSync('.env')) process.loadEnvFile('.env');
+  const key = process.env.API_BIBLE_KEY;
+  if (!key) {
+    console.error('API_BIBLE_KEY is not set: put it in .env (research/api-bible.md)');
+    process.exit(2);
+  }
+  return key;
+}

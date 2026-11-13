@@ -20,10 +20,9 @@ import { existsSync } from 'node:fs';
 import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 
-import { sourceEdition } from './source-files';
+import { SOURCES_ROOT, sourceEdition } from './source-files';
 import { CLEAR_BSB, MACULA_GREEK, MACULA_HEBREW, MIRROR, SOURCES, TVTMS, mirrorAsset, mirrorLabel, type SourceDef } from './sources';
 
-const SOURCES_ROOT = join(import.meta.dirname, 'sources');
 const STAGING = join(SOURCES_ROOT, '.staging');
 const MIRROR_DIR = join(SOURCES_ROOT, 'mirror');
 

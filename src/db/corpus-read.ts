@@ -397,7 +397,7 @@ export function readSchemes(db: SyncSqliteDb): Map<string, Scheme> {
 }
 
 /** Every mapping row to the pivot (ADR-0006). */
-export function readMappings(db: SyncSqliteDb): MappingRow[] {
+function readMappings(db: SyncSqliteDb): MappingRow[] {
   return db
     .select()
     .from(schema.schemeMapping)

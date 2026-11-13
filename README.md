@@ -65,10 +65,10 @@ Steps only a person can do:
 | Textual variants (not modeled) | research/README.md | New topic |
 | Ingest pipeline, tokenizer, `.vrs` parser, fixtures | `src/ingest/` | Keep. The `.vrs` parser was rewritten for the full format (step 2.4), `divergent.vrs` replaced |
 | Corpus schema and reader | `src/db/` | Keep. `listBooks` became `canonBooks`, which reads order and names from the canon tables |
-| Interlinear sourcing (old issue #2) | research/interlinear-corpus-sourcing.md | Keep, open |
+| Interlinear sourcing (old issue #2) | research/licensing.md, research/word-tags.md | Answered in steps 11 and 12 |
 | Licensing notes (an old agent memory) | research/licensing.md | Lost, redone in step 3 |
-| User data, storage and sync design (old ADR-0006, 0009, 0011) | docs/prior-art/ | Input for step 14 |
-| Literary edition (old ADR-0017), hub sourcing (old ADR-0021) | docs/prior-art/ | Input for structure and sourcing research |
+| User data, storage and sync design (old ADR-0006, 0009, 0011) | bible-codex at `c2643a2` | Was input for step 14 |
+| Literary edition (old ADR-0017), hub sourcing (old ADR-0021) | bible-codex at `c2643a2` | Input for structure research |
 | Reading modes, presets, library ring, ink, typography (old ADR-0002 to 0005, 0008, 0012, 0015, 0016, 0018 to 0020) | not carried | Drop: app-specific |
 
 ## Editions

@@ -5,13 +5,11 @@ import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 
 import type { BibleContract } from '../contract/contract';
-import { nativeModuleLoads } from '../ingest/native-probe';
+import { sqliteLoads } from '../ingest/native-probe';
 
 const CORPUS = join(import.meta.dirname, '..', '..', 'build', 'corpus.db');
 
-const native = nativeModuleLoads(
-  "import('better-sqlite3').then(({ default: D }) => { new D(':memory:').close(); process.exit(0); }, () => process.exit(1));",
-);
+const native = sqliteLoads();
 
 describe.skipIf(!native || !existsSync(CORPUS))('a BSB pack (build/corpus.db)', () => {
   let pack: BibleContract;

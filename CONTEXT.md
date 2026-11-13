@@ -124,7 +124,7 @@ Another text for a range of written words in one edition, stored beside the toke
 _Avoid_: variant (OSHB's word for the note, but also used for textual variants between manuscripts)
 
 **Structure overlay** *(planned)*:
-Any further grouping laid over the token stream: sections, pericopes, literary units that cross chapter boundaries, chiasm, parallelism. Unlike Blocks, overlays may overlap. The old repo's curated literary edition was one such overlay (`docs/prior-art/old-adr-0017-*`).
+Any further grouping laid over the token stream: sections, pericopes, literary units that cross chapter boundaries, chiasm, parallelism. Unlike Blocks, overlays may overlap. The old repo's curated literary edition was one such overlay (old-repo ADR-0017).
 
 ## Original language
 

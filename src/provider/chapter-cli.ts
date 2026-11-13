@@ -4,23 +4,17 @@
  * text stays in `build/api-bible/`, which git ignores.
  */
 
-import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { API_BIBLE_EDITIONS, readApiBibleChapter } from './api-bible';
-import { cachedChapter } from './api-bible-cache';
+import { apiBibleKey, cachedChapter } from './api-bible-cache';
 
 const [edition, book, chapter] = process.argv.slice(2);
 if (!edition || !book || !/^\d+$/.test(chapter ?? '')) {
   console.error('usage: bun run api-bible:chapter <edition> <BOOK> <chapter>');
   process.exit(2);
 }
-if (existsSync('.env')) process.loadEnvFile('.env');
-const key = process.env.API_BIBLE_KEY;
-if (!key) {
-  console.error('API_BIBLE_KEY is not set: put it in .env (research/api-bible.md)');
-  process.exit(2);
-}
+const key = apiBibleKey();
 
 async function main(key: string) {
   const got = await cachedChapter(edition, book, Number(chapter), { key, dir: join('build', 'api-bible') });

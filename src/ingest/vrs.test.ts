@@ -3,9 +3,8 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
+import { ref } from '../model/mapping';
 import { parseVrs, parseVrsCounts } from './vrs';
-
-const ref = (book: string, chapter: number, verse: number, segment = '') => ({ book, chapter, verse, segment });
 
 describe('parseVrsCounts (libpalaso count-line rules)', () => {
   it('reads count lines and excluded verses, skipping comments and mappings', () => {

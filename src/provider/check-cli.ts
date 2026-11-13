@@ -12,16 +12,11 @@ import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 
 import * as schema from '../db/corpus-schema';
-import { chapterFetcher } from './api-bible-cache';
+import { apiBibleKey, chapterFetcher } from './api-bible-cache';
 import { provider } from './provider';
 
 const CORPUS = join('build', 'corpus.db');
-if (existsSync('.env')) process.loadEnvFile('.env');
-const key = process.env.API_BIBLE_KEY;
-if (!key) {
-  console.error('API_BIBLE_KEY is not set: put it in .env (research/api-bible.md)');
-  process.exit(2);
-}
+const key = apiBibleKey();
 if (!existsSync(CORPUS)) {
   console.error(`${CORPUS} is missing: run bun run ingest`);
   process.exit(2);

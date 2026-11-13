@@ -38,6 +38,9 @@ export interface MappingRow {
   readonly source?: 'tvtms' | 'vrs';
 }
 
+/** A reference from its parts, with no segment unless one is given. */
+export const ref = (book: string, chapter: number, verse: number, segment = ''): Ref => ({ book, chapter, verse, segment });
+
 /**
  * A unique string for a reference. A one-letter segment is appended as in an
  * address (`REV 13:1a`); a longer pivot subverse id is set off by `!`

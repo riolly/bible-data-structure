@@ -114,7 +114,7 @@ export function joinWords(ours: readonly string[], theirs: readonly string[]): (
  * did on 2026-11-13. A re-pin of either side that rewords more stops the
  * ingest, so the revision gap is looked at, not only logged.
  */
-export const MAX_CHANGED = 4000;
+const MAX_CHANGED = 4000;
 
 /** One original word an English word translates. `seq` orders a word's rows. */
 export interface WordAlignment {
