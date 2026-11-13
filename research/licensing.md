@@ -67,10 +67,12 @@ Status: checked 2026-11-10 for plan step 9.
 | Library | License | Ship in an app | Attribution | Used |
 |---|---|---|---|---|
 | [bible-passage-reference-parser][bpr] 4.0.0 (npm), by Stephen Smith / OpenBible.info | MIT, "Copyright (c) 2011-2026 Stephen Smith" (`LICENSE.md` in the npm tarball, and the README's License section) | Yes | Keep the MIT notice in the shipped bundle's third-party notices | Yes, English only (`esm/lang/en.js`), in `src/contract/reference.ts` |
+| [fflate][fflate] 0.8.2 (npm), by Arjun Barrett | MIT, "Copyright (c) 2023 Arjun Barrett" (`LICENSE` in the npm package) | Yes | Keep the MIT notice in the shipped bundle's third-party notices | Yes, to deflate chapter documents in a pack (`src/pack/pack.ts`) and inflate them on read (`src/db/corpus-read.ts`) |
 
 The parser's book names and abbreviations are its own data, under the same MIT license. Its verse counts are not used: `passage` checks every verse against the edition's scheme.
 
 [bpr]: https://github.com/openbibleinfo/Bible-Passage-Reference-Parser
+[fflate]: https://github.com/101arrowz/fflate
 
 ## Closed-license translations
 

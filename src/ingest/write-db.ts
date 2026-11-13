@@ -26,7 +26,11 @@ import * as schema from '../db/corpus-schema';
 
 export type CorpusDb = BetterSQLite3Database<typeof schema>;
 
-/** DDL mirroring src/db/corpus-schema.ts (and schema.dbml). */
+/**
+ * DDL mirroring src/db/corpus-schema.ts (and schema.dbml). The large tables
+ * keyed by their primary key are WITHOUT ROWID, so the key isn't stored twice:
+ * it took a BSB pack from 145 MB to 118 MB (plan step 13).
+ */
 const DDL = `
 CREATE TABLE data_source (
   id TEXT PRIMARY KEY,
@@ -130,7 +134,7 @@ CREATE TABLE verse_text (
   segment TEXT NOT NULL DEFAULT '',
   text TEXT NOT NULL,
   PRIMARY KEY (translation_id, book, chapter, verse, segment)
-);
+) WITHOUT ROWID;
 CREATE TABLE block (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   translation_id INTEGER NOT NULL REFERENCES translation(id),
@@ -189,7 +193,7 @@ CREATE TABLE original_word (
   morph TEXT NOT NULL,
   gloss TEXT,
   PRIMARY KEY (source, ow_id)
-);
+) WITHOUT ROWID;
 CREATE UNIQUE INDEX original_word_verse ON original_word (translation_id, book, chapter, verse, segment, seq);
 CREATE TABLE word_alignment (
   translation_id INTEGER NOT NULL REFERENCES translation(id),
@@ -204,7 +208,7 @@ CREATE TABLE word_alignment (
   strongs TEXT NOT NULL,
   aligned_by TEXT NOT NULL REFERENCES data_source(id),
   PRIMARY KEY (translation_id, book, chapter, verse, segment, word_index, seq)
-);
+) WITHOUT ROWID;
 CREATE TABLE scheme_segment (
   scheme TEXT NOT NULL REFERENCES scheme(id),
   book TEXT NOT NULL REFERENCES book(code),

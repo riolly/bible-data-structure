@@ -54,6 +54,9 @@ An edition the first apps read: the English editions in ADR-0008's support table
 **Rights record**:
 One record per edition saying what its license allows: the route (provider), offline use (`none`, `cache` or `full`), refresh days, copy limit, AI use and attribution. The type and the seven local editions' records are in `src/contract/rights.ts`. Step 10 adds the licensed editions. (ADR-0008)
 
+**Pack**:
+The file an app ships for a set of editions, built from `build/corpus.db` by `bun run pack` (`src/pack/pack.ts`). It is a SQLite file with the corpus tables, so the app contract reads it the same way. It holds the editions it names and the hub editions their alignments point at, every scheme and mapping, and no token or block rows: a word address is read from the verse text (ADR-0004, step 13 amendment). Chapter documents are deflated. The corpus DB never ships.
+
 **Provider** *(planned)*:
 Where an edition's text comes from at read time: a local pack, or a licensed API such as API.Bible. A fetched chapter carries its own stamp, because the provider can refresh it. (ADR-0008)
 

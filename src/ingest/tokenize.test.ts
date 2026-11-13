@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { tokenize } from './tokenize';
+import { tokenize, verseWords } from './tokenize';
 
 /**
  * ADVERSARIAL policy tests (ADR-0004). These pin the REGISTERED tokenization
@@ -127,5 +127,12 @@ describe('registered tokenization policy (ADR-0004)', () => {
     expect(texts('ἐστίν\u037E'.normalize('NFC'))).toEqual(['w:ἐστίν', 'p:;']);
     expect(texts('καὶ ⸂ὅλης ἐκκλησίας⸃.')).toEqual(['w:καὶ', 'p:⸂', 'w:ὅλης', 'w:ἐκκλησίας', 'p:⸃.']);
     expect(texts('⟦ καὶ ἐπορεύθη')).toEqual(['p:⟦', 'w:καὶ', 'w:ἐπορεύθη']);
+  });
+});
+
+describe('verseWords (ADR-0004, step 13 amendment)', () => {
+  it("gives a verse text's words in word order, with a paragraph mark as punctuation", () => {
+    expect(verseWords('the LORD’s house, father-in-law; 144,000.')).toEqual(['the', 'LORD’s', 'house', 'father-in-law', '144,000']);
+    expect(verseWords('וַיִּשְׁמַע יִשְׂרָאֵל פ וַיִּהְיוּ')).toEqual(['וַיִּשְׁמַע', 'יִשְׂרָאֵל', 'וַיִּהְיוּ']);
   });
 });

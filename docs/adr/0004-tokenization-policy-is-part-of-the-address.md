@@ -108,3 +108,7 @@ Rule 6 collapsed `\v 17-18` to 17, so 18 named nothing. NLT prints Numbers 1:20-
 - **Every number must be in the scheme.** The ingest checks each number of a range against the edition's scheme, not just the first.
 - **Words stamp.** A word in a bridge hashes its address with the range (`4MA 8:28-29!3`), so the stamp changes when what a number resolves to changes. Other words hash as before. WEB is the only pinned edition with bridges. Five of its six bridges hold only a footnote (Sirach), and one holds words (4 Maccabees 8:28-29). So WEB's words stamp changed from `sha256:8fa638d577ba7d01` to `sha256:4e13d87b9f25701f`, and the other six stayed the same.
 - **Migration.** No word moved: each word keeps its first-verse address and index. The later numbers of a bridge gain an address. No outside reference existed yet, so nothing needs migrating.
+
+## Amendment: a unit's words are its verse text's words (2026-11-13, plan step 13)
+
+A pack ships no token rows (`src/pack/pack.ts`), so it reads a word address from the verse text. `verseWords` in `tokenize.ts` tokenizes a unit's `verse_text.text` as verse text (rule 6 on) and keeps the words. The ingest stops unless that list equals the unit's word tokens, in order. All seven pinned editions passed on 2026-11-13. The `words` call reads a translation's words this way from the corpus DB too, so both read the same words. Verse text joins a unit's text runs with a space, and no token spans a space, so tokenizing the joined text gives the same words as tokenizing each run.

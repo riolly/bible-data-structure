@@ -1,5 +1,6 @@
 import { and, asc, eq, gte, inArray, isNull, lte, or } from 'drizzle-orm';
 import { alias, type BaseSQLiteDatabase } from 'drizzle-orm/sqlite-core';
+import { inflateSync, strFromU8 } from 'fflate';
 
 import type { Block, ChapterDoc, OriginalWord, Reading, Token, VerseText } from '../model/corpus';
 import { Mappings, type MappingRow } from '../model/mapping';
@@ -152,7 +153,11 @@ export function readChapterDoc(
     .innerJoin(schema.translation, eq(d.translationId, schema.translation.id))
     .where(and(eq(schema.translation.abbrev, translationAbbrev), eq(d.book, bookCode), eq(d.chapter, chapter)))
     .all();
-  return row ? { chapter, content: JSON.parse(row.usj), stamp: row.stamp } : null;
+  if (!row) return null;
+  // a pack stores the document deflated (src/pack/pack.ts)
+  const usj: string | Uint8Array = row.usj;
+  const json = typeof usj === 'string' ? usj : strFromU8(inflateSync(usj));
+  return { chapter, content: JSON.parse(json), stamp: row.stamp };
 }
 
 /** One chapter's stamp, without its document, or null when the edition has no such chapter. */
@@ -240,34 +245,6 @@ export function readReadings(db: SyncSqliteDb, translationAbbrev: string, bookCo
     .orderBy(asc(r.verse), asc(r.segment), asc(r.wordIndex), asc(r.wordCount))
     .all()
     .map((row) => ({ ...row, owIds: row.owIds ? row.owIds.split(' ') : [] }));
-}
-
-/** The word tokens of one verse unit (the tokens of a bridge carry its first verse), in word order. */
-export function readUnitWords(
-  db: SyncSqliteDb,
-  translationAbbrev: string,
-  bookCode: string,
-  chapter: number,
-  verse: number,
-  segment: string,
-): { wordIndex: number; text: string }[] {
-  const t = schema.token;
-  return db
-    .select({ wordIndex: t.wordIndex, text: t.text })
-    .from(t)
-    .innerJoin(schema.translation, eq(t.translationId, schema.translation.id))
-    .where(
-      and(
-        eq(schema.translation.abbrev, translationAbbrev),
-        eq(t.book, bookCode),
-        eq(t.chapter, chapter),
-        eq(t.verse, verse),
-        eq(t.segment, segment),
-        eq(t.kind, 'word'),
-      ),
-    )
-    .orderBy(asc(t.wordIndex))
-    .all() as { wordIndex: number; text: string }[];
 }
 
 /** The original words of one verse unit of WLC or SBLGNT (plan step 11), in read order. Empty for other editions. */

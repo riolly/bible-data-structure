@@ -11,13 +11,13 @@ import {
   readEdition,
   readOriginalWords,
   readSchemes,
-  readUnitWords,
   readWordAlignments,
   type AlignedOriginal,
   readVerseText,
   readVerseUnit,
   type SyncSqliteDb,
 } from '../db/corpus-read';
+import { verseWords } from '../ingest/tokenize';
 import { formatAddress, parseAddress, type Address, type VerseRef } from '../model/address';
 import type { VerseText } from '../model/corpus';
 import { refExists, type Mappings, type Ref } from '../model/mapping';
@@ -274,8 +274,9 @@ export function corpusContract(db: SyncSqliteDb): BibleContract {
   }
 
   /**
-   * A verse unit's words: its original words in WLC and SBLGNT, its word
-   * tokens elsewhere. With `only`, just the written word at that index.
+   * A verse unit's words: its original words in WLC and SBLGNT, its verse
+   * text's words elsewhere (`verseWords`, the same as its word tokens). With
+   * `only`, just the written word at that index.
    */
   function unitWords(e: EditionStamp, u: Verse, only?: number): Word[] {
     const at = (wordIndex: number) =>
@@ -291,7 +292,8 @@ export function corpusContract(db: SyncSqliteDb): BibleContract {
         originals: [],
       }));
     }
-    const tokens = readUnitWords(db, e.id, u.book, u.chapter, u.verse, u.segment);
+    // a translation's words come from the verse text, so a pack needs no token rows
+    const tokens = verseWords(u.text).map((text, wordIndex) => ({ wordIndex, text }));
     const aligned = new Map<number, AlignedOriginal[]>();
     for (const r of readWordAlignments(db, e.id, u.book, u.chapter, u.verse, u.segment)) {
       (aligned.get(r.wordIndex) ?? aligned.set(r.wordIndex, []).get(r.wordIndex)!).push(r);
