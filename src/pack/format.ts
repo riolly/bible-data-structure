@@ -9,7 +9,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import { deflateSync, inflateSync, strFromU8, strToU8 } from 'fflate';
 
 import { dbReader, type CorpusReader } from '../contract/reader';
-import type { SyncSqliteDb } from '../db/corpus-read';
+import { at, prepared, type SyncSqliteDb } from '../db/corpus-read';
 import * as schema from '../db/corpus-schema';
 import type { ChapterDoc } from '../model/corpus';
 
@@ -31,12 +31,14 @@ export function packReader(db: SyncSqliteDb): CorpusReader {
 function readPackedDoc(db: SyncSqliteDb, abbrev: string, book: string, chapter: number): (ChapterDoc & { stamp: string }) | null {
   const d = schema.chapterDoc;
   // the schema types `usj` as the corpus DB's JSON text; a pack holds the deflated bytes
-  const [row] = db
-    .select({ usj: sql<Uint8Array>`${d.usj}`, stamp: d.stamp })
-    .from(d)
-    .innerJoin(schema.translation, eq(d.translationId, schema.translation.id))
-    .where(and(eq(schema.translation.abbrev, abbrev), eq(d.book, book), eq(d.chapter, chapter)))
-    .all();
+  const [row] = prepared(db, 'packedDoc', () =>
+    db
+      .select({ usj: sql<Uint8Array>`${d.usj}`, stamp: d.stamp })
+      .from(d)
+      .innerJoin(schema.translation, eq(d.translationId, schema.translation.id))
+      .where(and(eq(schema.translation.abbrev, at.abbrev), eq(d.book, at.book), eq(d.chapter, at.chapter)))
+      .prepare(),
+  ).all({ abbrev, book, chapter });
   if (!row) return null;
   return { chapter, content: JSON.parse(inflateDoc(row.usj)), stamp: row.stamp };
 }

@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNull, or } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 import type { BaseSQLiteDatabase } from 'drizzle-orm/sqlite-core';
 
 import type { Block, ChapterDoc, Reading, Token, VerseText } from '../model/corpus';
@@ -15,6 +15,33 @@ import * as schema from './corpus-schema';
 
 /** Driver-agnostic bound satisfied by both sync drizzle drivers. */
 export type SyncSqliteDb = BaseSQLiteDatabase<'sync', any, any, any, any>;
+
+/** The values a prepared read takes: `.all({ abbrev, book, chapter })`. */
+export const at = {
+  abbrev: sql.placeholder('abbrev'),
+  book: sql.placeholder('book'),
+  chapter: sql.placeholder('chapter'),
+  verse: sql.placeholder('verse'),
+  segment: sql.placeholder('segment'),
+};
+
+const statements = new WeakMap<SyncSqliteDb, Map<string, unknown>>();
+
+/**
+ * The query `name` of one DB as a prepared statement, built on its first
+ * use. Without it drizzle builds a query's SQL on every run, which was about
+ * half of a warm contract call (README, step 13).
+ */
+export function prepared<Q>(db: SyncSqliteDb, name: string, build: () => Q): Q {
+  let made = statements.get(db);
+  if (!made) statements.set(db, (made = new Map()));
+  let q = made.get(name) as Q | undefined;
+  if (!q) made.set(name, (q = build()));
+  return q;
+}
+
+/** Rows as arrays in select order. Drizzle's mapping of each row to an object was 85% of reading the schemes and mappings. */
+const values = <Row extends unknown[]>(query: { values(): unknown }): Row[] => query.values() as Row[];
 
 export interface Chapter {
   blocks: Block[];
@@ -132,12 +159,14 @@ export function readChapterDoc(
   chapter: number,
 ): (ChapterDoc & { stamp: string }) | null {
   const d = schema.chapterDoc;
-  const [row] = db
-    .select({ usj: d.usj, stamp: d.stamp })
-    .from(d)
-    .innerJoin(schema.translation, eq(d.translationId, schema.translation.id))
-    .where(and(eq(schema.translation.abbrev, translationAbbrev), eq(d.book, bookCode), eq(d.chapter, chapter)))
-    .all();
+  const [row] = prepared(db, 'chapterDoc', () =>
+    db
+      .select({ usj: d.usj, stamp: d.stamp })
+      .from(d)
+      .innerJoin(schema.translation, eq(d.translationId, schema.translation.id))
+      .where(and(eq(schema.translation.abbrev, at.abbrev), eq(d.book, at.book), eq(d.chapter, at.chapter)))
+      .prepare(),
+  ).all({ abbrev: translationAbbrev, book: bookCode, chapter });
   if (!row) return null;
   return { chapter, content: JSON.parse(row.usj), stamp: row.stamp };
 }
@@ -153,13 +182,15 @@ const verseUnitColumns = {
 /** One chapter's verse units with their text, in verse order. */
 export function readVerseText(db: SyncSqliteDb, translationAbbrev: string, bookCode: string, chapter: number): VerseText[] {
   const v = schema.verseText;
-  return db
-    .select(verseUnitColumns)
-    .from(v)
-    .innerJoin(schema.translation, eq(v.translationId, schema.translation.id))
-    .where(and(eq(schema.translation.abbrev, translationAbbrev), eq(v.book, bookCode), eq(v.chapter, chapter)))
-    .orderBy(asc(v.verse), asc(v.segment))
-    .all();
+  return prepared(db, 'verseText', () =>
+    db
+      .select(verseUnitColumns)
+      .from(v)
+      .innerJoin(schema.translation, eq(v.translationId, schema.translation.id))
+      .where(and(eq(schema.translation.abbrev, at.abbrev), eq(v.book, at.book), eq(v.chapter, at.chapter)))
+      .orderBy(asc(v.verse), asc(v.segment))
+      .prepare(),
+  ).all({ abbrev: translationAbbrev, book: bookCode, chapter });
 }
 
 /** One chapter's readings (ADR-0007), in word order. The ketiv they cover are the chapter's tokens. */
@@ -201,45 +232,61 @@ export function readSchemes(db: SyncSqliteDb): Map<string, Scheme> {
   for (const s of db.select().from(schema.scheme).all()) {
     parts.set(s.id, { ...s, verseCounts: new Map(), excluded: new Set(), segments: new Map(), titles: new Set() });
   }
+  const c = schema.schemeVerseCount;
   const counts = db
-    .select()
-    .from(schema.schemeVerseCount)
-    .orderBy(asc(schema.schemeVerseCount.scheme), asc(schema.schemeVerseCount.book), asc(schema.schemeVerseCount.chapter))
-    .all();
-  for (const c of counts) {
-    const m = parts.get(c.scheme)!.verseCounts;
-    const list = m.get(c.book) ?? m.set(c.book, []).get(c.book)!;
-    list[c.chapter - 1] = c.verseCount;
+    .select({ scheme: c.scheme, book: c.book, chapter: c.chapter, verseCount: c.verseCount })
+    .from(c)
+    .orderBy(asc(c.scheme), asc(c.book), asc(c.chapter));
+  for (const [scheme, book, chapter, verseCount] of values<[string, string, number, number]>(counts)) {
+    const m = parts.get(scheme)!.verseCounts;
+    const list = m.get(book) ?? m.set(book, []).get(book)!;
+    list[chapter - 1] = verseCount;
   }
-  for (const e of db.select().from(schema.schemeExcludedVerse).all()) {
-    parts.get(e.scheme)!.excluded.add(`${e.book} ${e.chapter}:${e.verse}`);
+  const e = schema.schemeExcludedVerse;
+  const excluded = db.select({ scheme: e.scheme, book: e.book, chapter: e.chapter, verse: e.verse }).from(e);
+  for (const [scheme, book, chapter, verse] of values<[string, string, number, number]>(excluded)) {
+    parts.get(scheme)!.excluded.add(`${book} ${chapter}:${verse}`);
   }
-  const segs = db.select().from(schema.schemeSegment).orderBy(asc(schema.schemeSegment.ordinal)).all();
-  for (const g of segs) {
-    const m = parts.get(g.scheme)!.segments;
-    const k = `${g.book} ${g.chapter}:${g.verse}`;
-    (m.get(k) ?? m.set(k, []).get(k)!).push(g.segment);
+  const g = schema.schemeSegment;
+  const segs = db
+    .select({ scheme: g.scheme, book: g.book, chapter: g.chapter, verse: g.verse, segment: g.segment })
+    .from(g)
+    .orderBy(asc(g.ordinal));
+  for (const [scheme, book, chapter, verse, segment] of values<[string, string, number, number, string]>(segs)) {
+    const m = parts.get(scheme)!.segments;
+    const k = `${book} ${chapter}:${verse}`;
+    (m.get(k) ?? m.set(k, []).get(k)!).push(segment);
   }
-  for (const t of db.select().from(schema.schemeTitle).all()) parts.get(t.scheme)!.titles.add(`${t.book} ${t.chapter}`);
+  const t = schema.schemeTitle;
+  const titles = db.select({ scheme: t.scheme, book: t.book, chapter: t.chapter }).from(t);
+  for (const [scheme, book, chapter] of values<[string, string, number]>(titles)) parts.get(scheme)!.titles.add(`${book} ${chapter}`);
   return new Map<string, Scheme>(parts);
 }
 
 /** Every mapping row to the pivot (ADR-0006). */
 function readMappings(db: SyncSqliteDb): MappingRow[] {
-  return db
-    .select()
-    .from(schema.schemeMapping)
-    .all()
-    .map((r) => ({
-      scheme: r.scheme,
-      from: { book: r.book, chapter: r.chapter, verse: r.verse, segment: r.segment },
-      to:
-        r.pivotBook === null
-          ? null
-          : { book: r.pivotBook, chapter: r.pivotChapter!, verse: r.pivotVerse!, segment: r.pivotSegment ?? '' },
-      kind: r.kind,
-      source: r.source === 'tvtms' ? 'tvtms' : 'vrs',
-    }));
+  const m = schema.schemeMapping;
+  type Row = [string, string, number, number, string, string | null, number | null, number | null, string | null, MappingRow['kind'], string];
+  const rows = db.select({
+    scheme: m.scheme,
+    book: m.book,
+    chapter: m.chapter,
+    verse: m.verse,
+    segment: m.segment,
+    pivotBook: m.pivotBook,
+    pivotChapter: m.pivotChapter,
+    pivotVerse: m.pivotVerse,
+    pivotSegment: m.pivotSegment,
+    kind: m.kind,
+    source: m.source,
+  }).from(m);
+  return values<Row>(rows).map(([scheme, book, chapter, verse, segment, pivotBook, pivotChapter, pivotVerse, pivotSegment, kind, source]) => ({
+    scheme,
+    from: { book, chapter, verse, segment },
+    to: pivotBook === null ? null : { book: pivotBook, chapter: pivotChapter!, verse: pivotVerse!, segment: pivotSegment ?? '' },
+    kind,
+    source: source === 'tvtms' ? 'tvtms' : 'vrs',
+  }));
 }
 
 /** Load the schemes and mappings, ready to move addresses between schemes. Pass `schemes` when they are already loaded. */
