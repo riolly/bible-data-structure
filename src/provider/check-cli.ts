@@ -11,6 +11,7 @@ import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 
+import { LICENSED_EDITIONS } from '../contract/rights';
 import * as schema from '../db/corpus-schema';
 import { apiBibleKey, chapterFetcher } from './api-bible-cache';
 import { provider } from './provider';
@@ -58,7 +59,7 @@ async function main(key: string) {
   const bridge = await c.verseText('NLT', 'NUM 1:21');
   check(bridge.found.kind === 'bridge' && bridge.found.address === 'NUM 1:20-21/nlt', `NLT NUM 1:21 is ${bridge.found.kind} ${bridge.found.address}`);
 
-  for (const id of ['NASB95', 'NLT', 'NIV']) {
+  for (const id of LICENSED_EDITIONS.keys()) {
     const r = await c.rights(id);
     console.log(`rights ${id}: ${r.route}, ${r.offline} ${r.refreshDays} days, copy ${r.copyLimit}, AI ${r.aiUse}`);
   }

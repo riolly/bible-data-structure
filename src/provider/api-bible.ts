@@ -18,6 +18,7 @@
  * No Node-only import here.
  */
 
+import type { LicensedEdition } from '../contract/rights';
 import { chapterStampAsync } from '../model/chapter-stamp';
 import { CHAR_STYLES, METADATA_PARAS, NOTE_PARTS, NOTES, REFERENCE_PARAS, type ChapterDoc, type VerseText } from '../model/corpus';
 import {
@@ -28,36 +29,7 @@ import {
   type RawUsjElement,
   type RawUsjNode,
 } from '../ingest/normalize';
-
-export interface ApiBibleEdition {
-  readonly bibleId: string;
-  /** The edition's scheme (src/ingest/schemes.ts): every address it returns names it. */
-  readonly scheme: string;
-  /** The edition's test for a Psalm title paragraph, when it isn't `\d` (`NormalizeOptions.isTitle`). */
-  readonly isTitle?: (para: RawUsjElement) => boolean;
-}
-
-const plainText = (nodes: readonly RawUsjNode[]): string =>
-  nodes.map((n) => (typeof n === 'string' ? n : plainText(n.content ?? []))).join('');
-
-/**
- * NASB 1995 prints a Psalm's title as `\ms` under its `\ms PSALM 3` line, with
- * `\ms BOOK 2` above Psalm 42 (research/api-bible.md). Its 116 titles fall on
- * the Psalms where KJV prints one.
- */
-const nasbTitle = (para: RawUsjElement) =>
-  para.marker === 'ms' && !/^(PSALM|BOOK) \d+$/.test(plainText(para.content ?? []).trim());
-
-/**
- * The licensed editions read through API.Bible, keyed by our abbreviation,
- * with API.Bible's id for each. research/api-bible.md lists what the key
- * reaches.
- */
-export const API_BIBLE_EDITIONS: ReadonlyMap<string, ApiBibleEdition> = new Map<string, ApiBibleEdition>([
-  ['NASB95', { bibleId: 'b8ee27bcd1cae43a-01', scheme: 'nasb95', isTitle: nasbTitle }],
-  ['NLT', { bibleId: 'd6e14a625393b4da-01', scheme: 'nlt' }],
-  ['NIV', { bibleId: '78a9f6124f344018-01', scheme: 'niv' }],
-]);
+import { hasVerse, titleChapters, type Scheme } from '../model/scheme';
 
 /** The query for a chapter as JSON, with everything our chapter document keeps. */
 export const CHAPTER_QUERY =
@@ -221,4 +193,28 @@ export async function readApiBibleChapter(data: ApiBibleChapter, opts: Normalize
   const { docs, verses } = normalizeChapters([raw], opts);
   const doc = docs[0];
   return { doc, unsupported, verses, stamp: await chapterStampAsync(JSON.stringify(doc.content), verses) };
+}
+
+/**
+ * One fetched chapter of a licensed edition, read as the provider reads it:
+ * the edition's title test, and the titles and verses of its scheme. Throws
+ * when the response is another chapter than `book chapter`. `chapter-cli.ts`
+ * reads through here too, so it prints what the contract gets.
+ */
+export function readLicensedChapter(
+  id: string,
+  edition: Pick<LicensedEdition, 'isTitle'>,
+  scheme: Scheme,
+  book: string,
+  chapter: number,
+  data: ApiBibleChapter,
+): Promise<ReadChapter> {
+  if (data.bookId !== book || data.number !== String(chapter)) {
+    throw new Error(`${id} ${book} ${chapter}: the fetch returned ${data.id}`);
+  }
+  return readApiBibleChapter(data, {
+    titleChapters: titleChapters(scheme, book),
+    hasVerse: (c, v) => hasVerse(scheme, book, c, v),
+    isTitle: edition.isTitle,
+  });
 }

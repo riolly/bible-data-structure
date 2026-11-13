@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { API_BIBLE_EDITIONS, type ApiBibleNode } from './api-bible';
+import { LICENSED_EDITIONS } from '../contract/rights';
+import type { ApiBibleNode } from './api-bible';
 import { editionFacts, factsText } from './edition-facts';
 
 const text = (s: string): ApiBibleNode => ({ type: 'text', text: s });
@@ -60,7 +61,7 @@ describe('editionFacts: counts, never text', () => {
 
   it("finds a title only by the edition's own test: NASB's \\ms under its PSALM line", () => {
     expect(editionFacts(meta, undefined, books, tvtms).titled).toEqual([]);
-    const nasb = API_BIBLE_EDITIONS.get('NASB95')!.isTitle;
+    const nasb = LICENSED_EDITIONS.get('NASB95')!.isTitle;
     expect(editionFacts(meta, nasb, books, tvtms).titled).toEqual(['PSA 3']);
   });
 });

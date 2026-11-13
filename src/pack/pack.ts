@@ -24,6 +24,7 @@ import { existsSync, rmSync } from 'node:fs';
 
 import { deflateSync, strToU8 } from 'fflate';
 
+import { LICENSED_EDITIONS } from '../contract/rights';
 import { PIVOT } from '../model/mapping';
 import { createCorpusDb, createIndexes } from '../ingest/write-db';
 
@@ -35,7 +36,7 @@ export const HUBS = ['WLC', 'SBLGNT'] as const;
  * schemes of ADR-0008's target editions that an app fetches from API.Bible,
  * so it can map them to the pack's editions.
  */
-const SCHEMES = [PIVOT, 'kjv', 'nasb95', 'niv', 'nlt'] as const;
+const SCHEMES = [PIVOT, 'kjv', ...[...LICENSED_EDITIONS.values()].map((e) => e.scheme)];
 
 /** Tables every pack copies whole. */
 const SHARED = ['data_source', 'book', 'canon', 'canon_section', 'canon_entry', 'canon_entry_book', 'book_name'] as const;

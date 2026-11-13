@@ -1,9 +1,9 @@
 /**
  * Fetch API.Bible chapters on this machine and keep each response, unchanged,
  * under `build/api-bible/` (plan step 10). Git ignores `build/`, so licensed
- * text is never committed. A kept response is used for `refreshDays` (30,
- * section 11 of API.Bible's terms), then fetched again. Starter allows 5,000
- * calls a month, so every read goes through here.
+ * text is never committed. A kept response is used for its edition's
+ * `refreshDays` from the rights record (src/contract/rights.ts), then fetched
+ * again. Starter allows 5,000 calls a month, so every read goes through here.
  *
  * Node only. The key is `API_BIBLE_KEY` in `.env` (research/api-bible.md).
  */
@@ -12,7 +12,8 @@ import { existsSync } from 'node:fs';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 
-import { API_BIBLE_EDITIONS, CHAPTER_QUERY, type ApiBibleChapter } from './api-bible';
+import { LICENSED_EDITIONS, type RightsRecord } from '../contract/rights';
+import { CHAPTER_QUERY, type ApiBibleChapter } from './api-bible';
 import type { FetchChapter } from './provider';
 
 const API_BASE = 'https://rest.api.bible/v1';
@@ -26,7 +27,6 @@ export interface KeptResponse {
 export interface CacheOptions {
   readonly key: string;
   readonly dir: string;
-  readonly refreshDays?: number;
   readonly now?: () => Date;
   readonly fetch?: typeof fetch;
 }
@@ -41,22 +41,29 @@ export class ApiBibleHttpError extends Error {
   }
 }
 
-const bibleIdOf = (edition: string) => {
-  const bibleId = API_BIBLE_EDITIONS.get(edition)?.bibleId;
-  if (!bibleId) throw new Error(`no API.Bible edition "${edition}"`);
-  return bibleId;
+const apiBibleEdition = (edition: string) => {
+  const e = LICENSED_EDITIONS.get(edition);
+  if (!e) throw new Error(`no API.Bible edition "${edition}"`);
+  return e;
 };
 
 /**
  * GET `path` under the edition's Bible, from the kept response when it is
- * younger than `refreshDays`. `file` names the kept copy under the Bible's
- * directory.
+ * younger than `rights.refreshDays`. `file` names the kept copy under the
+ * Bible's directory. `rights` is the edition's record unless the provider
+ * passes its own.
  */
-async function cachedGet<T>(edition: string, path: string, file: string, opts: CacheOptions): Promise<Cached<T>> {
-  const bibleId = bibleIdOf(edition);
+async function cachedGet<T>(
+  edition: string,
+  path: string,
+  file: string,
+  opts: CacheOptions,
+  rights: RightsRecord = apiBibleEdition(edition).rights,
+): Promise<Cached<T>> {
+  const { bibleId } = apiBibleEdition(edition);
   const now = (opts.now ?? (() => new Date()))();
   const kept = join(opts.dir, bibleId, file);
-  const maxAge = (opts.refreshDays ?? 30) * 86_400_000;
+  const maxAge = rights.refreshDays === null ? Infinity : rights.refreshDays * 86_400_000;
 
   const old = await readFile(kept, 'utf8').then((s) => JSON.parse(s) as KeptResponse, () => null);
   if (old && now.getTime() - Date.parse(old.fetchedAt) < maxAge) {
@@ -84,19 +91,26 @@ export interface Cached<T> {
 export type CachedChapter = Cached<ApiBibleChapter>;
 
 /** One chapter of a licensed edition, from the kept response or a fresh fetch. */
-export function cachedChapter(edition: string, book: string, chapter: number, opts: CacheOptions): Promise<CachedChapter> {
-  return cachedGet(edition, `/chapters/${book}.${chapter}?${CHAPTER_QUERY}`, `${book}.${chapter}.json`, opts);
+export function cachedChapter(
+  edition: string,
+  book: string,
+  chapter: number,
+  opts: CacheOptions,
+  rights?: RightsRecord,
+): Promise<CachedChapter> {
+  return cachedGet(edition, `/chapters/${book}.${chapter}?${CHAPTER_QUERY}`, `${book}.${chapter}.json`, opts, rights);
 }
 
 /**
  * The provider's fetch on Node (provider.ts): each chapter through the kept
- * responses. A 404 is a chapter the edition doesn't print.
+ * responses, kept for the provider's rights record. A 404 is a chapter the
+ * edition doesn't print.
  */
 export const chapterFetcher =
   (opts: CacheOptions): FetchChapter =>
-  async (edition, book, chapter) => {
+  async (edition, book, chapter, licensed) => {
     try {
-      const { data, fetchedAt } = await cachedChapter(edition, book, chapter, opts);
+      const { data, fetchedAt } = await cachedChapter(edition, book, chapter, opts, licensed.rights);
       return { data, fetchedAt };
     } catch (e) {
       if (e instanceof ApiBibleHttpError && e.status === 404) return null;
