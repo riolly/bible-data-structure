@@ -106,7 +106,7 @@ Answered on 2026-11-14:
 
 Waiting on a written answer. The letters are in [licensing-questions.md](licensing-questions.md):
 
-- Whether a whole licensed Bible may be stored on a device. The terms allow offline storage with a 30-day refresh, the Express FAQ says "Caching is allowed and recommended", and the developer FAQ asks for "fewer than 500 consecutive verses". Ask API.Bible in writing. Until it answers, the provider counts the chapters it holds in memory as stored, and keeps NASB under Lockman's 1,000 verses (`keepLimit` in `src/contract/rights.ts`).
+- Whether a whole licensed Bible may be stored on a device. The terms allow offline storage with a 30-day refresh, the Express FAQ says "Caching is allowed and recommended", and the developer FAQ asks for "fewer than 500 consecutive verses". Ask API.Bible in writing. Until it answers, the provider counts the chapters it holds in memory as stored, and so does the Node cache for the chapters it keeps on disk (`src/provider/api-bible-cache.ts`). Each keeps NASB under Lockman's 1,000 verses (`keepLimit` in `src/contract/rights.ts`).
 - What file format a direct Lockman license delivers, and whether its words carry Strong's numbers. Lockman licenses a Strong's-keyed NASB to Bible software such as Blue Letter Bible.
 
 [lockman]: https://www.lockman.org/permission-to-quote-copyright-trademark-information/

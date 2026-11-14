@@ -68,7 +68,7 @@ const chapter = await bible.chapter('KJV', 'JHN', 3);
 const hebrew = await bible.map('KJV', 'PSA 51:1', 'WLC');
 ```
 
-For licensed editions, wrap the pack in a provider with the app's own fetch: `provider({ local: packReader(db), fetchChapter })`. On a Node server, `chapterFetcher` from `bible-data-structure/node` is that fetch, through the kept responses. A call that can't answer rejects with a `ContractError`, and its `code` says whether the address was bad, the edition unknown or a fetch failed (`src/contract/contract.ts`).
+For licensed editions, wrap the pack in a provider with the app's own fetch: `provider({ local: packReader(db), fetchChapter })`. On a Node server, `chapterFetcher` from `bible-data-structure/node` is that fetch, through the kept responses, which it bounds by the rights record's refresh days and keep limit (`src/provider/api-bible-cache.ts`). A call that can't answer rejects with a `ContractError`, and its `code` says whether the address was bad, the edition unknown or a fetch failed (`src/contract/contract.ts`).
 
 What the app's `tsconfig.json` needs, checked from a scratch app on 2026-11-14:
 
