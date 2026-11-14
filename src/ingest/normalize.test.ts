@@ -320,6 +320,21 @@ describe('normalize guards', () => {
     ]);
   });
 
+  it('leaves the pilcrow out of the verse text and keeps its token (ADR-0001 amendment, 2026-11-14)', () => {
+    // KJV MRK 16:9, as ebible prints it
+    const r = normalizeUsj(
+      doc([
+        { type: 'chapter', marker: 'c', number: '16' },
+        { type: 'para', marker: 'p', content: [{ type: 'verse', marker: 'v', number: '9' }, '¶ Now when Jesus was risen'] },
+      ]),
+    );
+    expect(r.verses).toEqual([{ chapter: 16, verse: 9, lastVerse: 9, segment: '', text: 'Now when Jesus was risen' }]);
+    // the token stream is the document's: the mark stays, and no word index moves
+    expect(r.tokens.map((t) => [t.text, t.kind, t.wordIndex]).slice(0, 3)).toEqual([
+      ['¶', 'punct', null], ['Now', 'word', 0], ['when', 'word', 1],
+    ]);
+  });
+
   it('counts bridged verses; the tokens carry the first number and the unit the range', () => {
     const r = normalizeUsj(
       doc([

@@ -103,7 +103,7 @@ The surface text of the words an outside reference points at, or its sha256 wher
 The stored truth of one chapter of an edition: its USJ as usfm-grammar gives it, with the whitespace, character styles, footnotes, cross-references, stanza breaks and published verse numbers. Tokens, Blocks and verse text are derived from it. Chapter 0 is the book's front matter. Only the markers listed in ADR-0001's step 7 amendment are supported, and the ingest stops on any other. (ADR-0001 amendment)
 
 **Verse text**:
-One verse unit's surface text, derived from the chapter document, without notes. Empty when the edition prints the number with no words. A verse the edition skips has none. (ADR-0001 amendment)
+One verse unit's surface text, derived from the chapter document, without notes and without the pilcrow KJV prints where a paragraph starts. Empty when the edition prints the number with no words. A verse the edition skips has none. (ADR-0001 amendments)
 
 **Token**:
 One word or punctuation occurrence in one edition's text, derived from the chapter document: the unit of word addressing. Whitespace is never a Token. A KJV Token and a BSB Token are never the same object. (ADR-0001)
