@@ -22,7 +22,8 @@ import { join } from 'node:path';
 import { BOOK_BY_CODE } from '../model/books';
 import type { Block, Token, VerseText } from '../model/corpus';
 import { PROTESTANT, canonBookCodes } from '../model/canon';
-import { Relation, parseRefKey, refKey, type MappingRow, type Ref } from '../model/mapping';
+import { Relation, parseRefKey, refKey, unletteredFirstParts, type MappingRow, type Ref } from '../model/mapping';
+import { parseAddress } from '../model/address';
 import { lastVerse, type Scheme } from '../model/scheme';
 import { ENG_TO_PIVOT, allVrsPivotRows, buildPivot } from './pivot';
 import { PARATEXT_SCHEMES } from './schemes';
@@ -651,6 +652,8 @@ export interface CompiledMappings {
   readonly pivot: Scheme;
   /** Rows to store: TVTMS where it decides, `.vrs` elsewhere. */
   readonly rows: MappingRow[];
+  /** Rows whose scheme-side part id names nothing the scheme prints (`foldSchemeSegments`). */
+  readonly dropped: MappingRow[];
   readonly perScheme: Map<string, Compiled>;
   /** Per scheme with a `.vrs` witness, the verses where TVTMS and `.vrs` disagree. */
   readonly diff: Map<string, string[]>;
@@ -692,14 +695,70 @@ export function compileMappings(
     [...schemes.keys()].map((id) => [id, compileTvtms(tvtms, schemes.get(id)!, seed, texts.get(id) ?? [])]),
   );
   const vrsRows = allVrsPivotRows(schemes, engRows);
-  const rows = mergeWitnesses(perScheme, vrsRows);
+  const { rows, dropped } = foldSchemeSegments(mergeWitnesses(perScheme, vrsRows), schemes);
+  checkSchemeSegments(rows);
   return {
     pivot,
     rows,
+    dropped,
     perScheme,
     diff: diffWitnesses(perScheme, vrsRows),
     conflicts: editionConflicts(schemes, tvtms, seed, texts, vrsRows, rows),
   };
+}
+
+/**
+ * TVTMS names some parts of a scheme's verse with ids an address can't carry
+ * (#70): Brenton's 1KI 2:46h1 to h4, ESG 4:17aa. A letter and digits name a
+ * piece of the printed part with that letter, so the row folds to the letter
+ * when the scheme lists it for the verse, and a folded row identical to
+ * another is dropped. Any other long id names no part the edition prints, and the row
+ * moves to the whole verse. Where the scheme prints an unlettered first part,
+ * a whole-verse row is that part's row (`Relation`), so the row is dropped
+ * instead. Pivot-side ids stay as TVTMS gives them.
+ */
+export function foldSchemeSegments(
+  rows: readonly MappingRow[],
+  schemes: ReadonlyMap<string, Scheme>,
+): { rows: MappingRow[]; dropped: MappingRow[] } {
+  const out: MappingRow[] = [];
+  const dropped: MappingRow[] = [];
+  const seen = new Set<string>();
+  for (const row of rows) {
+    let r = row;
+    const seg = row.from.segment;
+    const folded = !/^[a-z]?$/.test(seg);
+    if (folded) {
+      const listed = schemes.get(row.scheme)?.segments.get(`${row.from.book} ${row.from.chapter}:${row.from.verse}`) ?? [];
+      const letter = /^([a-z])\d+$/.exec(seg)?.[1];
+      if (letter && listed.includes(letter)) r = { ...row, from: { ...row.from, segment: letter } };
+      else if (listed.includes('')) {
+        dropped.push(row);
+        continue;
+      } else r = { ...row, from: { ...row.from, segment: '' } };
+    }
+    const key = `${r.scheme} ${refKey(r.from)} ${r.to ? refKey(r.to) : 'absent'}`;
+    if (folded && seen.has(key)) continue;
+    seen.add(key);
+    out.push(r);
+  }
+  return { rows: out, dropped };
+}
+
+/** Stop on a scheme-side segment `parseAddress` rejects: `map` would return it in an address `resolve` can't read (#70). */
+export function checkSchemeSegments(rows: readonly MappingRow[]): void {
+  const bad: string[] = [];
+  for (const { scheme, from } of rows) {
+    const text = `${from.book} ${from.chapter}:${from.verse}${from.segment}/${scheme}`;
+    try {
+      parseAddress(text);
+    } catch {
+      bad.push(`${scheme} ${text.replace(/\/.*/, '')}`);
+    }
+  }
+  if (bad.length > 0) {
+    throw new Error(`mapping rows name a scheme-side part that parseAddress rejects (fold it in foldSchemeSegments):\n  ${bad.slice(0, 10).join('\n  ')}`);
+  }
 }
 
 /**
@@ -719,10 +778,11 @@ function editionConflicts(
   const targets = (rel: Relation, r: Ref) => rel.forward(r).map(refKey).sort().join(', ') || 'absent';
   for (const [id, editions] of texts) {
     if (editions.length < 2) continue;
-    const scheme = new Relation(rows.filter((r) => r.scheme === id));
+    const firstParts = unletteredFirstParts(schemes.get(id)!);
+    const scheme = new Relation(rows.filter((r) => r.scheme === id), firstParts);
     for (const text of editions) {
       const own = compileTvtms(tvtms, schemes.get(id)!, seed, [text]);
-      const mine = new Relation(mergeWitnesses(new Map([[id, own]]), vrsRows));
+      const mine = new Relation(foldSchemeSegments(mergeWitnesses(new Map([[id, own]]), vrsRows), schemes).rows, firstParts);
       const lines: string[] = [];
       for (const key of [...own.decided].sort()) {
         const r = parseRefKey(key);

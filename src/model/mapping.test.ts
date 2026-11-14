@@ -130,3 +130,68 @@ describe('checkCoverage (replaces the bijection check)', () => {
     expect(mm.map('kjv', 'heb', ref('JOL', 2, 28))).toEqual([ref('JOL', 3, 1), ref('JOL', 3, 2)]);
   });
 });
+
+describe('a part letter the rows do not use (#71)', () => {
+  it('follows its whole verse when the scheme rows divide that verse into other parts', () => {
+    const r = new Relation([
+      { from: ref('XYZ', 5, 1, 'a'), to: ref('XYZ', 5, 1) },
+      { from: ref('XYZ', 5, 1, 'b'), to: ref('XYZ', 5, 2) },
+    ]);
+    expect(r.forward(ref('XYZ', 5, 1, 'c'))).toEqual([ref('XYZ', 5, 1), ref('XYZ', 5, 2)]);
+    expect(r.followsWhole(ref('XYZ', 5, 1, 'c'))).toBe(true);
+    expect(r.followsWhole(ref('XYZ', 5, 1, 'a'))).toBe(false);
+  });
+
+  it('follows its whole verse when the pivot divides that verse into other parts', () => {
+    // kjv has no rows for REV 13:1; the pivot divides it into a and b
+    expect(m.map('kjv', 'nrs', ref('REV', 13, 1, 'c'))).toEqual([ref('REV', 12, 18), ref('REV', 13, 1)]);
+    expect(m.followsWhole('kjv', ref('REV', 13, 1, 'c'))).toBe(true);
+    expect(m.map('kjv', 'nrs', ref('REV', 13, 1, 'a'))).toEqual([ref('REV', 12, 18)]);
+    expect(m.followsWhole('kjv', ref('REV', 13, 1, 'a'))).toBe(false);
+    // a verse nobody divides keeps the letter, and the target marks the part (JHN 3:16c)
+    expect(m.map('kjv', 'nrs', ref('JOL', 1, 1, 'c'))).toEqual([ref('JOL', 1, 1, 'c')]);
+    expect(m.followsWhole('kjv', ref('JOL', 1, 1, 'c'))).toBe(false);
+  });
+});
+
+describe('a verse printed as an unlettered first part and lettered parts (#69)', () => {
+  // Brenton prints 1KI 2:35, then 35a and 35b, text copied from 4:29 and 3:1
+  const kgs = scheme('brn', { '1KI': [46, 35] }, { segments: new Map([['1KI 2:35', ['', 'a', 'b']]]) });
+  const kjv1 = scheme('kjv', { '1KI': [46, 35, 28, 34] });
+  const pv = scheme(PIVOT, { '1KI': [46, 35, 28, 34] });
+  const parts: MappingRow[] = [
+    { scheme: 'brn', from: ref('1KI', 2, 35, 'a'), to: ref('1KI', 4, 29), kind: 'CopiedFrom verse' },
+    { scheme: 'brn', from: ref('1KI', 2, 35, 'b'), to: ref('1KI', 3, 1), kind: 'CopiedFrom verse' },
+  ];
+  const mm = new Mappings(parts, new Map([[PIVOT, pv], ['brn', kgs], ['kjv', kjv1]]));
+
+  it('maps the unlettered part by its number, beside where the lettered parts go', () => {
+    expect(mm.map('kjv', 'brn', ref('1KI', 2, 35))).toEqual([ref('1KI', 2, 35)]);
+    expect(mm.map('brn', 'kjv', ref('1KI', 2, 35))).toEqual([ref('1KI', 2, 35), ref('1KI', 4, 29), ref('1KI', 3, 1)]);
+    expect(mm.map('brn', 'kjv', ref('1KI', 2, 35, 'a'))).toEqual([ref('1KI', 4, 29)]);
+  });
+
+  it('keeps the unlettered part when a lettered part lands on the same verse (TVTMS 1KI 12:24w)', () => {
+    const w: MappingRow = { scheme: 'brn', from: ref('1KI', 2, 35, 'b'), to: ref('1KI', 2, 35), kind: 'CopiedFrom verse' };
+    const mw = new Mappings([parts[0], w], new Map([[PIVOT, pv], ['brn', kgs], ['kjv', kjv1]]));
+    expect(mw.map('kjv', 'brn', ref('1KI', 2, 35))).toEqual([ref('1KI', 2, 35, 'b'), ref('1KI', 2, 35)]);
+  });
+
+  it('keeps a row at the whole verse as the first part row (ESG 3:13 to Hebrew EST 3:13)', () => {
+    const rel = new Relation([...parts, { from: ref('1KI', 2, 35), to: ref('1KI', 2, 36) }], new Set(['1KI 2:35']));
+    expect(rel.forward(ref('1KI', 2, 35))).toEqual([ref('1KI', 4, 29), ref('1KI', 3, 1), ref('1KI', 2, 36)]);
+    expect(rel.backward(ref('1KI', 2, 35), () => true)).toEqual([]);
+    // a lettered part with no row follows the whole verse, not the first part row
+    expect(rel.forward(ref('1KI', 2, 35, 'c'))).toEqual([ref('1KI', 4, 29), ref('1KI', 3, 1), ref('1KI', 2, 36)]);
+  });
+
+  it('leaves verses whose lettered parts make up the whole verse as they were (kjv REV 13:1)', () => {
+    const rel = new Relation(parts);
+    expect(rel.forward(ref('1KI', 2, 35))).toEqual([ref('1KI', 4, 29), ref('1KI', 3, 1)]);
+    expect(rel.backward(ref('1KI', 2, 35), () => true)).toEqual([]);
+  });
+
+  it('passes the coverage check', () => {
+    expect(checkCoverage(kgs, pv, parts)).toEqual([]);
+  });
+});

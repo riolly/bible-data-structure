@@ -74,7 +74,7 @@ A book, chapter, verse and optional segment **under a named versification scheme
 _Avoid_: reference, citation (those are human-written strings that resolve to an address)
 
 **Segment**:
-A lettered part of a verse (`13:1a`), used where schemes split a verse differently, and where an edition letters text it adds after a verse (Brenton's `1KI 2:35a` to `35o`). A Token carries the segment its source marks, and a word index counts within the segment (ADR-0004 v1.4). Addresses use one letter; pivot mapping rows may use TVTMS's longer subverse ids (ADR-0006).
+A lettered part of a verse (`13:1a`), used where schemes split a verse differently, and where an edition letters text it adds after a verse (Brenton's `1KI 2:35a` to `35o`). A Token carries the segment its source marks, and a word index counts within the segment (ADR-0004 v1.4). Where an edition prints a verse's own text unlettered before its lettered parts, as Brenton does at 1KI 2:35, segment `''` names that unlettered first part, which maps by its number when only the lettered parts have mapping rows. Addresses use one letter; pivot mapping rows may use TVTMS's longer subverse ids (ADR-0006). The ingest folds a longer id on the scheme side to the edition's letter (Brenton's `1KI 2:46h1` to `h`).
 
 **Derived scheme**:
 A registered scheme plus a listed set of chapter-length changes, for an edition that fits no registered scheme. It has its own scheme id. `kjv` is `eng` with two changes. (ADR-0002 amendment)

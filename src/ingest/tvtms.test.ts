@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { Mappings, PIVOT, checkCoverage, ref, refKey, type Ref } from '../model/mapping';
+import { Mappings, PIVOT, checkCoverage, ref, refKey, type MappingRow, type Ref } from '../model/mapping';
 import type { Block, Token } from '../model/corpus';
 import type { Scheme } from '../model/scheme';
 import { buildPivot, checkExtendOnly, pivotSnapshot } from './pivot';
@@ -13,6 +13,7 @@ import {
   TVTMS_PATH,
   WORD_TEST_MARGIN,
   addBookText,
+  checkSchemeSegments,
   compileTvtms,
   compileMappings,
   editionText,
@@ -20,6 +21,7 @@ import {
   evaluateTests,
   decidedTextTest,
   evaluateTextTest,
+  foldSchemeSegments,
   parseStandardRefs,
   parseTvtms,
   readTvtms,
@@ -267,6 +269,50 @@ describe('parseTvtms and compileTvtms on synthetic rows', () => {
   });
 });
 
+describe('scheme-side part ids longer than one letter (#70)', () => {
+  const brn: Scheme = {
+    id: 'brn',
+    name: 'brn',
+    sourceUrl: '',
+    note: '',
+    verseCounts: new Map([['1KI', [46, 46]], ['ESG', [1, 1, 1, 17]], ['SIR', [1, 2]]]),
+    excluded: new Set(),
+    segments: new Map([['1KI 2:46', ['', 'e', 'h']], ['ESG 4:17', ['', 'a']], ['SIR 6:2', ['a', 'b']]]),
+    titles: new Set(),
+  };
+  const row = (from: Ref, to: Ref): MappingRow => ({ scheme: 'brn', from, to, kind: 'CopiedFrom verse', source: 'tvtms' });
+  const rows = [
+    row(ref('1KI', 2, 46, 'h1'), ref('1KI', 4, 2)),
+    row(ref('1KI', 2, 46, 'h2'), ref('1KI', 4, 3)),
+    row(ref('1KI', 2, 46, 'e1'), ref('1KI', 4, 22)),
+    row(ref('1KI', 2, 46, 'e2'), ref('1KI', 4, 22)),
+    row(ref('1KI', 2, 46, 'v1'), ref('1KI', 12, 22)),
+    row(ref('ESG', 4, 17, 'aa'), ref('ESG', 14, 16)),
+    row(ref('SIR', 6, 2, 'c1'), ref('SIR', 6, 3)),
+    row(ref('2ES', 7, 36), ref('2ES', 7, 35, 'aa')),
+    row(ref('2ES', 7, 36), ref('2ES', 7, 35, 'aa')),
+  ];
+
+  it('folds a letter and digits to the printed part, and maps an id the edition has no part for from the whole verse', () => {
+    const { rows: out, dropped } = foldSchemeSegments(rows, new Map([['brn', brn]]));
+    expect(out.map((r) => `${refKey(r.from)} ${refKey(r.to!)}`)).toEqual([
+      '1KI 2:46h 1KI 4:2',
+      '1KI 2:46h 1KI 4:3',
+      '1KI 2:46e 1KI 4:22',
+      'SIR 6:2 SIR 6:3',
+      '2ES 7:36 2ES 7:35!aa',
+      '2ES 7:36 2ES 7:35!aa', // only folded rows merge: vul's .vrs repeats DAG 3:52's rows
+    ]);
+    // where the edition prints an unlettered first part, a whole-verse row would be that part's: drop instead
+    expect(dropped.map((r) => refKey(r.from))).toEqual(['1KI 2:46!v1', 'ESG 4:17!aa']);
+  });
+
+  it('stops the ingest on a scheme-side segment an address cannot carry, and allows one on the pivot side', () => {
+    expect(() => checkSchemeSegments(rows)).toThrow(/parseAddress.*brn 1KI 2:46h1/s);
+    expect(() => checkSchemeSegments(rows.slice(-1))).not.toThrow();
+  });
+});
+
 describe('readTvtms opens its file through pinnedPath (#63)', () => {
   it('names the download command when the file is missing, and the fix when it differs from its pin', () => {
     const root = mkdtempSync(join(tmpdir(), 'tvtms-'));
@@ -300,6 +346,11 @@ describe.skipIf(!hasTvtms)('the pinned TVTMS file', () => {
     expect(pivot.verseCounts.get('2ES')![6]).toBe(70);
     expect(pivot.segments.get('REV 13:1')).toEqual(['a', 'b']);
     expect([...pivot.segments.values()].flat().every((x) => /^[a-z]+$/.test(x))).toBe(true);
+  });
+
+  it('gives every scheme-side row a segment an address can carry (#70)', () => {
+    expect(rows.filter((r) => !/^[a-z]?$/.test(r.from.segment)).map((r) => `${r.scheme} ${refKey(r.from)}`)).toEqual([]);
+    expect(keys(m.toPivot('brenton', ref('1KI', 2, 46, 'h')))).toEqual(['1KI 4:2', '1KI 4:3', '1KI 4:4', '1KI 4:5']);
   });
 
   it('keeps a Latin verse whole when only its part moves (Sir 18:1)', () => {

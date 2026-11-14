@@ -119,11 +119,18 @@ export interface Verse {
   readonly verse: number;
   /** The last verse: above `verse` for a bridge, equal to it otherwise. */
   readonly lastVerse: number;
-  /** The unit's segment letter, `''` for a whole verse. */
+  /**
+   * The unit's segment letter. `''` for a whole verse, or for the unlettered
+   * first part of a verse printed with lettered parts after it (Brenton's
+   * 1KI 2:35, then 35a to 35o).
+   */
   readonly segment: string;
   /**
    * Set when the address asked for part of this unit (`REV 13:1a/kjv`) and
-   * the edition doesn't mark that part. The text is the whole unit.
+   * the edition doesn't mark that part, or when `map` gives the units of a
+   * part's whole verse because no mapping divides the verse into that part
+   * (KJV `REV 13:1c`, where the pivot has only 13:1a and 13:1b). The text is
+   * the whole unit.
    */
   readonly part?: string;
   /** Surface text without notes. `''` when the edition prints the number with no words (a footnote only). */
@@ -224,8 +231,8 @@ export interface PassagePart {
   /**
    * One lookup per verse unit in the range, in order. A bridge appears once.
    * A verse the edition prints in parts gives each unit the edition prints
-   * for it, as `chapter` does: Brenton's 1KI 2:35 is the whole verse, then
-   * 35a to 35o. A verse the edition skips is an `absent` entry in its place, so the
+   * for it, as `chapter` does: Brenton's 1KI 2:35 is its unlettered first
+   * part, then 35a to 35o. A verse the edition skips is an `absent` entry in its place, so the
    * reader sees the gap (BSB's MAT 17:21).
    */
   readonly found: readonly Lookup[];

@@ -14,7 +14,7 @@ import { existsSync, readFileSync, mkdirSync, rmSync, writeFileSync } from 'node
 import { join } from 'node:path';
 
 import type { IngestStats, WordTag } from './normalize';
-import { PIVOT, checkCoverage } from '../model/mapping';
+import { PIVOT, checkCoverage, refKey } from '../model/mapping';
 import type { Scheme } from '../model/scheme';
 import { loadSchemes } from './schemes';
 import { checkBook } from './book-check';
@@ -194,7 +194,7 @@ function writeMappings(
   tvtms: readonly TvtmsRow[],
   texts: ReadonlyMap<string, readonly EditionText[]>,
 ) {
-  const { pivot, rows: mappingRows, perScheme, diff, conflicts } = compileMappings(schemes, tvtms, texts);
+  const { pivot, rows: mappingRows, dropped, perScheme, diff, conflicts } = compileMappings(schemes, tvtms, texts);
   if (conflicts.size > 0) {
     const lines = [...conflicts].flatMap(([ed, ls]) => ls.slice(0, 10).map((l) => `${ed}: ${l}`));
     throw new Error(
@@ -203,6 +203,10 @@ function writeMappings(
   }
   console.log('');
   insertMappings(db, mappingRows);
+  if (dropped.length > 0) {
+    const ids = dropped.map((r) => `${r.scheme} ${refKey(r.from)}`);
+    console.log(`  ${dropped.length} TVTMS rows name a part no edition prints, beside an unlettered first part: ${[...new Set(ids)].join(', ')}`);
+  }
   console.log(`schemes: ${[...schemes.keys()].join(', ')} + ${PIVOT}`);
   for (const s of schemes.values()) {
     const c = perScheme.get(s.id)!;

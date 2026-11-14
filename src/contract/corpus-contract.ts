@@ -274,15 +274,19 @@ export function readerContract(read: CorpusReader): BibleContract {
     readonly l: Lookup;
   }
 
-  /** Add the edition's units for target refs under its scheme, merging the parts of one unit. `got` holds their chapters. */
-  function place(e: EditionStamp, targets: readonly Ref[], out: Placed[], got: Read) {
+  /**
+   * Add the edition's units for target refs under its scheme, merging the parts of one unit. `got` holds their chapters.
+   * `part` marks every unit as holding only that part of the source: a part that follows its whole verse (#71).
+   */
+  function place(e: EditionStamp, targets: readonly Ref[], out: Placed[], got: Read, part = '') {
     for (const t of targets) {
       const l = lookup(e, t, got);
       if (l.kind === 'absent') {
         if (!out.some((p) => p.l.address === l.address)) out.push({ at: t, l });
         continue;
       }
-      for (const u of l.kind === 'parts' ? l.parts : [l]) {
+      for (const found of l.kind === 'parts' ? l.parts : [l]) {
+        const u = part && !found.part ? { ...found, part } : found;
         const i = out.findIndex((p) => p.l.kind !== 'absent' && p.l.address === u.address);
         if (i < 0) out.push({ at: u, l: u });
         else if (out[i].l.kind !== 'absent' && (out[i].l as Verse).part !== u.part) {
@@ -325,7 +329,7 @@ export function readerContract(read: CorpusReader): BibleContract {
     const got = await load(e, moved.flatMap((step) => step.targets));
     const placed: Placed[] = [];
     for (const { r, targets } of moved) {
-      if (targets.length > 0) place(e, targets, placed, got);
+      if (targets.length > 0) place(e, targets, placed, got, m.followsWhole(scheme, r) ? r.segment : '');
       else placed.push({ at: null, l: absent(formatAddress({ scheme, start: r }), 'scheme') });
     }
     return inOrder(placed).map((p) => p.l);
@@ -468,7 +472,7 @@ export function readerContract(read: CorpusReader): BibleContract {
         targets.push(...mappings.map(from.scheme, to.scheme, ref));
       }
       const placed: Placed[] = [];
-      place(to, targets, placed, await load(to, targets));
+      place(to, targets, placed, await load(to, targets), refs.length === 1 && mappings.followsWhole(from.scheme, r) ? r.segment : '');
       const ordered = inOrder(placed).map((p) => p.l);
       const verses = ordered.filter((l): l is Verse => l.kind !== 'absent');
       const missing = ordered.filter((l): l is Absent => l.kind === 'absent');
@@ -491,6 +495,9 @@ export function readerContract(read: CorpusReader): BibleContract {
         const end = { chapter: a.end.chapter, verse: a.end.verse };
         const { steps } = walk(s, { book: r.book, start: { chapter: r.chapter, verse: r.verse }, end });
         found = await (a.scheme === e.scheme ? ownSteps(e, steps) : otherSteps(e, a.scheme, steps));
+      } else if (a.scheme === e.scheme && r.segment === '') {
+        // a whole verse, as passage reads it: Brenton's 1KI 2:35 is its unlettered part and 35a to 35o (#69)
+        found = await ownSteps(e, [{ r, exists: refExists(s, r) }]);
       } else if (a.scheme === e.scheme) {
         const l = lookup(e, r, await load(e, [r]));
         found = l.kind === 'parts' ? [...l.parts] : [l];
