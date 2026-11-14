@@ -6,6 +6,8 @@
  * which Greek needs (ADR-0004 v1.1 rule 1). Every place the ingest or a
  * provider normalizes text calls this, never a bare `normalize('NFC')`.
  */
-const NOT_HEBREW = /[^֐-׿יִ-ﭏ]+/g;
+// Escapes, not the characters themselves: U+FB1D decomposes under NFC, so a tool that
+// rewrote this file as NFC would change the range.
+const NOT_HEBREW = /[^\u0590-\u05FF\uFB1D-\uFB4F]+/g;
 
 export const storedText = (s: string): string => s.replace(NOT_HEBREW, (run) => run.normalize('NFC'));

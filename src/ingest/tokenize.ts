@@ -12,7 +12,8 @@
  *     ("father-in-law") are ONE word — one tap target. A combining mark binds
  *     to its base letter, so a decomposed accent or a Hebrew vowel point stays
  *     inside its word instead of splitting off as punct (ADR-0004 v1.1);
- *     ingest runs NFC first (normalize.ts) so Greek polytonic recomposes.
+ *     ingest runs `storedText` first (text-form.ts, ADR-0004 v1.6): NFC for
+ *     everything but Hebrew, so Greek polytonic recomposes.
  *  2. A grouped NUMBER — digits joined by , or . ("144,000", "3.5") — is ONE
  *     word token.
  *  3. A trailing bare apostrophe (plural possessive "disciples’") and a
