@@ -27,7 +27,10 @@ const unit = (verse: number, lastVerse = verse, segment = ''): VerseText => ({ c
 const NUM_1 = [unit(1), unit(20, 21), unit(22, 22, 'a'), unit(22, 22, 'b'), unit(23)];
 
 const reader: CorpusReader = {
-  edition: (abbrev) => (abbrev === 'TST' ? { abbrev, scheme: 'tst', edition: null, wordsStamp: null, textStamp: null } : null),
+  edition: (abbrev) => (abbrev === 'TST' ? { abbrev, name: 'Test', language: 'english', scheme: 'tst', edition: null, wordsStamp: null, textStamp: null } : null),
+  editions: () => [],
+  books: () => new Map(),
+  bookList: () => [],
   chapter: (_, book, chapter) => (book === 'NUM' && chapter === 1 ? { stamp: 'sha256:num1', verses: NUM_1 } : null),
   chapterDoc: () => null,
   originalWords: () => [],

@@ -18,8 +18,10 @@ import type {
   Absent,
   AbsentReason,
   BibleContract,
+  BookInfo,
   ChapterResult,
   Credit,
+  EditionInfo,
   EditionStamp,
   Lookup,
   MapKind,
@@ -33,7 +35,7 @@ import type {
   Word,
   WordsResult,
 } from './contract';
-import { dbReader, type AlignedOriginal, type ChapterUnits, type CorpusReader } from './reader';
+import { dbReader, type AlignedOriginal, type ChapterUnits, type CorpusReader, type EditionRow, type ListedBook } from './reader';
 import { parseReference, type BookRange } from './reference';
 import { RIGHTS, type RightsRecord } from './rights';
 
@@ -51,19 +53,22 @@ export function readerContract(read: CorpusReader): BibleContract {
   const schemes = read.schemes();
   const editions = new Map<string, EditionStamp>();
   let mappings: Mappings | undefined;
+  let bookList: readonly ListedBook[] | undefined;
+
+  const stampOf = (row: EditionRow): EditionStamp => ({
+    id: row.abbrev,
+    scheme: row.scheme,
+    stamp: row.edition,
+    wordsStamp: row.wordsStamp,
+    textStamp: row.textStamp,
+  });
 
   function edition(id: string): EditionStamp {
     const cached = editions.get(id);
     if (cached) return cached;
     const row = read.edition(id);
     if (!row) throw new Error(`unknown edition "${id}"`);
-    const e: EditionStamp = {
-      id: row.abbrev,
-      scheme: row.scheme,
-      stamp: row.edition,
-      wordsStamp: row.wordsStamp,
-      textStamp: row.textStamp,
-    };
+    const e = stampOf(row);
     editions.set(id, e);
     return e;
   }
@@ -360,6 +365,18 @@ export function readerContract(read: CorpusReader): BibleContract {
   }
 
   return {
+    async editions(): Promise<EditionInfo[]> {
+      return read.editions().map((row) => ({ ...stampOf(row), name: row.name, language: row.language }));
+    },
+
+    async books(id): Promise<BookInfo[]> {
+      const held = read.books(edition(id).id);
+      return (bookList ??= read.bookList()).flatMap((b) => {
+        const chapters = held.get(b.book);
+        return chapters === undefined ? [] : [{ ...b, chapters }];
+      });
+    },
+
     async chapter(id, book, chapter): Promise<ChapterResult> {
       const e = edition(id);
       if (!Number.isInteger(chapter) || chapter < 1) throw new Error(`chapter: ${chapter} is not a chapter number`);

@@ -417,6 +417,36 @@ describe.skipIf(!native || !existsSync(CORPUS))('the app contract on the corpus 
     ]);
   });
 
+  it('editions and books: what an edition and book picker lists, in canon order', async () => {
+    const editions = await c.editions();
+    expect(editions.map((e) => e.id)).toEqual(['KJV', 'BSB', 'WLC', 'SBLGNT', 'RP', 'WEB', 'Brenton']);
+    expect(editions[0]).toMatchObject({ id: 'KJV', name: 'King James Version', language: 'english', scheme: 'kjv', stamp: expect.stringMatching(/^sha256:/) });
+    expect(editions[2]).toMatchObject({ id: 'WLC', language: 'hebrew', scheme: 'org' });
+
+    const kjv = await c.books('KJV');
+    expect(kjv).toHaveLength(66);
+    expect(kjv[0]).toEqual({ book: 'GEN', name: 'Genesis', section: 'ot', chapters: 50 });
+    expect(kjv.find((b) => b.book === 'PSA')).toEqual({ book: 'PSA', name: 'Psalms', section: 'ot', chapters: 150 });
+    expect(kjv.at(-1)).toEqual({ book: 'REV', name: 'Revelation', section: 'nt', chapters: 22 });
+    // every chapter a book lists reads, and the next one doesn't
+    for (const b of [kjv[0], kjv.at(-1)!]) {
+      expect((await c.chapter('KJV', b.book, b.chapters)).kind).toBe('chapter');
+      expect((await c.chapter('KJV', b.book, b.chapters + 1)).kind).toBe('absent');
+    }
+
+    expect((await c.books('WLC')).map((b) => b.book).slice(0, 2).concat((await c.books('WLC')).at(-1)!.book)).toEqual(['GEN', 'EXO', 'MAL']);
+    expect((await c.books('SBLGNT')).map((b) => b.book)).toHaveLength(27);
+    // WEB's deuterocanon has no canon yet: after Revelation, by USFM number
+    const web = await c.books('WEB');
+    expect(web).toHaveLength(81);
+    expect(web.slice(65, 68)).toMatchObject([
+      { book: 'REV', section: 'nt' },
+      { book: 'TOB', name: 'Tobit', section: null },
+      { book: 'JDT', section: null },
+    ]);
+    await expect(c.books('ESV')).rejects.toThrow(/unknown edition "ESV"/);
+  });
+
   it('rights: a record for each of the seven editions in the corpus', async () => {
     for (const id of ['KJV', 'BSB', 'WLC', 'SBLGNT', 'RP', 'WEB', 'Brenton']) {
       const r = await c.rights(id);
@@ -498,6 +528,13 @@ describe.skipIf(!native)('the app contract on a verse bridge (fixtures/adversari
     expect((await c.map('FIX', 'JHN 1:5-6', 'FIX')).asked).toBe('JHN 1:5-6/kjv');
     await expect(c.map('FIX', 'JHN 1:4-6', 'FIX')).rejects.toThrow(/not one verse/);
     await expect(c.map('FIX', 'JHN 1:5!1', 'FIX')).rejects.toThrow(/not one verse/);
+  });
+
+  it('lists its one edition and the book it holds', async () => {
+    expect(await c.editions()).toEqual([
+      { id: 'FIX', name: 'Fixture', language: 'english', scheme: 'kjv', stamp: 'sha256:fixture', wordsStamp: expect.any(String), textStamp: expect.any(String) },
+    ]);
+    expect(await c.books('FIX')).toEqual([{ book: 'JHN', name: 'John', section: 'nt', chapters: 2 }]);
   });
 
   it('rights throws for an edition the contract does not read, though it has a record', async () => {

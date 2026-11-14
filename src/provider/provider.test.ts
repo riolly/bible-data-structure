@@ -57,8 +57,8 @@ const testRights = (edition: string): RightsRecord => ({
 });
 
 const EDITIONS = new Map<string, LicensedEdition>([
-  ['KJVAB', { scheme: 'kjv', rights: testRights('KJVAB') }],
-  ['NLTX', { scheme: 'nlt', rights: testRights('NLTX') }],
+  ['KJVAB', { name: 'King James (Authorised) Version', language: 'english', scheme: 'kjv', rights: testRights('KJVAB') }],
+  ['NLTX', { name: 'NLT stand-in', language: 'english', scheme: 'nlt', rights: testRights('NLTX') }],
 ]);
 
 const CHAPTERS = new Map<string, ApiBibleChapter>([
@@ -163,6 +163,22 @@ describe.skipIf(!native || !existsSync(CORPUS))('the provider: local and license
     clock += 31 * 86_400_000;
     await p.verseText('KJVAB', 'JHN 3:16');
     expect(fetches).toEqual(['KJVAB JHN 3', 'KJVAB JHN 3']);
+  });
+
+  it('editions and books: the licensed editions after the local ones, their books listed without a fetch', async () => {
+    const { p, fetches } = make();
+    const editions = await p.editions();
+    expect(editions.map((e) => e.id)).toEqual(['KJV', 'BSB', 'WLC', 'SBLGNT', 'RP', 'WEB', 'Brenton', 'KJVAB', 'NLTX']);
+    expect(editions.at(-1)).toEqual({ id: 'NLTX', name: 'NLT stand-in', language: 'english', scheme: 'nlt', stamp: null, wordsStamp: null, textStamp: null });
+    const books = await p.books('NLTX');
+    expect(books).toHaveLength(66);
+    expect([books[0], books[3], books.at(-1)]).toEqual([
+      { book: 'GEN', name: 'Genesis', section: 'ot', chapters: 50 },
+      { book: 'NUM', name: 'Numbers', section: 'ot', chapters: 36 },
+      { book: 'REV', name: 'Revelation', section: 'nt', chapters: 22 },
+    ]);
+    expect((await p.books('KJV')).map((b) => [b.book, b.chapters])).toEqual((await p.books('KJVAB')).map((b) => [b.book, b.chapters]));
+    expect(fetches).toEqual([]);
   });
 
   it('rights: the licensed records, and the local ones from rights.ts', async () => {

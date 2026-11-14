@@ -4,10 +4,10 @@
  * shares stay in src/db/corpus-read.ts.
  */
 
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, gt, isNull, max } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/sqlite-core';
 
-import { at, loadMappings, prepared, readChapterDoc, readSchemes, readVerseText, type SyncSqliteDb } from '../db/corpus-read';
+import { at, canonBooks, loadMappings, prepared, readChapterDoc, readSchemes, readVerseText, type SyncSqliteDb } from '../db/corpus-read';
 import * as schema from '../db/corpus-schema';
 import type { ChapterDoc, OriginalWord, VerseText } from '../model/corpus';
 import type { Mappings } from '../model/mapping';
@@ -28,6 +28,24 @@ export interface ChapterUnits {
  */
 export type ChapterRead<T> = T | null | Promise<T | null>;
 
+/** An edition as a reader gives it: its name, scheme and stamps (ADR-0002, ADR-0005). */
+export interface EditionRow {
+  readonly abbrev: string;
+  readonly name: string;
+  readonly language: string;
+  readonly scheme: string;
+  readonly edition: string | null;
+  readonly wordsStamp: string | null;
+  readonly textStamp: string | null;
+}
+
+/** A book in the order a book list shows it, with its English short name and its section of the Protestant canon. */
+export interface ListedBook {
+  readonly book: string;
+  readonly name: string;
+  readonly section: string | null;
+}
+
 /**
  * The reads the contract makes. Each takes an edition's abbreviation. Only a
  * chapter read may wait (`ChapterRead`); the others are sync. A hub read
@@ -36,7 +54,13 @@ export type ChapterRead<T> = T | null | Promise<T | null>;
  * 2026-11-11 amendment).
  */
 export interface CorpusReader {
-  edition(abbrev: string): { abbrev: string; scheme: string; edition: string | null; wordsStamp: string | null; textStamp: string | null } | null;
+  edition(abbrev: string): EditionRow | null;
+  /** Every edition the reader reads. */
+  editions(): EditionRow[];
+  /** The books the edition holds, each with its last chapter number. It reads no chapter. */
+  books(abbrev: string): Map<string, number>;
+  /** Every book the reader knows: the Protestant canon's in canon order, then the others by USFM number. */
+  bookList(): ListedBook[];
   chapter(abbrev: string, book: string, chapter: number): ChapterRead<ChapterUnits>;
   /**
    * The chapter's document, with the stamp of the copy it is from: a reader
@@ -63,7 +87,10 @@ const KEPT_CHAPTERS = 16;
 export function dbReader(db: SyncSqliteDb): CorpusReader {
   const kept = new Map<string, ChapterUnits | null>();
   return {
-    edition: (abbrev) => readEdition(db, abbrev),
+    edition: (abbrev) => readEditions(db).find((e) => e.abbrev === abbrev) ?? null,
+    editions: () => readEditions(db),
+    books: (abbrev) => readBooks(db, abbrev),
+    bookList: () => readBookList(db),
     chapter(abbrev, book, chapter) {
       const key = `${abbrev} ${book} ${chapter}`;
       const got = kept.has(key) ? kept.get(key)! : readChapterUnits(db, abbrev, book, chapter);
@@ -82,18 +109,60 @@ export function dbReader(db: SyncSqliteDb): CorpusReader {
   };
 }
 
-/** One edition's scheme and stamps (ADR-0002, ADR-0005), or null when the corpus has no such edition. */
-function readEdition(
-  db: SyncSqliteDb,
-  translationAbbrev: string,
-): { abbrev: string; scheme: string; edition: string; wordsStamp: string | null; textStamp: string | null } | null {
+/** Every edition's name, scheme and stamps (ADR-0002, ADR-0005), in the order the file holds them. */
+function readEditions(db: SyncSqliteDb): EditionRow[] {
   const t = schema.translation;
-  const [row] = db
-    .select({ abbrev: t.abbrev, scheme: t.scheme, edition: t.edition, wordsStamp: t.wordsStamp, textStamp: t.textStamp })
+  return db
+    .select({
+      abbrev: t.abbrev,
+      name: t.name,
+      language: t.language,
+      scheme: t.scheme,
+      edition: t.edition,
+      wordsStamp: t.wordsStamp,
+      textStamp: t.textStamp,
+    })
     .from(t)
-    .where(eq(t.abbrev, translationAbbrev))
+    .orderBy(asc(t.id))
     .all();
-  return row ?? null;
+}
+
+/** The books one edition has a chapter document for, each with its last chapter number. */
+function readBooks(db: SyncSqliteDb, abbrev: string): Map<string, number> {
+  const d = schema.chapterDoc;
+  const rows = db
+    .select({ book: d.book, chapters: max(d.chapter) })
+    .from(d)
+    .innerJoin(schema.translation, eq(d.translationId, schema.translation.id))
+    // chapter 0 is the front matter
+    .where(and(eq(schema.translation.abbrev, abbrev), gt(d.chapter, 0)))
+    .groupBy(d.book)
+    .all();
+  return new Map(rows.map((r) => [r.book, r.chapters!]));
+}
+
+/** The canon and the language of a book list (ADR-0008: the Protestant canon, in English). */
+const LIST_CANON = 'protestant';
+const LIST_LANG = 'en';
+
+/** Every book: the Protestant canon's in canon order, then the others by USFM number, each with its English short name. */
+function readBookList(db: SyncSqliteDb): ListedBook[] {
+  const canon = canonBooks(db, LIST_CANON, LIST_LANG).map((b) => ({ book: b.code, name: b.name, section: b.section }));
+  const listed = new Set(canon.map((b) => b.book));
+  const n = schema.bookName;
+  const names = new Map(
+    db
+      .select({ book: n.bookCode, name: n.short })
+      .from(n)
+      .where(and(eq(n.lang, LIST_LANG), isNull(n.canonId)))
+      .all()
+      .map((r) => [r.book, r.name]),
+  );
+  const others = db.select({ book: schema.book.code }).from(schema.book).orderBy(asc(schema.book.usfmNumber)).all();
+  return [
+    ...canon,
+    ...others.filter((b) => !listed.has(b.book)).map((b) => ({ book: b.book, name: names.get(b.book) ?? b.book, section: null })),
+  ];
 }
 
 /** One chapter's verse units and stamp, or null when the edition has neither. */

@@ -37,7 +37,7 @@ const SCHEME: Scheme = {
   titles: new Set(),
 };
 const rights = { edition: 'KJVAB', route: 'api.bible', refreshDays: 30, keepLimit: null } as RightsRecord;
-const EDITIONS = new Map<string, LicensedEdition>([['KJVAB', { scheme: 'tst', rights }]]);
+const EDITIONS = new Map<string, LicensedEdition>([['KJVAB', { name: 'Test', language: 'english', scheme: 'tst', rights }]]);
 const day = 86_400_000;
 
 /** Licensed chapters whose fetch logs each call and waits for `serve` when `hold` is set. */
@@ -181,13 +181,13 @@ describe('licensed chapters: hold, refresh and fetch', () => {
   });
 
   it('gives null for a chapter the edition does not print when nothing is kept (0 refresh days)', async () => {
-    const editions = new Map<string, LicensedEdition>([['KJVAB', { scheme: 'tst', rights: { ...rights, refreshDays: 0 } }]]);
+    const editions = new Map<string, LicensedEdition>([['KJVAB', { name: 'Test', language: 'english', scheme: 'tst', rights: { ...rights, refreshDays: 0 } }]]);
     const held = licensedChapters({ editions, fetchChapter: async () => null, schemeOf: () => SCHEME, now: () => 0 });
     expect(await held.chapter('KJVAB', 'JHN', 4)).toBeNull();
   });
 
   it('0 refresh days keeps nothing: each read fetches, and the read that fetched gets the chapter', async () => {
-    const editions = new Map<string, LicensedEdition>([['KJVAB', { scheme: 'tst', rights: { ...rights, refreshDays: 0 } }]]);
+    const editions = new Map<string, LicensedEdition>([['KJVAB', { name: 'Test', language: 'english', scheme: 'tst', rights: { ...rights, refreshDays: 0 } }]]);
     const t = make(undefined, editions);
     expect((await t.held.chapter('KJVAB', 'JHN', 3))?.verses).toHaveLength(36);
     expect(t.held.chapter('KJVAB', 'JHN', 3)).toBeInstanceOf(Promise);
@@ -199,10 +199,13 @@ describe('licensed chapters: hold, refresh and fetch', () => {
   });
 
   it('0 refresh days: one `chapter` call of the contract fetches the chapter once', async () => {
-    const editions = new Map<string, LicensedEdition>([['KJVAB', { scheme: 'tst', rights: { ...rights, refreshDays: 0 } }]]);
+    const editions = new Map<string, LicensedEdition>([['KJVAB', { name: 'Test', language: 'english', scheme: 'tst', rights: { ...rights, refreshDays: 0 } }]]);
     const t = make(undefined, editions);
     const reader: CorpusReader = {
-      edition: (abbrev) => ({ abbrev, scheme: 'tst', edition: null, wordsStamp: null, textStamp: null }),
+      edition: (abbrev) => ({ abbrev, name: 'Test', language: 'english', scheme: 'tst', edition: null, wordsStamp: null, textStamp: null }),
+      editions: () => [],
+      books: () => new Map(),
+      bookList: () => [],
       chapter: (id, book, chapter) => t.held.chapter(id, book, chapter),
       chapterDoc: (id, book, chapter) => {
         const r = t.held.chapter(id, book, chapter);
@@ -228,8 +231,8 @@ describe('licensed chapters: hold, refresh and fetch', () => {
   // the scheme gives John 1, 3 and 4 51, 36 and 54 verses, which is what a keep limit counts
   const limited = (keepLimit: number) =>
     new Map<string, LicensedEdition>([
-      ['KJVAB', { scheme: 'tst', rights: { ...rights, keepLimit } }],
-      ['OTHER', { scheme: 'tst', rights: { ...rights, edition: 'OTHER' } }],
+      ['KJVAB', { name: 'Test', language: 'english', scheme: 'tst', rights: { ...rights, keepLimit } }],
+      ['OTHER', { name: 'Test', language: 'english', scheme: 'tst', rights: { ...rights, edition: 'OTHER' } }],
     ]);
   const isHeld = (t: ReturnType<typeof make>, edition: string, chapter: number) => !(t.held.chapter(edition, 'JHN', chapter) instanceof Promise);
 
@@ -287,7 +290,10 @@ describe('licensed chapters: hold, refresh and fetch', () => {
     const [first, second] = [await copy(' a'), await copy(' b')];
     expect(first.stamp).not.toBe(second.stamp);
     const reader = (units: (typeof first)[]): CorpusReader => ({
-      edition: (abbrev) => ({ abbrev, scheme: 'tst', edition: null, wordsStamp: null, textStamp: null }),
+      edition: (abbrev) => ({ abbrev, name: 'Test', language: 'english', scheme: 'tst', edition: null, wordsStamp: null, textStamp: null }),
+      editions: () => [],
+      books: () => new Map(),
+      bookList: () => [],
       // the units come from `units` in turn, the last one from then on; the document is always the second copy's
       chapter: () => (units.length > 1 ? units.shift()! : units[0]),
       chapterDoc: (_, __, chapter) => (chapter === 3 ? { ...second.doc, stamp: second.stamp } : null),
@@ -312,7 +318,10 @@ describe('licensed chapters: hold, refresh and fetch', () => {
     const t = make(new Map([['JHN 3', JHN_3], ['JHN 4', JHN_4]]));
     t.state.hold = true;
     const reader: CorpusReader = {
-      edition: (abbrev) => ({ abbrev, scheme: 'tst', edition: null, wordsStamp: null, textStamp: null }),
+      edition: (abbrev) => ({ abbrev, name: 'Test', language: 'english', scheme: 'tst', edition: null, wordsStamp: null, textStamp: null }),
+      editions: () => [],
+      books: () => new Map(),
+      bookList: () => [],
       chapter: (id, book, chapter) => t.held.chapter(id, book, chapter),
       chapterDoc: () => null,
       originalWords: () => [],

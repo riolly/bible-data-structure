@@ -20,7 +20,7 @@
 
 import type { BibleContract } from '../contract/contract';
 import { readerContract } from '../contract/corpus-contract';
-import type { CorpusReader } from '../contract/reader';
+import type { CorpusReader, EditionRow } from '../contract/reader';
 import { LICENSED_EDITIONS, type LicensedEdition } from '../contract/rights';
 import type { Mappings } from '../model/mapping';
 import type { Scheme } from '../model/scheme';
@@ -79,11 +79,25 @@ export function provider(opts: ProviderOptions): Provider {
     fetchTimeoutMs: opts.fetchTimeoutMs,
   });
   const licensed = (id: string) => editions.has(id);
+  /** A licensed edition has no edition, words or text stamp (ADR-0005, 2026-11-11 amendment). */
+  const licensedRow = (id: string, e: LicensedEdition): EditionRow => ({
+    abbrev: id,
+    name: e.name,
+    language: e.language,
+    scheme: schemeOf(id).id,
+    edition: null,
+    wordsStamp: null,
+    textStamp: null,
+  });
   const reader: CorpusReader = {
     edition(id) {
-      if (!licensed(id)) return local.edition(id);
-      return { abbrev: id, scheme: schemeOf(id).id, edition: null, wordsStamp: null, textStamp: null };
+      const e = editions.get(id);
+      return e ? licensedRow(id, e) : local.edition(id);
     },
+    editions: () => [...local.editions(), ...[...editions].map(([id, e]) => licensedRow(id, e))],
+    // a licensed edition's books and chapter counts are its scheme's: nothing is fetched to list them
+    books: (id) => (licensed(id) ? new Map([...schemeOf(id).verseCounts].map(([book, counts]) => [book, counts.length])) : local.books(id)),
+    bookList: () => local.bookList(),
     chapter: (id, book, chapter) => (licensed(id) ? held.chapter(id, book, chapter) : local.chapter(id, book, chapter)),
     chapterDoc: (id, book, chapter) =>
       licensed(id) ? thenRead(held.chapter(id, book, chapter), (r: ReadChapter) => ({ ...r.doc, stamp: r.stamp })) : local.chapterDoc(id, book, chapter),

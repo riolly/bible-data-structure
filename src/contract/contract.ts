@@ -2,6 +2,8 @@
  * The app contract (plan step 9): the calls an app makes to read the model,
  * with the reading screen as the first consumer.
  *
+ *     editions()                         the editions this contract reads
+ *     books(edition)                     an edition's books, with their names and chapter counts
  *     chapter(edition, book, chapter)    a chapter's document and verse units
  *     passage(edition, reference)        a human reference, "1 Cor 13:4-7"
  *     verseText(edition, address)        one verse unit, from `JHN 3:16`
@@ -53,6 +55,26 @@ export interface EditionStamp {
   readonly wordsStamp: string | null;
   /** The text stamp: changes whenever any chapter stamp does. */
   readonly textStamp: string | null;
+}
+
+/** An edition the contract reads, for an edition picker. */
+export interface EditionInfo extends EditionStamp {
+  /** `King James Version`. */
+  readonly name: string;
+  /** The text's language: `english`, `hebrew`, `greek`. */
+  readonly language: string;
+}
+
+/** A book an edition holds, for a book and chapter picker. */
+export interface BookInfo {
+  /** The USFM code: `GEN`. */
+  readonly book: string;
+  /** The English short name, `Genesis`, or the USFM code when the file has no name for the book. */
+  readonly name: string;
+  /** The book's section of the Protestant canon, `ot` or `nt`. Null for a book outside that canon. */
+  readonly section: string | null;
+  /** The book's last chapter number in the edition. Chapters count from 1. */
+  readonly chapters: number;
 }
 
 /**
@@ -308,6 +330,17 @@ export interface WordsResult {
 }
 
 export interface BibleContract {
+  /** Every edition this contract reads: the file's in the order it holds them, then a provider's licensed ones. */
+  editions(): Promise<readonly EditionInfo[]>;
+
+  /**
+   * The books the edition holds: the Protestant canon's in canon order, then
+   * any others by USFM number (ADR-0008: there is no other canon yet). It
+   * reads no chapter. A licensed edition's books and chapter counts are its
+   * scheme's, so nothing is fetched.
+   */
+  books(edition: string): Promise<readonly BookInfo[]>;
+
   /**
    * One chapter of an edition. Absent when the scheme has no such chapter
    * (`scheme`) or the edition doesn't print it (`text`).
