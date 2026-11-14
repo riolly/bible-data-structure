@@ -269,46 +269,75 @@ describe('parseTvtms and compileTvtms on synthetic rows', () => {
   });
 });
 
-describe('scheme-side part ids longer than one letter (#70)', () => {
-  const brn: Scheme = {
-    id: 'brn',
-    name: 'brn',
+describe('scheme-side part letters (#70)', () => {
+  const scheme = (id: string, segments: [string, string[]][]): Scheme => ({
+    id,
+    name: id,
     sourceUrl: '',
     note: '',
-    verseCounts: new Map([['1KI', [46, 46]], ['ESG', [1, 1, 1, 17]], ['SIR', [1, 2]]]),
+    verseCounts: new Map([['1KI', [46, 46, 46, 46, 46, 46, 46, 53]], ['ESG', [1]], ['SIR', [1, 1, 1, 1, 1, 2]], ['EXO', Array(38).fill(17)]]),
     excluded: new Set(),
-    segments: new Map([['1KI 2:46', ['', 'e', 'h']], ['ESG 4:17', ['', 'a']], ['SIR 6:2', ['a', 'b']]]),
+    segments: new Map(segments),
     titles: new Set(),
-  };
-  const row = (from: Ref, to: Ref): MappingRow => ({ scheme: 'brn', from, to, kind: 'CopiedFrom verse', source: 'tvtms' });
+  });
+  // Rahlfs letters skip j: the 10th and 11th printed parts of 1KI 2:46 are k and l
+  const kgs: [string, string[]] = ['1KI 2:46', ['', ...'abcdefghikl']];
+  const brn = scheme('brn', [kgs, ['1KI 8:53', ['', 'a']], ['ESG 1:1', ['', 'b', 'c']], ['SIR 6:2', ['a', 'b']]]);
+  const lx = scheme('lx', [kgs]);
+  const row = (scheme: string, from: Ref, to: Ref): MappingRow => ({ scheme, from, to, kind: 'CopiedFrom verse', source: 'tvtms' });
   const rows = [
-    row(ref('1KI', 2, 46, 'h1'), ref('1KI', 4, 2)),
-    row(ref('1KI', 2, 46, 'h2'), ref('1KI', 4, 3)),
-    row(ref('1KI', 2, 46, 'e1'), ref('1KI', 4, 22)),
-    row(ref('1KI', 2, 46, 'e2'), ref('1KI', 4, 22)),
-    row(ref('1KI', 2, 46, 'v1'), ref('1KI', 12, 22)),
-    row(ref('ESG', 4, 17, 'aa'), ref('ESG', 14, 16)),
-    row(ref('SIR', 6, 2, 'c1'), ref('SIR', 6, 3)),
-    row(ref('2ES', 7, 36), ref('2ES', 7, 35, 'aa')),
-    row(ref('2ES', 7, 36), ref('2ES', 7, 35, 'aa')),
+    row('brn', ref('1KI', 2, 46, 'a'), ref('1KI', 4, 20)),
+    row('brn', ref('1KI', 2, 46, 'e1'), ref('1KI', 4, 22)),
+    row('brn', ref('1KI', 2, 46, 'e2'), ref('1KI', 4, 22)),
+    row('brn', ref('1KI', 2, 46, 'h1'), ref('1KI', 4, 2)),
+    row('brn', ref('1KI', 2, 46, 'h2'), ref('1KI', 4, 3)),
+    row('brn', ref('1KI', 2, 46, 'j'), ref('1KI', 4, 21)),
+    row('brn', ref('1KI', 2, 46, 'k'), ref('1KI', 11, 42)),
+    row('brn', ref('1KI', 8, 53, 'a'), ref('1KI', 8, 12)),
+    row('brn', ref('1KI', 8, 53, 'b'), ref('1KI', 8, 13)),
+    row('brn', ref('ESG', 1, 1, 'a'), ref('ESG', 11, 2)),
+    row('brn', ref('ESG', 1, 1, 'b'), ref('ESG', 11, 3)),
+    row('brn', ref('SIR', 6, 2, 'c1'), ref('SIR', 6, 3)),
+    row('brn', ref('EXO', 38, 17, 'l'), ref('EXO', 38, 17, 'l')),
+    row('brn', ref('EXO', 38, 17, 'aa'), ref('EXO', 38, 18)),
+    row('lx', ref('1KI', 2, 46, 'h1'), ref('1KI', 4, 2)),
+    row('lx', ref('1KI', 2, 46, 'j'), ref('1KI', 4, 21)),
+    row('brn', ref('2ES', 7, 36), ref('2ES', 7, 35, 'aa')),
+    row('brn', ref('2ES', 7, 36), ref('2ES', 7, 35, 'aa')),
   ];
+  const schemes = new Map([['brn', brn], ['lx', lx]]);
+  const keyed = (list: readonly MappingRow[]) => list.map((r) => `${r.scheme} ${refKey(r.from)} ${refKey(r.to!)}`);
 
-  it('folds a letter and digits to the printed part, and maps an id the edition has no part for from the whole verse', () => {
-    const { rows: out, dropped } = foldSchemeSegments(rows, new Map([['brn', brn]]));
-    expect(out.map((r) => `${refKey(r.from)} ${refKey(r.to!)}`)).toEqual([
-      '1KI 2:46h 1KI 4:2',
-      '1KI 2:46h 1KI 4:3',
-      '1KI 2:46e 1KI 4:22',
-      'SIR 6:2 SIR 6:3',
-      '2ES 7:36 2ES 7:35!aa',
-      '2ES 7:36 2ES 7:35!aa', // only folded rows merge: vul's .vrs repeats DAG 3:52's rows
+  it("reads TVTMS letters as ordinals over the parts an edition prints, and folds a piece to its part's letter", () => {
+    // ESG 1:1: Brenton's unlettered part is TVTMS's a, so its letters were checked and don't line up
+    const { rows: out, dropped } = foldSchemeSegments(rows, schemes, new Map([['brn', new Set(['ESG 1:1'])]]));
+    expect(keyed(out)).toEqual([
+      'brn 1KI 2:46a 1KI 4:20',
+      'brn 1KI 2:46e 1KI 4:22',
+      'brn 1KI 2:46h 1KI 4:2',
+      'brn 1KI 2:46h 1KI 4:3',
+      'brn 1KI 2:46k 1KI 4:21',
+      'brn 1KI 2:46l 1KI 11:42',
+      // no parts listed: TVTMS's letter stays, and a longer id moves to the whole verse
+      'brn EXO 38:17l EXO 38:17l',
+      'brn EXO 38:17 EXO 38:18',
+      // a scheme no edition prints keeps TVTMS's letters
+      'lx 1KI 2:46h 1KI 4:2',
+      'lx 1KI 2:46j 1KI 4:21',
+      'brn 2ES 7:36 2ES 7:35!aa',
+      'brn 2ES 7:36 2ES 7:35!aa', // only changed rows merge: vul's .vrs repeats DAG 3:52's rows
     ]);
-    // where the edition prints an unlettered first part, a whole-verse row would be that part's: drop instead
-    expect(dropped.map((r) => refKey(r.from))).toEqual(['1KI 2:46!v1', 'ESG 4:17!aa']);
+    expect(dropped.map((d) => `${refKey(d.row.from)}: ${d.reason}`)).toEqual([
+      '1KI 8:53a: TVTMS names 2 lettered parts, the scheme lists 1',
+      '1KI 8:53b: TVTMS names 2 lettered parts, the scheme lists 1',
+      "ESG 1:1a: TVTMS's letters don't line up with the edition's text",
+      "ESG 1:1b: TVTMS's letters don't line up with the edition's text",
+      'SIR 6:2!c1: TVTMS names 3 lettered parts, the scheme lists 2',
+    ]);
   });
 
   it('stops the ingest on a scheme-side segment an address cannot carry, and allows one on the pivot side', () => {
-    expect(() => checkSchemeSegments(rows)).toThrow(/parseAddress.*brn 1KI 2:46h1/s);
+    expect(() => checkSchemeSegments(rows)).toThrow(/parseAddress.*brn 1KI 2:46e1/s);
     expect(() => checkSchemeSegments(rows.slice(-1))).not.toThrow();
   });
 });
@@ -336,9 +365,9 @@ describe.skipIf(!hasTvtms)('the pinned TVTMS file', () => {
   /** The editions' word counts for the tested verses, from the last ingest (build/edition-text.json). */
   const snapshot = JSON.parse(readFileSync(join(import.meta.dirname, 'fixtures', 'edition-text.json'), 'utf8')) as EditionTextSnapshot;
   const texts = editionTextsFromSnapshot(snapshot);
-  const { pivot, rows, perScheme: compiled, diff, conflicts } = hasTvtms
+  const { pivot, rows, dropped, perScheme: compiled, diff, conflicts } = hasTvtms
     ? compileMappings(schemes, tvtms, texts)
-    : { pivot: buildPivot(schemes), rows: [], perScheme: new Map(), diff: new Map(), conflicts: new Map() };
+    : { pivot: buildPivot(schemes), rows: [], dropped: [], perScheme: new Map(), diff: new Map(), conflicts: new Map() };
   const m = new Mappings(rows, new Map(schemes).set(PIVOT, pivot));
 
   it('keeps KJV numbering for the 66 protestant books and gives 2 Esdras 7 KJV\'s 70 verses', () => {
@@ -351,6 +380,30 @@ describe.skipIf(!hasTvtms)('the pinned TVTMS file', () => {
   it('gives every scheme-side row a segment an address can carry (#70)', () => {
     expect(rows.filter((r) => !/^[a-z]?$/.test(r.from.segment)).map((r) => `${r.scheme} ${refKey(r.from)}`)).toEqual([]);
     expect(keys(m.toPivot('brenton', ref('1KI', 2, 46, 'h')))).toEqual(['1KI 4:2', '1KI 4:3', '1KI 4:4', '1KI 4:5']);
+  });
+
+  it("maps Brenton's printed letters, which skip j, to TVTMS's ordinals", () => {
+    expect(keys(m.toPivot('brenton', ref('1KI', 2, 35, 'k')))).toEqual(['1KI 9:10']);
+    expect(keys(m.toPivot('brenton', ref('1KI', 2, 35, 'o')))).toEqual(['1KI 2:9']);
+    expect(keys(m.toPivot('brenton', ref('1KI', 2, 46, 'l')))).toEqual(['1KI 11:42']);
+    expect(keys(m.toPivot('brenton', ref('1KI', 12, 24, 'n')))).toEqual(['1KI 14:17', '1KI 14:18']);
+    expect(keys(m.toPivot('brenton', ref('1KI', 12, 24, 'y')))).toEqual(['1KI 12:22', '1KI 12:23']);
+    expect(keys(m.toPivot('brenton', ref('ESG', 10, 3, 'l')))).toEqual(['ESG 11:1']);
+    // lxx has no edition to check the letters against, so its rows keep TVTMS's
+    expect(keys(m.toPivot('lxx', ref('ESG', 10, 3, 'k')))).toEqual(['ESG 11:1']);
+  });
+
+  /**
+   * Brenton verses whose lettered-part rows are dropped: TVTMS names more
+   * parts than Brenton prints (1KI 8:53, ESG 4:17), or its letters don't
+   * line up with Brenton's text (ESG 1:1, ESG 8:12, UNALIGNED_PARTS).
+   */
+  const KNOWN_DROPPED: Record<string, string[]> = { brenton: ['1KI 8:53', 'ESG 1:1', 'ESG 4:17', 'ESG 8:12'] };
+
+  it('drops only the known verses whose TVTMS letters name no printed part', () => {
+    const verses: Record<string, string[]> = {};
+    for (const { row: r } of dropped) (verses[r.scheme] ??= []).push(`${r.from.book} ${r.from.chapter}:${r.from.verse}`);
+    expect(Object.fromEntries(Object.entries(verses).map(([id, v]) => [id, [...new Set(v)].sort()]))).toEqual(KNOWN_DROPPED);
   });
 
   it('keeps a Latin verse whole when only its part moves (Sir 18:1)', () => {

@@ -14,7 +14,7 @@ import { existsSync, readFileSync, mkdirSync, rmSync, writeFileSync } from 'node
 import { join } from 'node:path';
 
 import type { IngestStats, WordTag } from './normalize';
-import { PIVOT, checkCoverage, refKey } from '../model/mapping';
+import { PIVOT, checkCoverage } from '../model/mapping';
 import type { Scheme } from '../model/scheme';
 import { loadSchemes } from './schemes';
 import { checkBook } from './book-check';
@@ -204,8 +204,10 @@ function writeMappings(
   console.log('');
   insertMappings(db, mappingRows);
   if (dropped.length > 0) {
-    const ids = dropped.map((r) => `${r.scheme} ${refKey(r.from)}`);
-    console.log(`  ${dropped.length} TVTMS rows name a part no edition prints, beside an unlettered first part: ${[...new Set(ids)].join(', ')}`);
+    const verses = new Map<string, string>();
+    for (const { row: r, reason } of dropped) verses.set(`${r.scheme} ${r.from.book} ${r.from.chapter}:${r.from.verse}`, reason);
+    console.log(`  ${dropped.length} TVTMS rows name a part no edition prints, in ${verses.size} verses:`);
+    for (const [verse, reason] of verses) console.log(`    ${verse}: ${reason}`);
   }
   console.log(`schemes: ${[...schemes.keys()].join(', ')} + ${PIVOT}`);
   for (const s of schemes.values()) {

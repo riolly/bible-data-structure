@@ -652,8 +652,8 @@ export interface CompiledMappings {
   readonly pivot: Scheme;
   /** Rows to store: TVTMS where it decides, `.vrs` elsewhere. */
   readonly rows: MappingRow[];
-  /** Rows whose scheme-side part id names nothing the scheme prints (`foldSchemeSegments`). */
-  readonly dropped: MappingRow[];
+  /** Rows whose scheme-side part letter names no part the scheme prints (`foldSchemeSegments`). */
+  readonly dropped: DroppedRow[];
   readonly perScheme: Map<string, Compiled>;
   /** Per scheme with a `.vrs` witness, the verses where TVTMS and `.vrs` disagree. */
   readonly diff: Map<string, string[]>;
@@ -695,7 +695,8 @@ export function compileMappings(
     [...schemes.keys()].map((id) => [id, compileTvtms(tvtms, schemes.get(id)!, seed, texts.get(id) ?? [])]),
   );
   const vrsRows = allVrsPivotRows(schemes, engRows);
-  const { rows, dropped } = foldSchemeSegments(mergeWitnesses(perScheme, vrsRows), schemes);
+  const printed = new Map([...texts.keys()].map((id) => [id, UNALIGNED_PARTS.get(id) ?? new Set<string>()]));
+  const { rows, dropped } = foldSchemeSegments(mergeWitnesses(perScheme, vrsRows), schemes, printed);
   checkSchemeSegments(rows);
   return {
     pivot,
@@ -703,42 +704,90 @@ export function compileMappings(
     dropped,
     perScheme,
     diff: diffWitnesses(perScheme, vrsRows),
-    conflicts: editionConflicts(schemes, tvtms, seed, texts, vrsRows, rows),
+    conflicts: editionConflicts(schemes, tvtms, seed, texts, vrsRows, rows, printed),
   };
 }
 
 /**
- * TVTMS names some parts of a scheme's verse with ids an address can't carry
- * (#70): Brenton's 1KI 2:46h1 to h4, ESG 4:17aa. A letter and digits name a
- * piece of the printed part with that letter, so the row folds to the letter
- * when the scheme lists it for the verse, and a folded row identical to
- * another is dropped. Any other long id names no part the edition prints, and the row
- * moves to the whole verse. Where the scheme prints an unlettered first part,
- * a whole-verse row is that part's row (`Relation`), so the row is dropped
- * instead. Pivot-side ids stay as TVTMS gives them.
+ * Brenton verses whose TVTMS part letters don't line up with the parts
+ * Brenton prints, read against its text. ESG 1:1: Brenton's unlettered part
+ * is TVTMS's a (11:2, Mordecai's dream dated) and its b is TVTMS's b (11:3).
+ * ESG 8:12: Brenton's a heads the letter, its b is 16:1, and its last part
+ * x is 16:24 where TVTMS's last, u, is 16:21.
+ */
+export const UNALIGNED_PARTS: ReadonlyMap<string, ReadonlySet<string>> = new Map([['brenton', new Set(['ESG 1:1', 'ESG 8:12'])]]);
+
+/** A TVTMS part letter as an ordinal over the whole alphabet: a = 1, z = 26, aa = 27. */
+const ordinal = (letters: string) => [...letters].reduce((n, c) => n * 26 + c.charCodeAt(0) - 96, 0);
+
+/** A mapping row the ingest leaves out, and why. */
+export interface DroppedRow {
+  readonly row: MappingRow;
+  readonly reason: string;
+}
+
+/**
+ * Give scheme-side part letters the edition's letters (#70). TVTMS letters a
+ * verse's parts a to z, then aa, ab..., so a letter is an ordinal: k is the
+ * 11th part. An edition may letter differently (Brenton prints Rahlfs's
+ * letters, which skip j, so its 11th part of 1KI 2:46 is l). `printed` names
+ * the schemes an edition prints, with the verses whose letters were read
+ * against its text and don't line up. In those schemes, where the scheme
+ * lists the verse's parts, the nth TVTMS letter becomes the nth lettered part
+ * listed, and a piece of a part (`h1`) becomes that part's letter. A verse
+ * whose rows name more parts than the scheme lists, or that doesn't line up,
+ * loses its lettered-part rows: nothing says which part an ordinal names.
+ *
+ * Elsewhere TVTMS's letters stay. A longer id there folds to its letter when
+ * the scheme lists it, moves to the whole verse when the scheme lists no
+ * unlettered first part, and is dropped otherwise, since a whole-verse row
+ * there is the first part's row (`Relation`). A changed row identical to
+ * another merges. Pivot-side ids stay as TVTMS gives them.
  */
 export function foldSchemeSegments(
   rows: readonly MappingRow[],
   schemes: ReadonlyMap<string, Scheme>,
-): { rows: MappingRow[]; dropped: MappingRow[] } {
+  printed: ReadonlyMap<string, ReadonlySet<string>> = new Map(),
+): { rows: MappingRow[]; dropped: DroppedRow[] } {
+  const verseOf = (r: MappingRow) => `${r.from.book} ${r.from.chapter}:${r.from.verse}`;
+  const lettersOf = (r: MappingRow) => /^([a-z]+)\d*$/.exec(r.from.segment)?.[1];
+  // the most parts TVTMS names in each verse of a printed scheme
+  const named = new Map<string, number>();
+  for (const r of rows) {
+    const letters = lettersOf(r);
+    if (!letters || !printed.has(r.scheme)) continue;
+    const k = `${r.scheme} ${verseOf(r)}`;
+    named.set(k, Math.max(named.get(k) ?? 0, ordinal(letters)));
+  }
   const out: MappingRow[] = [];
-  const dropped: MappingRow[] = [];
+  const dropped: DroppedRow[] = [];
   const seen = new Set<string>();
   for (const row of rows) {
-    let r = row;
     const seg = row.from.segment;
-    const folded = !/^[a-z]?$/.test(seg);
-    if (folded) {
-      const listed = schemes.get(row.scheme)?.segments.get(`${row.from.book} ${row.from.chapter}:${row.from.verse}`) ?? [];
+    const verse = verseOf(row);
+    const listed = schemes.get(row.scheme)?.segments.get(verse) ?? [];
+    const parts = listed.filter((x) => x !== '');
+    const letters = lettersOf(row);
+    let next: string | undefined = seg;
+    let reason = '';
+    if (letters && parts.length > 0 && printed.has(row.scheme)) {
+      const n = named.get(`${row.scheme} ${verse}`)!;
+      if (printed.get(row.scheme)!.has(verse)) reason = "TVTMS's letters don't line up with the edition's text";
+      else if (n > parts.length) reason = `TVTMS names ${n} lettered parts, the scheme lists ${parts.length}`;
+      else next = parts[ordinal(letters) - 1];
+    } else if (!/^[a-z]?$/.test(seg)) {
       const letter = /^([a-z])\d+$/.exec(seg)?.[1];
-      if (letter && listed.includes(letter)) r = { ...row, from: { ...row.from, segment: letter } };
-      else if (listed.includes('')) {
-        dropped.push(row);
-        continue;
-      } else r = { ...row, from: { ...row.from, segment: '' } };
+      if (letter && listed.includes(letter)) next = letter;
+      else if (listed.includes('')) reason = 'the id names no part the scheme lists, beside an unlettered first part';
+      else next = '';
     }
+    if (reason) {
+      dropped.push({ row, reason });
+      continue;
+    }
+    const r = next === seg ? row : { ...row, from: { ...row.from, segment: next! } };
     const key = `${r.scheme} ${refKey(r.from)} ${r.to ? refKey(r.to) : 'absent'}`;
-    if (folded && seen.has(key)) continue;
+    if (next !== seg && seen.has(key)) continue;
     seen.add(key);
     out.push(r);
   }
@@ -773,6 +822,7 @@ function editionConflicts(
   texts: ReadonlyMap<string, readonly EditionText[]>,
   vrsRows: readonly MappingRow[],
   rows: readonly MappingRow[],
+  printed: ReadonlyMap<string, ReadonlySet<string>>,
 ): Map<string, string[]> {
   const out = new Map<string, string[]>();
   const targets = (rel: Relation, r: Ref) => rel.forward(r).map(refKey).sort().join(', ') || 'absent';
@@ -782,7 +832,7 @@ function editionConflicts(
     const scheme = new Relation(rows.filter((r) => r.scheme === id), firstParts);
     for (const text of editions) {
       const own = compileTvtms(tvtms, schemes.get(id)!, seed, [text]);
-      const mine = new Relation(foldSchemeSegments(mergeWitnesses(new Map([[id, own]]), vrsRows), schemes).rows, firstParts);
+      const mine = new Relation(foldSchemeSegments(mergeWitnesses(new Map([[id, own]]), vrsRows), schemes, printed).rows, firstParts);
       const lines: string[] = [];
       for (const key of [...own.decided].sort()) {
         const r = parseRefKey(key);

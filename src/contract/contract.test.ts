@@ -223,6 +223,24 @@ describe.skipIf(!native || !existsSync(CORPUS))('the app contract on the corpus 
     expect(h.verses.map((v) => v.address)).toEqual(['1KI 4:2/kjv', '1KI 4:3/kjv', '1KI 4:4/kjv', '1KI 4:5/kjv']);
   });
 
+  it("map reads TVTMS's part letters as ordinals over Brenton's, which skip j (#70)", async () => {
+    const cases: [string, string, string, RegExp, RegExp][] = [
+      // Brenton's 10th part is k: the twenty years of building
+      ['1KI 2:35k', 'KJV', '1KI 9:10/kjv', /μετὰ τὸ οἰκοδομῆσαι αὐτὸν τὸν οἶκον τοῦ Κυρίου/, /at the end of twenty years/],
+      ['1KI 2:46l', 'KJV', '1KI 11:42/kjv', /Σαλωμὼν υἱὸς Δαυὶδ ἐβασίλευσεν/, /the time that Solomon reigned in Jerusalem/],
+      ['1KI 12:24z', 'KJV', '1KI 12:24/kjv', /ἤκουσαν τοῦ λόγου Κυρίου/, /They hearkened therefore to the word of the LORD/],
+      // the colophon, pivot ESG 11:1 (KJV Apocrypha Esther 11:1)
+      ['ESG 10:3l', 'WEB', 'ESG 10:14/web', /βασιλεύοντος Πτολεμαίου καὶ Κλεοπάτρας/, /reign of Ptolemeus and Cleopatra/],
+    ];
+    for (const [address, to, want, greek, english] of cases) {
+      const own = (await c.verseText('Brenton', address)).found;
+      expect(own.kind === 'verse' && own.text, address).toMatch(greek);
+      const m = await c.map('Brenton', address, to);
+      expect([m.kind, m.verses.map((v) => v.address)], address).toEqual(['one', [want]]);
+      expect(m.verses[0].text, address).toMatch(english);
+    }
+  });
+
   it('a range that ends past the book stops at its last verse (#9)', async () => {
     const cases: [string, string, number][] = [
       ['Ps 150:5-151:2', 'PSA 150:5-6/kjv', 2],
