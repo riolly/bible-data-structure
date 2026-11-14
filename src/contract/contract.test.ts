@@ -122,12 +122,20 @@ describe.skipIf(!native || !existsSync(CORPUS))('the app contract on the corpus 
     expect(m.missing).toEqual([{ kind: 'absent', address: 'ACT 8:37/bsb', reason: 'text' }]);
   });
 
-  it('verse parts: Brenton prints 1KI 2:35 whole with parts 35a to 35o, and SIR 6:2 only as 2a and 2b', async () => {
+  it('verse parts: Brenton prints 1KI 2:35 as an unlettered unit and units 35a to 35o, and SIR 6:2 only as 2a and 2b', async () => {
     const parts = 'abcdefghiklmno'.split(''); // Brenton skips j
-    const kgs = await c.passage('Brenton', '1 Kgs 2:35');
-    expect(addresses(kgs.parts[0].found)).toEqual(['verse 1KI 2:35/brenton', ...parts.map((s) => `verse 1KI 2:35${s}/brenton`)]);
+    // one verse is its unlettered unit alone, as resolve reads the address
+    expect(addresses((await c.passage('Brenton', '1 Kgs 2:35')).parts[0].found)).toEqual(['verse 1KI 2:35/brenton']);
+    // a range takes every unit in it, as chapter does
+    const range = (await c.passage('Brenton', '1 Kgs 2:34-36')).parts[0].found;
+    expect(addresses(range)).toEqual([
+      'verse 1KI 2:34/brenton',
+      'verse 1KI 2:35/brenton',
+      ...parts.map((s) => `verse 1KI 2:35${s}/brenton`),
+      'verse 1KI 2:36/brenton',
+    ]);
     const ch = await c.chapter('Brenton', '1KI', 2);
-    expect(ch.kind === 'chapter' && ch.verses.filter((v) => v.verse === 35).map((v) => v.address)).toEqual(kgs.parts[0].found.map((l) => l.address));
+    expect(ch.kind === 'chapter' && ch.verses.filter((v) => v.verse >= 34 && v.verse <= 36).map((v) => v.address)).toEqual(range.map((l) => l.address));
 
     const sir = await c.verseText('Brenton', 'SIR 6:2');
     expect(sir.found.kind).toBe('parts');
@@ -184,6 +192,88 @@ describe.skipIf(!native || !existsSync(CORPUS))('the app contract on the corpus 
     // the other way, KJV's whole 13:1 is SBLGNT's 12:18 and 13:1
     const back = await c.map('KJV', 'REV 13:1', 'SBLGNT');
     expect([back.kind, back.verses.map((v) => v.address)]).toEqual(['several', ['REV 12:18/org', 'REV 13:1/org']]);
+  });
+
+  it('map: a part letter the mapping does not use follows its whole verse (#71)', async () => {
+    const parts = async (from: string, address: string, to: string) => {
+      const m = await c.map(from, address, to);
+      return [m.kind, m.verses.map((v) => `${v.address}${v.part ? ` part ${v.part}` : ''}`), m.missing.length];
+    };
+    expect(await parts('KJV', 'REV 13:1a', 'SBLGNT')).toEqual(['one', ['REV 12:18/org'], 0]);
+    // the pivot divides REV 13:1 into a and b only: c is somewhere in both
+    expect(await parts('KJV', 'REV 13:1c', 'SBLGNT')).toEqual(['several', ['REV 12:18/org part c', 'REV 13:1/org part c'], 0]);
+    expect(await parts('KJV', 'JHN 3:16c', 'SBLGNT')).toEqual(['part', ['JHN 3:16/org part c'], 0]);
+  });
+
+  it('map and resolve: the address without a letter is the unlettered unit, both ways (#69)', async () => {
+    for (const v of ['1KI 2:35', '1KI 2:46', 'PRO 20:9']) {
+      const there = await c.map('Brenton', v, 'KJV');
+      expect([there.kind, there.verses.map((x) => x.address), there.missing], v).toEqual(['one', [`${v}/kjv`], []]);
+      const back = await c.map('KJV', v, 'Brenton');
+      expect([back.kind, back.verses.map((x) => x.address), back.missing], v).toEqual(['one', [`${v}/brenton`], []]);
+      expect(addresses((await c.resolve('Brenton', `${v}/brenton`)).found), v).toEqual([`verse ${v}/brenton`]);
+      expect(addresses((await c.resolve('KJV', `${v}/brenton`)).found), v).toEqual([`verse ${v}/kjv`]);
+    }
+    // a lettered unit maps by its own row
+    expect((await c.map('Brenton', '1KI 2:35k', 'KJV')).verses.map((v) => v.address)).toEqual(['1KI 9:10/kjv']);
+  });
+
+  it('map folds every TVTMS part into the one part Brenton prints: 1KI 8:53a is KJV 8:12 and 8:13', async () => {
+    const own = (await c.verseText('Brenton', '1KI 8:53a')).found;
+    expect(own.kind === 'verse' && own.text).toMatch(/Κύριος εἶπε τοῦ κατοικεῖν ἐν γνόφῳ· οἰκοδόμησον οἶκόν μου/);
+    const m = await c.map('Brenton', '1KI 8:53a', 'KJV');
+    expect([m.kind, m.verses.map((v) => v.address), m.missing]).toEqual(['several', ['1KI 8:12/kjv', '1KI 8:13/kjv'], []]);
+    expect(m.verses[0].text).toMatch(/dwell in the thick darkness/);
+    expect(m.verses[1].text).toMatch(/I have surely built thee an house to dwell in/);
+  });
+
+  it('moves a lettered part with its verse when TVTMS renumbers the verse as one piece', async () => {
+    const own = (await c.verseText('Brenton', 'PSA 144:13a')).found;
+    expect(own.kind === 'verse' && own.text).toMatch(/πιστὸς Κύριος ἐν τοῖς λόγοις αὐτοῦ/);
+    const psa = await c.map('Brenton', 'PSA 144:13a', 'WEB');
+    expect([psa.kind, psa.verses.map((v) => v.address), psa.missing]).toEqual(['one', ['PSA 145:13/web'], []]);
+    expect(psa.verses[0].text).toMatch(/faithful in all his words/);
+    const jos = await c.map('Brenton', 'JOS 24:31a', 'KJV');
+    expect([jos.kind, jos.verses.map((v) => v.address), jos.missing]).toEqual(['one', ['JOS 24:30/kjv'], []]);
+    expect(addresses((await c.resolve('KJV', 'PSA 144:13a/brenton')).found)).toEqual(['verse PSA 145:13/kjv']);
+  });
+
+  it("maps the parts of Brenton's unaligned Esther verses nowhere, like a verse the pivot lacks", async () => {
+    const nowhere = await c.map('Brenton', 'EZR 14:1', 'KJV');
+    expect([nowhere.kind, nowhere.missing]).toEqual(['absent', []]);
+    for (const a of ['ESG 1:1k', 'ESG 4:17k', 'ESG 8:12x']) {
+      const m = await c.map('Brenton', a, 'WEB');
+      expect([m.kind, m.verses, m.missing], a).toEqual(['absent', [], []]);
+    }
+    // WEB's ESG 4:19 is pivot ESG 13:9, which Brenton prints inside ESG 4:17's parts
+    const back = await c.map('WEB', 'ESG 4:19', 'Brenton');
+    expect(back.verses.filter((v) => v.part !== undefined || v.segment !== '')).toEqual([]);
+  });
+
+  it('map returns only addresses resolve reads: Brenton 1KI 2:46h1 is part h (#70)', async () => {
+    const m = await c.map('KJV', '1KI 4:2', 'Brenton');
+    expect([m.kind, m.verses.map((v) => v.address), m.missing]).toEqual(['several', ['1KI 2:46h/brenton', '1KI 4:2/brenton'], []]);
+    expect(addresses((await c.resolve('Brenton', '1KI 2:46h/brenton')).found)).toEqual(['verse 1KI 2:46h/brenton']);
+    const h = await c.map('Brenton', '1KI 2:46h', 'KJV');
+    expect(h.verses.map((v) => v.address)).toEqual(['1KI 4:2/kjv', '1KI 4:3/kjv', '1KI 4:4/kjv', '1KI 4:5/kjv']);
+  });
+
+  it("map reads TVTMS's part letters as ordinals over Brenton's, which skip j (#70)", async () => {
+    const cases: [string, string, string, RegExp, RegExp][] = [
+      // Brenton's 10th part is k: the twenty years of building
+      ['1KI 2:35k', 'KJV', '1KI 9:10/kjv', /μετὰ τὸ οἰκοδομῆσαι αὐτὸν τὸν οἶκον τοῦ Κυρίου/, /at the end of twenty years/],
+      ['1KI 2:46l', 'KJV', '1KI 11:42/kjv', /Σαλωμὼν υἱὸς Δαυὶδ ἐβασίλευσεν/, /the time that Solomon reigned in Jerusalem/],
+      ['1KI 12:24z', 'KJV', '1KI 12:24/kjv', /ἤκουσαν τοῦ λόγου Κυρίου/, /They hearkened therefore to the word of the LORD/],
+      // the colophon, pivot ESG 11:1 (KJV Apocrypha Esther 11:1)
+      ['ESG 10:3l', 'WEB', 'ESG 10:14/web', /βασιλεύοντος Πτολεμαίου καὶ Κλεοπάτρας/, /reign of Ptolemeus and Cleopatra/],
+    ];
+    for (const [address, to, want, greek, english] of cases) {
+      const own = (await c.verseText('Brenton', address)).found;
+      expect(own.kind === 'verse' && own.text, address).toMatch(greek);
+      const m = await c.map('Brenton', address, to);
+      expect([m.kind, m.verses.map((v) => v.address)], address).toEqual(['one', [want]]);
+      expect(m.verses[0].text, address).toMatch(english);
+    }
   });
 
   it('a range that ends past the book stops at its last verse (#9)', async () => {

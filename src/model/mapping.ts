@@ -5,7 +5,12 @@
  * (or part of one) in the pivot. Rows may be many-to-many, cross chapters and
  * books, and mark a verse `absent` (`to: null`) where the pivot has no
  * counterpart. The table is sparse: a verse with no row maps to the same
- * reference in the pivot.
+ * reference in the pivot. Where an edition prints a verse as an unlettered
+ * first part and lettered parts (Brenton's 1KI 2:35, then 35a to 35o), the
+ * address without a letter names the unlettered part alone, and each part
+ * maps by its own row or keeps its number (#69). When no lettered part of
+ * such a verse has a row, the parts take the verse's row. A part letter no row uses
+ * follows its whole verse when rows divide that verse into other parts (#71).
  *
  * Moving an address from scheme A to scheme B goes A → pivot → B. There is no
  * one-to-one or bijection requirement; a lookup returns a list.
@@ -80,8 +85,25 @@ function dropCoveredWholes(refs: Ref[]): Ref[] {
 }
 
 /**
+ * `BOOK C:V` of the verses a scheme prints as an unlettered first part and
+ * then lettered parts: its segment list has `''` beside letters.
+ */
+export function unletteredFirstParts(s: Scheme): Set<string> {
+  const out = new Set<string>();
+  for (const [k, segs] of s.segments) if (segs.length > 1 && segs.includes('')) out.add(k);
+  return out;
+}
+
+/**
  * One direction-agnostic relation from a scheme's references to another
  * scheme's, with identity wherever no row speaks.
+ *
+ * `firstParts` holds the `from` side's verses printed as an unlettered first
+ * part and lettered parts (`unletteredFirstParts`). There a row at the whole
+ * verse is the first part's row (TVTMS `!0`, Brenton ESG 3:13 to Hebrew
+ * EST 3:13), and without one the first part keeps its number. The lettered
+ * parts are sibling units: they don't follow the first part, and it doesn't
+ * go where they go.
  */
 export class Relation {
   private readonly byFrom = new Map<string, (Ref | null)[]>();
@@ -91,7 +113,10 @@ export class Relation {
   /** `BOOK C:V` → to-keys of rows whose `to` is that verse or a part of it. */
   private readonly toParts = new Map<string, string[]>();
 
-  constructor(rows: readonly { from: Ref; to: Ref | null }[]) {
+  constructor(
+    rows: readonly { from: Ref; to: Ref | null }[],
+    private readonly firstParts: ReadonlySet<string> = new Set(),
+  ) {
     for (const { from, to } of rows) {
       const fk = refKey(from);
       if (!this.byFrom.has(fk)) push(this.fromParts, verseOf(from), fk);
@@ -104,21 +129,56 @@ export class Relation {
     }
   }
 
-  /** Whether any row starts at this reference, its whole verse or one of its parts. */
+  /**
+   * The row at a part's whole verse. Where the verse has an unlettered first
+   * part, that row is the first part's own as soon as any lettered part has a
+   * row. With no row at a lettered part, the source renumbered the verse as
+   * one piece, so its lettered parts move with it (Brenton's PSA 144:13a goes
+   * to PSA 145:13 with 144:13).
+   */
+  private wholeRow(r: Ref): (Ref | null)[] | undefined {
+    const wk = refKey(whole(r));
+    if (this.firstParts.has(verseOf(r)) && this.fromParts.get(verseOf(r))?.some((k) => k !== wk)) return undefined;
+    return this.byFrom.get(wk);
+  }
+
+  /**
+   * Whether any row starts at this reference, its whole verse or one of its
+   * parts. An unlettered first part speaks only through its own row (#69).
+   */
   private speaksFor(r: Ref): boolean {
-    return this.byFrom.has(refKey(r)) || this.byFrom.has(refKey(whole(r))) ||
-      (r.segment === '' && this.fromParts.has(verseOf(r)));
+    if (this.byFrom.has(refKey(r))) return true;
+    if (this.firstParts.has(verseOf(r))) return false;
+    return this.wholeRow(r) !== undefined || (r.segment === '' && this.fromParts.has(verseOf(r)));
+  }
+
+  /**
+   * Whether a part has no row of its own or at its whole verse while rows
+   * divide its verse into other parts (#71). It then follows the whole verse.
+   * The lettered parts of a verse printed with an unlettered first part are
+   * units beside it, so they never follow it (#69).
+   */
+  followsWhole(r: Ref): boolean {
+    return r.segment !== '' && !this.firstParts.has(verseOf(r)) && !this.byFrom.has(refKey(r)) &&
+      this.wholeRow(r) === undefined && this.fromParts.has(verseOf(r));
   }
 
   /**
    * Where `r` goes. Empty means absent. A whole verse goes wherever its own
-   * rows and its parts' rows send it; a part with no row of its own follows
-   * its whole verse.
+   * rows and its parts' rows send it. An unlettered first part goes where its
+   * own row sends it, or keeps its number: its lettered parts are other units
+   * (#69). A part with no row of its own takes the row at its whole verse, or
+   * follows the whole verse when other parts have rows, or keeps its number.
    */
   forward(r: Ref): Ref[] {
     const real = (list: (Ref | null)[]) => list.filter((t): t is Ref => t !== null);
     if (r.segment !== '') {
-      const own = this.byFrom.get(refKey(r)) ?? this.byFrom.get(refKey(whole(r)));
+      const own = this.byFrom.get(refKey(r)) ?? this.wholeRow(r);
+      if (own) return dedupe(real(own));
+      return this.followsWhole(r) ? this.forward(whole(r)) : [r];
+    }
+    if (this.firstParts.has(verseOf(r))) {
+      const own = this.byFrom.get(refKey(r));
       return own ? dedupe(real(own)) : [r];
     }
     const keys = this.fromParts.get(verseOf(r));
@@ -135,8 +195,10 @@ export class Relation {
     const out: Ref[] = [...(this.byTo.get(refKey(r)) ?? [])];
     if (r.segment !== '') out.push(...(this.byTo.get(refKey(whole(r))) ?? []));
     else for (const k of this.toParts.get(verseOf(r)) ?? []) if (k !== refKey(r)) out.push(...this.byTo.get(k)!);
-    if (!this.speaksFor(r) && exists(r)) out.push(r);
-    return dropCoveredWholes(dedupe(out));
+    if (this.speaksFor(r) || !exists(r)) return dropCoveredWholes(dedupe(out));
+    // an unlettered first part is a unit of its own, which its lettered parts don't cover (#69)
+    if (r.segment === '' && this.firstParts.has(verseOf(r))) return dedupe([...dropCoveredWholes(dedupe(out)), r]);
+    return dropCoveredWholes(dedupe([...out, r]));
   }
 }
 
@@ -163,7 +225,13 @@ export class Mappings {
   ) {
     const byScheme = new Map<string, MappingRow[]>();
     for (const r of rows) push(byScheme, r.scheme, r);
-    for (const id of schemes.keys()) this.relations.set(id, new Relation(byScheme.get(id) ?? []));
+    for (const [id, s] of schemes) this.relations.set(id, new Relation(byScheme.get(id) ?? [], unletteredFirstParts(s)));
+  }
+
+  /** Whether the pivot divides `t`'s verse into parts and none has `t`'s letter. */
+  private pivotLacksPart(t: Ref): boolean {
+    const segs = t.segment === '' ? undefined : this.schemes.get(PIVOT)?.segments.get(verseOf(t));
+    return segs !== undefined && !segs.includes(t.segment);
   }
 
   private scheme(id: string): Scheme {
@@ -172,9 +240,21 @@ export class Mappings {
     return s;
   }
 
+  /** Where `r` goes in the pivot. A part letter the pivot doesn't divide its verse into follows the whole verse (#71). */
   toPivot(scheme: string, r: Ref): Ref[] {
     this.scheme(scheme);
-    return this.relations.get(scheme)!.forward(r);
+    return dedupe(this.relations.get(scheme)!.forward(r).map((t) => (this.pivotLacksPart(t) ? whole(t) : t)));
+  }
+
+  /**
+   * Whether `r` is a part with no counterpart of its own, so it goes where its
+   * whole verse goes and holds only some of each target (#71): no row has its
+   * letter while rows or the pivot divide its verse into other parts.
+   */
+  followsWhole(scheme: string, r: Ref): boolean {
+    this.scheme(scheme);
+    const rel = this.relations.get(scheme)!;
+    return rel.followsWhole(r) || (r.segment !== '' && rel.forward(r).some((t) => this.pivotLacksPart(t)));
   }
 
   fromPivot(scheme: string, r: Ref): Ref[] {
@@ -195,7 +275,7 @@ export class Mappings {
  */
 export function checkCoverage(scheme: Scheme, pivot: Scheme, rows: readonly MappingRow[]): string[] {
   const own = rows.filter((r) => r.scheme === scheme.id);
-  const rel = new Relation(own);
+  const rel = new Relation(own, unletteredFirstParts(scheme));
   // A verse counts as marked absent when every row starting in it is absent.
   const rowsOfVerse = new Map<string, MappingRow[]>();
   for (const r of own) push(rowsOfVerse, verseOf(r.from), r);

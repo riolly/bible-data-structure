@@ -194,7 +194,7 @@ function writeMappings(
   tvtms: readonly TvtmsRow[],
   texts: ReadonlyMap<string, readonly EditionText[]>,
 ) {
-  const { pivot, rows: mappingRows, perScheme, diff, conflicts } = compileMappings(schemes, tvtms, texts);
+  const { pivot, rows: mappingRows, dropped, perScheme, diff, conflicts } = compileMappings(schemes, tvtms, texts);
   if (conflicts.size > 0) {
     const lines = [...conflicts].flatMap(([ed, ls]) => ls.slice(0, 10).map((l) => `${ed}: ${l}`));
     throw new Error(
@@ -203,6 +203,12 @@ function writeMappings(
   }
   console.log('');
   insertMappings(db, mappingRows);
+  if (dropped.length > 0) {
+    const verses = new Map<string, string>();
+    for (const { row: r, reason } of dropped) verses.set(`${r.scheme} ${r.from.book} ${r.from.chapter}:${r.from.verse}`, reason);
+    console.log(`  ${dropped.length} TVTMS rows name a part no edition prints, in ${verses.size} verses:`);
+    for (const [verse, reason] of verses) console.log(`    ${verse}: ${reason}`);
+  }
   console.log(`schemes: ${[...schemes.keys()].join(', ')} + ${PIVOT}`);
   for (const s of schemes.values()) {
     const c = perScheme.get(s.id)!;
