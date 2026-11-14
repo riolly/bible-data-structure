@@ -48,6 +48,7 @@ Several questions were recorded as open before this ADR cut the scope. Each one 
 |---|---|---|
 | The pivot home of the Greek additions to Esther, of Baruch 6 or `LJE`, and of Daniel 3:24-90 or `S3Y`. Also the three Esther layouts, Daniel 13-14 or `SUS` and `BEL`, and Psalm 151 in `PSA` or `PS2` | ADR-0006, research/canons.md | A target edition prints a deuterocanonical book |
 | 100 verses of the derived schemes `brenton` (97) and `web` (3) map nowhere: 2 Esdras 14 and 19, Proverbs 24:35-62 and Sirach 30 in Brenton, Baruch 1:22 and 4 Maccabees 7:24-25 in WEB | README plan step 3, `src/ingest/tvtms.test.ts` (`KNOWN_DERIVED`) | The Septuagint or a deuterocanonical book comes into scope |
+| The lettered parts of Brenton's `ESG 1:1`, `4:17` and `8:12` read as absent. TVTMS divides those verses into parts that Brenton's printed parts don't match, so no row can name the right verse | `UNALIGNED_PARTS` in `src/ingest/tvtms.ts` (issues #69 and #70) | The same |
 | The trouble-spot fixture for the Greek additions to Daniel and Esther | research/README.md | The same |
 | Canon status values, the default Catholic order, the Ethiopian narrower and broader lists, and the unchecked Oriental Orthodox, OSIS and Russian sources | ADR-0002, research/canons.md | A Catholic or Orthodox canon is added |
 | Research topics never started: textual variants, lexicons past Strong's numbers, tokenization of scripts without spaces | research/README.md | An app feature that needs one |
