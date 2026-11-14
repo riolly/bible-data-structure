@@ -7,7 +7,7 @@
 import { and, asc, eq } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/sqlite-core';
 
-import { loadMappings, readChapterDoc, readSchemes, readVerseText, type SyncSqliteDb } from '../db/corpus-read';
+import { at, loadMappings, prepared, readChapterDoc, readSchemes, readVerseText, type SyncSqliteDb } from '../db/corpus-read';
 import * as schema from '../db/corpus-schema';
 import type { ChapterDoc, OriginalWord, VerseText } from '../model/corpus';
 import type { Mappings } from '../model/mapping';
@@ -108,12 +108,14 @@ function readChapterUnits(db: SyncSqliteDb, abbrev: string, book: string, chapte
 /** One chapter's stamp, without its document, or null when the edition has no such chapter. */
 function readChapterStamp(db: SyncSqliteDb, translationAbbrev: string, bookCode: string, chapter: number): string | null {
   const d = schema.chapterDoc;
-  const [row] = db
-    .select({ stamp: d.stamp })
-    .from(d)
-    .innerJoin(schema.translation, eq(d.translationId, schema.translation.id))
-    .where(and(eq(schema.translation.abbrev, translationAbbrev), eq(d.book, bookCode), eq(d.chapter, chapter)))
-    .all();
+  const [row] = prepared(db, 'chapterStamp', () =>
+    db
+      .select({ stamp: d.stamp })
+      .from(d)
+      .innerJoin(schema.translation, eq(d.translationId, schema.translation.id))
+      .where(and(eq(schema.translation.abbrev, at.abbrev), eq(d.book, at.book), eq(d.chapter, at.chapter)))
+      .prepare(),
+  ).all({ abbrev: translationAbbrev, book: bookCode, chapter });
   return row?.stamp ?? null;
 }
 
@@ -127,35 +129,38 @@ function readOriginalWords(
   segment: string,
 ): OriginalWord[] {
   const w = schema.originalWord;
-  return db
-    .select({
-      owId: w.owId,
-      book: w.book,
-      chapter: w.chapter,
-      verse: w.verse,
-      segment: w.segment,
-      wordIndex: w.wordIndex,
-      seq: w.seq,
-      kind: w.kind,
-      text: w.text,
-      lemma: w.lemma,
-      strongs: w.strongs,
-      morph: w.morph,
-      gloss: w.gloss,
-    })
-    .from(w)
-    .innerJoin(schema.translation, eq(w.translationId, schema.translation.id))
-    .where(
-      and(
-        eq(schema.translation.abbrev, translationAbbrev),
-        eq(w.book, bookCode),
-        eq(w.chapter, chapter),
-        eq(w.verse, verse),
-        eq(w.segment, segment),
-      ),
-    )
-    .orderBy(asc(w.seq))
-    .all()
+  return prepared(db, 'originalWords', () =>
+    db
+      .select({
+        owId: w.owId,
+        book: w.book,
+        chapter: w.chapter,
+        verse: w.verse,
+        segment: w.segment,
+        wordIndex: w.wordIndex,
+        seq: w.seq,
+        kind: w.kind,
+        text: w.text,
+        lemma: w.lemma,
+        strongs: w.strongs,
+        morph: w.morph,
+        gloss: w.gloss,
+      })
+      .from(w)
+      .innerJoin(schema.translation, eq(w.translationId, schema.translation.id))
+      .where(
+        and(
+          eq(schema.translation.abbrev, at.abbrev),
+          eq(w.book, at.book),
+          eq(w.chapter, at.chapter),
+          eq(w.verse, at.verse),
+          eq(w.segment, at.segment),
+        ),
+      )
+      .orderBy(asc(w.seq))
+      .prepare(),
+  )
+    .all({ abbrev: translationAbbrev, book: bookCode, chapter, verse, segment })
     .map((row) => ({ ...row, strongs: row.strongs ? row.strongs.split(' ') : [] }));
 }
 
@@ -186,34 +191,37 @@ function readWordAlignments(
   const a = schema.wordAlignment;
   const o = schema.originalWord;
   const hub = alias(schema.translation, 'hub');
-  return db
-    .select({
-      wordIndex: a.wordIndex,
-      strongs: a.strongs,
-      owId: a.owId,
-      edition: hub.abbrev,
-      scheme: hub.scheme,
-      book: o.book,
-      chapter: o.chapter,
-      verse: o.verse,
-      segment: o.segment,
-      owWordIndex: o.wordIndex,
-    })
-    .from(a)
-    .innerJoin(schema.translation, eq(a.translationId, schema.translation.id))
-    .innerJoin(o, and(eq(o.source, a.source), eq(o.owId, a.owId)))
-    .innerJoin(hub, eq(o.translationId, hub.id))
-    .where(
-      and(
-        eq(schema.translation.abbrev, translationAbbrev),
-        eq(a.book, bookCode),
-        eq(a.chapter, chapter),
-        eq(a.verse, verse),
-        eq(a.segment, segment),
-      ),
-    )
-    .orderBy(asc(a.wordIndex), asc(a.seq))
-    .all()
+  return prepared(db, 'wordAlignments', () =>
+    db
+      .select({
+        wordIndex: a.wordIndex,
+        strongs: a.strongs,
+        owId: a.owId,
+        edition: hub.abbrev,
+        scheme: hub.scheme,
+        book: o.book,
+        chapter: o.chapter,
+        verse: o.verse,
+        segment: o.segment,
+        owWordIndex: o.wordIndex,
+      })
+      .from(a)
+      .innerJoin(schema.translation, eq(a.translationId, schema.translation.id))
+      .innerJoin(o, and(eq(o.source, a.source), eq(o.owId, a.owId)))
+      .innerJoin(hub, eq(o.translationId, hub.id))
+      .where(
+        and(
+          eq(schema.translation.abbrev, at.abbrev),
+          eq(a.book, at.book),
+          eq(a.chapter, at.chapter),
+          eq(a.verse, at.verse),
+          eq(a.segment, at.segment),
+        ),
+      )
+      .orderBy(asc(a.wordIndex), asc(a.seq))
+      .prepare(),
+  )
+    .all({ abbrev: translationAbbrev, book: bookCode, chapter, verse, segment })
     .map((row) => ({ ...row, strongs: row.strongs ? row.strongs.split(' ') : [] }));
 }
 
