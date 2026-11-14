@@ -2,7 +2,7 @@
 
 Status: accepted 2026-11-10 with the owner, after a review of the model against licensed translations. Moved here from the README plan (step 5).
 
-The first apps are our own, free, published by a registered organization, for English readers. AI features may come later. Every cut below can be undone, because addresses name their scheme (ADR-0002). A model feature lands when a contract call or a fixture from a target edition needs it. The target editions are the English editions in the Examples row below, plus the hub texts WLC and SBLGNT.
+The first apps are our own, free, for English readers. The owner publishes them as an individual. This sentence said "a registered organization" until 2026-11-14, and none exists yet. API.Bible's terms cover an individual (research/licensing.md). AI features may come later. Every cut below can be undone, because addresses name their scheme (ADR-0002). A model feature lands when a contract call or a fixture from a target edition needs it. The target editions are the English editions in the Examples row below, plus the hub texts WLC and SBLGNT.
 
 ## In scope
 
