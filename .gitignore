@@ -2,3 +2,5 @@ node_modules/
 build/
 src/ingest/sources/
 .env
+dist/
+*.tgz

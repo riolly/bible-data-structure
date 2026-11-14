@@ -5,9 +5,10 @@
  *
  * Nothing reachable from here imports a Node module (index.test.ts), so it
  * bundles for a browser, React Native, Bun or Node. The app brings a sync
- * drizzle SQLite driver. The Node-only pieces are imported by path:
- * `openPack` and `buildPack` (src/pack/pack.ts, better-sqlite3) and
- * `chapterFetcher` (src/provider/api-bible-cache.ts, the disk cache).
+ * drizzle SQLite driver. `chapterFetcher`, the Node fetch with its disk
+ * cache, is in the Node entry (src/node.ts). `openPack` and `buildPack`
+ * (src/pack/pack.ts, better-sqlite3) stay in this repo: an app opens its
+ * pack with its own driver.
  */
 
 export * from './contract/contract';

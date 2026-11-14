@@ -5,7 +5,20 @@
   "engines": {
     "node": ">=24"
   },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./node": {
+      "types": "./dist/node.d.ts",
+      "default": "./dist/node.mjs"
+    }
+  },
+  "files": ["dist"],
   "scripts": {
+    "build": "rm -rf dist && bun build src/index.ts src/node.ts --outdir dist --format esm --target node --packages external --splitting --entry-naming \"[name].mjs\" --chunk-naming \"chunk-[hash].mjs\" && tsc -p tsconfig.build.json",
+    "prepack": "bun run build",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
@@ -17,17 +30,17 @@
     "api-bible:check": "tsx src/provider/check-cli.ts"
   },
   "dependencies": {
-    "better-sqlite3": "12.11.1",
     "bible-passage-reference-parser": "4.0.0",
     "drizzle-orm": "1.0.0-rc.4-5d5b77c",
-    "fflate": "0.8.2",
-    "usfm-grammar": "3.2.0"
+    "fflate": "0.8.2"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^24.0.0",
+    "better-sqlite3": "12.11.1",
     "tsx": "^4.23.0",
     "typescript": "~6.0.3",
+    "usfm-grammar": "3.2.0",
     "vitest": "^4.1.9"
   },
   "trustedDependencies": ["better-sqlite3", "tree-sitter", "tree-sitter-usfm3"]

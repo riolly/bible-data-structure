@@ -53,14 +53,14 @@ Steps only a person can do:
 
 ## Use from an app
 
-An app imports `src/index.ts` and brings a sync drizzle SQLite driver. The contract ran unchanged on better-sqlite3, `node:sqlite`, `bun:sqlite` and sql.js on 2026-11-14.
+`bun pm pack` builds the package and writes `bible-data-structure-0.0.1.tgz` (77 KB). It holds `dist/` only: the app entry (`src/index.ts`), the Node entry (`src/node.ts`) and their type declarations. An app keeps the file in its own repo and installs it with `bun add ./vendor/bible-data-structure-0.0.1.tgz`. That installs drizzle-orm, fflate and the reference parser, with no native build. The app brings a sync drizzle SQLite driver. The contract ran unchanged on better-sqlite3, `node:sqlite`, `bun:sqlite` and sql.js on 2026-11-14.
 
 ```ts
-import Database from 'better-sqlite3';
-import { drizzle } from 'drizzle-orm/better-sqlite3';
-import { ContractError, packContract, schema } from './src';
+import { DatabaseSync } from 'node:sqlite';
+import { drizzle } from 'drizzle-orm/node-sqlite';
+import { ContractError, packContract, schema } from 'bible-data-structure';
 
-const db = drizzle({ client: new Database('build/packs/KJV+BSB.db', { readonly: true }), schema });
+const db = drizzle({ client: new DatabaseSync('KJV+BSB.db', { readOnly: true }), schema });
 const bible = packContract(db);
 
 const editions = await bible.editions();            // KJV, BSB, WLC, SBLGNT
@@ -69,7 +69,15 @@ const chapter = await bible.chapter('KJV', 'JHN', 3);
 const hebrew = await bible.map('KJV', 'PSA 51:1', 'WLC');
 ```
 
-For licensed editions, wrap the pack in a provider with the app's own fetch: `provider({ local: packReader(db), fetchChapter })`. A call that can't answer rejects with a `ContractError`, and its `code` says whether the address was bad, the edition unknown or a fetch failed (`src/contract/contract.ts`).
+For licensed editions, wrap the pack in a provider with the app's own fetch: `provider({ local: packReader(db), fetchChapter })`. On a Node server, `chapterFetcher` from `bible-data-structure/node` is that fetch, through the kept responses. A call that can't answer rejects with a `ContractError`, and its `code` says whether the address was bad, the edition unknown or a fetch failed (`src/contract/contract.ts`).
+
+What the app's `tsconfig.json` needs, checked from a scratch app on 2026-11-14:
+
+- `moduleResolution: "Bundler"`. Under `NodeNext` the declarations and the app resolve two copies of drizzle's types, and `packContract(db)` fails to compile.
+- `skipLibCheck: true`. drizzle-orm `1.0.0-rc.4` fails its own declaration check without it.
+- `strict`, `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes` all pass.
+
+A git dependency doesn't work: bun installs none of a git dependency's dev dependencies, so the build can't run on install.
 
 ## Carried over from bible-codex
 
