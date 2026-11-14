@@ -26,7 +26,7 @@ Send through the Contact link on [care.api.bible](https://care.api.bible/), API.
 
 ## To the Lockman Foundation
 
-Send through the contact on Lockman's [permissions page](https://www.lockman.org/permission-to-quote-copyright-trademark-information/). Nothing in the repo waits on this answer: NASB stays a Reading edition (ADR-0008) until a license for files with Strong's numbers exists. Lockman may only license to an organization, and the first question asks.
+Send through Lockman's [Email Us form](https://www.lockman.org/email-us/), which takes a name, an email address, a subject and a message. The [permission to quote request form](https://www.lockman.org/permission-to-quote-request-form/) is for quoting verses in a work, not for licensing text files, so it doesn't fit. Nothing in the repo waits on this answer: NASB stays a Reading edition (ADR-0008) until a license for files with Strong's numbers exists. Lockman may only license to an organization, and the first question asks.
 
 > Subject: License for NASB text files with Strong's numbers, for a free app
 >
@@ -44,4 +44,5 @@ Send through the contact on Lockman's [permissions page](https://www.lockman.org
 
 ## Answers
 
-None yet.
+- API.Bible: sent on 2026-11-14 through the help site's contact widget. No answer yet.
+- Lockman Foundation: not sent.
