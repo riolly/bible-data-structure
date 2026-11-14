@@ -39,3 +39,19 @@ A Reading edition reaches the original-language verse through the pivot, one ver
 
 - **One support level.** Rejected. Licensed translations come without Strong's numbers on their words, so either they are excluded or every edition loses word taps.
 - **Model every canon and language first.** Rejected. It delays the first app for data no first app reads, and none of it is expensive to add later.
+
+## Amendment: questions the scope closes (2026-11-14)
+
+Several questions were recorded as open before this ADR cut the scope. Each one only matters for text that is out of scope, so none is open work. A question comes back when its trigger happens, and not before. Nothing below blocks a target edition.
+
+| Question | Where it was recorded | Trigger that reopens it |
+|---|---|---|
+| The pivot home of the Greek additions to Esther, of Baruch 6 or `LJE`, and of Daniel 3:24-90 or `S3Y`. Also the three Esther layouts, Daniel 13-14 or `SUS` and `BEL`, and Psalm 151 in `PSA` or `PS2` | ADR-0006, research/canons.md | A target edition prints a deuterocanonical book |
+| 100 verses of the derived schemes `brenton` (97) and `web` (3) map nowhere: 2 Esdras 14 and 19, Proverbs 24:35-62 and Sirach 30 in Brenton, Baruch 1:22 and 4 Maccabees 7:24-25 in WEB | README plan step 3, `src/ingest/tvtms.test.ts` (`KNOWN_DERIVED`) | The Septuagint or a deuterocanonical book comes into scope |
+| The trouble-spot fixture for the Greek additions to Daniel and Esther | research/README.md | The same |
+| Canon status values, the default Catholic order, the Ethiopian narrower and broader lists, and the unchecked Oriental Orthodox, OSIS and Russian sources | ADR-0002, research/canons.md | A Catholic or Orthodox canon is added |
+| Research topics never started: textual variants, lexicons past Strong's numbers, tokenization of scripts without spaces | research/README.md | An app feature that needs one |
+
+The pivot is extend-only (ADR-0006), so leaving a pivot home undecided costs nothing later: the ids are added when the decision is made, and no existing id moves. The test in `tvtms.test.ts` pins the count of unmapped verses, so a change that adds one fails.
+
+Plan step 15 says to delete a Brenton, WEB or Robinson-Pierpont test that a later step breaks instead of fixing it. That rule covers a test only one of those editions needs. A wrong answer from shared code is fixed even when one of those editions is the only one that shows it, as issues #69, #70 and #71 were.

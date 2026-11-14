@@ -69,7 +69,7 @@ book_name         book_code, lang (BCP 47), canon_id NULL, long, short, abbr, so
 - Adding a tradition later means adding canon rows, a scheme and its mapping data. No stored address changes.
 - A small fixture (one deuterocanonical chapter under a second scheme) must import with no model changes.
 - The carried code still uses the old shape. `src/ingest/books.ts` maps USFM codes to English slugs used as ids, `book` has `testament` and `position`, and `versification_map` maps to the non-existent "av11n" canonical scheme. Replacing these is the first code change. Done in step 2 (2026-11-09).
-- Decided 2026-11-09 (amendment below): an edition that fits no registered scheme gets a derived scheme. Open: which Catholic order becomes the default when a Catholic canon is added, and the Ethiopian narrow and broad lists (two canons or one with statuses). See the "What to decide next" sections of both research files.
+- Decided 2026-11-09 (amendment below): an edition that fits no registered scheme gets a derived scheme. Not decided, and not needed while only the Protestant canon is in scope (ADR-0008 amendment, 2026-11-14): which Catholic order becomes the default when a Catholic canon is added, and the Ethiopian narrow and broad lists (two canons or one with statuses).
 
 ## Amendment: derived schemes (2026-11-09, step 3)
 
