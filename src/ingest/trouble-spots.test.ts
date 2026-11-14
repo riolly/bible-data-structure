@@ -103,7 +103,7 @@ describe.skipIf(!native || !hasTvtms)('trouble spots (research/README.md)', () =
     // the address a mapping lands on holds the title's words
     expect(words('KJV', 'PSA', 51, 0).slice(0, 4)).toEqual(['To', 'the', 'chief', 'Musician']);
     expect(verseTokens('KJV', 'PSA', 51, 0)[0].wordIndex).toBe(0);
-    expect(words('WLC', 'PSA', 51, 1)).toEqual(['לַמְנַצֵּ֗חַ', 'מִזְמ֥וֹר', 'לְדָוִֽד']);
+    expect(words('WLC', 'PSA', 51, 1)).toEqual(['לַמְנַצֵּ֗חַ', 'מִזְמ֥וֹר', 'לְדָוִֽד']);
     expect(map('kjv', 'org', ref('PSA', 51, 1))).toEqual(['PSA 51:3']);
     expect(map('org', 'kjv', ref('PSA', 51, 3))).toEqual(['PSA 51:1']);
     expect(map('org', 'kjv', ref('PSA', 51, 1))).toEqual(['PSA 51:0']);

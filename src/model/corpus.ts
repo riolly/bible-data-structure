@@ -78,7 +78,7 @@ export interface Reading {
   readonly wordIndex: number;
   readonly wordCount: number;
   readonly kind: 'qere';
-  /** The reading's own text, pointed, NFC. */
+  /** The reading's own text, pointed, as the source wrote it (ADR-0004 v1.6). */
   readonly text: string;
   /** The source's ids of the reading's words, in order: what an alignment points at (ADR-0003). */
   readonly owIds: readonly string[];
@@ -111,7 +111,7 @@ export interface OriginalWord {
   /** Read order within the verse: written words, each qere right after the ketiv it replaces. */
   readonly seq: number;
   readonly kind: OriginalWordKind;
-  /** The word as tokenized, NFC. */
+  /** The word as tokenized: Hebrew as the source wrote it, other scripts NFC (ADR-0004 v1.6). */
   readonly text: string;
   /** The source's lemma: OSHB's Strong's form (`c/1961`, `834 a`), or a Greek dictionary form (`λόγος`). */
   readonly lemma: string;

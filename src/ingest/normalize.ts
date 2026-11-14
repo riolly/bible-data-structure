@@ -43,6 +43,7 @@ import {
   type Token,
   type VerseText,
 } from '../model/corpus';
+import { storedText } from './text-form';
 import { tokenize, withoutParagraphMarks } from './tokenize';
 
 /**
@@ -279,15 +280,13 @@ export function normalizeChapters(docs: readonly RawChapterDoc[], opts: Normaliz
 
   const flushText = () => {
     if (!buf) return;
-    // Unicode NFC before tokenizing: sources arrive decomposed (esp. Greek
-    // polytonic & Hebrew). Also keeps decomposed base+mark from splitting a
-    // word apart (a combining mark is category M, which the tokenizer's punct
-    // branch would otherwise capture). Idempotent on already-NFC (ASCII) text.
-    const run = buf.normalize('NFC');
+    // NFC before tokenizing, except Hebrew (storedText, ADR-0004 v1.6):
+    // Greek polytonic arrives decomposed. Idempotent on already-NFC text.
+    const run = storedText(buf);
     const raw = tokenize(run, { paragraphMarks: !inHeading });
     const runStart = bufStart;
     if (openTags.length > 0 && run !== buf) {
-      throw new Error(`chapter ${chapter}: a tagged run changes under NFC, so its word tags can't be placed`);
+      throw new Error(`chapter ${chapter}: a tagged run changes under NFC (storedText), so its word tags can't be placed`);
     }
     bufStart += buf.length;
     buf = '';

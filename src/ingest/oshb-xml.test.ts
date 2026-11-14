@@ -7,6 +7,7 @@ import type { Token } from '../model/corpus';
 import { OSHB_BOOKS, checkReadings, oshbXmlToUsfm, type OshbReading } from './oshb-xml';
 import { SOURCES_ROOT } from './source-files';
 import { SOURCES } from './sources';
+import { storedText } from './text-form';
 import { tokenize } from './tokenize';
 
 // Lines from the pinned OSHB (1SA 9:1, 2SA 8:3, 2KI 5:18, DEU 6:4, JER 48:44, GEN 1:5), cut down.
@@ -63,27 +64,26 @@ describe('oshbXmlToUsfm', () => {
   });
 
   it('makes the paragraph marks punctuation and the ketiv words', () => {
-    const words = (line: string) => tokenize(line.normalize('NFC'), { paragraphMarks: true }).filter((t) => t.kind === 'word');
-    expect(words('בִּֽנְהַר־׃ פ').map((t) => t.text)).toEqual(['בִּֽנְהַר'.normalize('NFC')]);
+    const words = (line: string) => tokenize(storedText(line), { paragraphMarks: true }).filter((t) => t.kind === 'word');
+    expect(words('בִּֽנְהַר־׃ פ').map((t) => t.text)).toEqual(['בִּֽנְהַר']);
     expect(words('יִסְלַח־נא שְׁמַ֖ע הניס מִפְּנֵ֤י׃ ס')).toHaveLength(5);
   });
 
   it('keys each qere by the range of written words its note follows (ADR-0007)', () => {
-    const nfc = (s: string) => s.normalize('NFC');
     expect(readings.map(({ verseWords, qere, ...r }) => r)).toEqual([
       // two written words read as one
-      { book: '1SA', chapter: 9, verse: 1, wordIndex: 2, wordCount: 2, kind: 'qere', text: nfc('מִבִּנְיָמִ֗ין'), owIds: ['09EC9'], ketiv: ['מבן', 'ימין'] },
+      { book: '1SA', chapter: 9, verse: 1, wordIndex: 2, wordCount: 2, kind: 'qere', text: 'מִבִּנְיָמִ֗ין', owIds: ['09EC9'], ketiv: ['מבן', 'ימין'] },
       // read and not written, after the verse's last word
-      { book: '1SA', chapter: 9, verse: 2, wordIndex: 1, wordCount: 0, kind: 'qere', text: nfc('פְּרָֽת'), owIds: ['10dp9'], ketiv: [] },
+      { book: '1SA', chapter: 9, verse: 2, wordIndex: 1, wordCount: 0, kind: 'qere', text: 'פְּרָֽת', owIds: ['10dp9'], ketiv: [] },
       // written and not read
       { book: '1SA', chapter: 10, verse: 1, wordIndex: 1, wordCount: 1, kind: 'qere', text: '', owIds: [], ketiv: ['נא'] },
       // an exegesis note between the ketiv and its qere
-      { book: '1SA', chapter: 10, verse: 1, wordIndex: 3, wordCount: 1, kind: 'qere', text: nfc('הַנָּ֞ס'), owIds: ['24Rwm'], ketiv: ['הניס'] },
+      { book: '1SA', chapter: 10, verse: 1, wordIndex: 3, wordCount: 1, kind: 'qere', text: 'הַנָּ֞ס', owIds: ['24Rwm'], ketiv: ['הניס'] },
     ]);
   });
 
   it("carries its verse's words, so the ingest can check where it sits", () => {
-    expect(readings[1].verseWords).toEqual(['בִּֽנְהַר'.normalize('NFC')]);
+    expect(readings[1].verseWords).toEqual(['בִּֽנְהַר']);
   });
 
   it('keeps each written word with its OSHB id, lemma and morphology, the ketiv words too (plan step 11)', () => {
@@ -93,8 +93,8 @@ describe('oshbXmlToUsfm', () => {
       '10:1 12gsX=5545 12yBx=4994 05WH5=8085 24PtS=d/5211 24Vrx=m/6440',
     ]);
     // the text is the word token's: no morpheme breaks, large letters kept
-    expect(verses[0].words[0]).toEqual({ id: '09wci', lemma: 'c/1961', morph: 'HC/Vqw3ms', text: 'וַֽיְהִי'.normalize('NFC'), wordIndex: 0 });
-    expect(verses[2].words[2].text).toBe('שְׁמַ֖ע'.normalize('NFC'));
+    expect(verses[0].words[0]).toEqual({ id: '09wci', lemma: 'c/1961', morph: 'HC/Vqw3ms', text: 'וַֽיְהִי', wordIndex: 0 });
+    expect(verses[2].words[2].text).toBe('שְׁמַ֖ע');
     expect(verses[0].words.map((w) => w.wordIndex)).toEqual([0, 1, 2, 3, 4]);
   });
 
@@ -127,6 +127,21 @@ describe('oshbXmlToUsfm', () => {
     expect(() => oshbXmlToUsfm(wrap(w('a', 'אִתָּ ךְ')), 'GEN')).toThrow(/is not one word token/);
     expect(() => oshbXmlToUsfm(wrap('<seg type="x-new">*</seg>'), 'GEN')).toThrow(/unknown <seg/);
     expect(() => oshbXmlToUsfm(wrap('stray'), 'GEN')).toThrow(/outside an element/);
+  });
+});
+
+describe('oshbXmlToUsfm keeps Hebrew as the source wrote it (ADR-0004 v1.6)', () => {
+  // JOS 10:1 word 6 (06YgF): the lamed carries a patah, then a hiriq, which NFC would swap.
+  const jerusalem = '\u05D9\u05B0\u05E8\u05D5\u05BC\u05E9\u05C1\u05B8\u05DC\u05B7\u05B4\u0597\u05DD';
+  const xml = `<osis><osisText><div type="book" osisID="Josh"><chapter osisID="Josh.10"><verse osisID="Josh.10.1">
+    <w lemma="3389" morph="HNp" id="06YgF">${jerusalem}</w><note type="variant"><catchWord>x</catchWord><rdg type="x-qere"><w lemma="3389" morph="HNp" id="06Qer">${jerusalem}</w></rdg></note>
+  </verse></chapter></div></osisText></osis>`;
+  const { usfm, readings, verses } = oshbXmlToUsfm(xml, 'JOS');
+
+  it('in the verse text, the word and the qere', () => {
+    expect(usfm.split('\n')).toContain(`\\v 1 ${jerusalem}`);
+    expect(verses[0].words[0].text).toBe(jerusalem);
+    expect(readings[0]).toMatchObject({ text: jerusalem, qere: [{ text: jerusalem }] });
   });
 });
 

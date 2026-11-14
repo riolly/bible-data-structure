@@ -189,8 +189,13 @@ export type ChapterResult =
        *   `d` paragraph is not a title otherwise: WEB's Psalm 119 has 22, the
        *   acrostic letters, and no verse 0.
        * - The text is the source's, unchanged. `Verse.text` and `Word.text`
-       *   are NFC with each run of whitespace made one space, so normalize
-       *   the document's text the same way before comparing (WLC's is not NFC).
+       *   make each run of whitespace one space and apply NFC to every
+       *   script except Hebrew (U+0590 to U+05FF, U+FB1D to U+FB4F), which
+       *   keeps the source's code point order (ADR-0004 v1.6). Prepare the
+       *   document's text the same way before comparing it with them. To
+       *   compare Hebrew text with another source, normalize both sides the
+       *   same way (NFC or NFD) for the comparison only, and keep the stored
+       *   text as it is.
        */
       readonly content: readonly UsjNode[];
       /**
