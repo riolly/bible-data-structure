@@ -20,7 +20,7 @@ The supported-marker table in ADR-0001 is the set of markers the seven sources u
 Counted in `build/corpus.db` on 2026-11-14.
 
 - **KJV, pilcrow** ([eng-kjv_usfm.zip][kjv], for example `71-MRKeng-kjv.usfm`): `\v 9 ¶ Now \w when\w* \add Jesus\add* was \w risen\w*`. The pilcrow is plain text after the verse marker, where the printed KJV starts a paragraph. 2,970 of KJV's 31,218 verse units begin with `¶ `, and in none is it anywhere else. The other six editions have none. It is a punctuation token with no word index. Verse text leaves it out (ADR-0001 amendment, 2026-11-14).
-- **WLC, `פ` and `ס`** (OSHB): a standalone unpointed `פ` or `ס` marks an open or closed paragraph break (ADR-0004 rule 6). 3,072 of WLC's 23,213 verse units end with one after the verse's last word, and 88 hold one inside the verse. Verse text still holds them.
+- **WLC, `פ` and `ס`** (OSHB): a standalone unpointed `פ` or `ס` marks an open or closed paragraph break (ADR-0004 rule 6). WLC has 3,162 of them, each a punctuation token with no word index, in 3,130 of its 23,213 verse units. 3,072 units end with one after the verse's last word, and 88 hold one inside the verse, as 1 Chronicles 1:41 does. Verse text leaves them out (ADR-0001 amendment, 2026-11-14). KJV prints the same two letters once each as stanza labels of Psalm 119, in headings, where they are words.
 - **API.Bible's KJV** prints the pilcrow too. In John 3 both have it at verses 14, 16, 18, 22, 23 and 25 (`src/provider/fixtures/api-bible-kjv-JHN.3.json`). The four kept NASB95, NLT and NIV chapters hold none.
 
 [kjv]: https://ebible.org/Scriptures/eng-kjv_usfm.zip

@@ -335,6 +335,22 @@ describe('normalize guards', () => {
     ]);
   });
 
+  it('leaves the Hebrew paragraph marks out of the verse text and keeps their tokens (ADR-0001 amendment, 2026-11-14)', () => {
+    // WLC 1CH 1:41 has a setuma inside the verse and one after it. A samekh inside a word stays.
+    const r = normalizeUsj(
+      doc([
+        { type: 'chapter', marker: 'c', number: '1' },
+        { type: 'para', marker: 'p', content: [{ type: 'verse', marker: 'v', number: '41' }, 'דִּישׁ֑וֹן ס וּבְנֵ֣י סֵ֖פֶר׃ ס'] },
+        { type: 'para', marker: 'p', content: [{ type: 'verse', marker: 'v', number: '42' }, 'אֶחָֽד׃ פ'] },
+      ]),
+    );
+    expect(r.verses.map((v) => v.text)).toEqual(['דִּישׁ֑וֹן וּבְנֵ֣י סֵ֖פֶר׃', 'אֶחָֽד׃']);
+    // the token stream is the document's: the marks stay as punctuation, and no word index moves
+    expect(r.tokens.filter((t) => t.verse === 41).map((t) => [t.text, t.kind, t.wordIndex])).toEqual([
+      ['דִּישׁ֑וֹן', 'word', 0], ['ס', 'punct', null], ['וּבְנֵ֣י', 'word', 1], ['סֵ֖פֶר', 'word', 2], ['׃', 'punct', null], ['ס', 'punct', null],
+    ]);
+  });
+
   it('counts bridged verses; the tokens carry the first number and the unit the range', () => {
     const r = normalizeUsj(
       doc([

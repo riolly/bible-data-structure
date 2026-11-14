@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { tokenize, verseWords } from './tokenize';
+import { tokenize, verseWords, withoutParagraphMarks } from './tokenize';
 
 /**
  * ADVERSARIAL policy tests (ADR-0004). These pin the REGISTERED tokenization
@@ -134,5 +134,25 @@ describe('verseWords (ADR-0004, step 13 amendment)', () => {
   it("gives a verse text's words in word order, with a paragraph mark as punctuation", () => {
     expect(verseWords('the LORD’s house, father-in-law; 144,000.')).toEqual(['the', 'LORD’s', 'house', 'father-in-law', '144,000']);
     expect(verseWords('וַיִּשְׁמַע יִשְׂרָאֵל פ וַיִּהְיוּ')).toEqual(['וַיִּשְׁמַע', 'יִשְׂרָאֵל', 'וַיִּהְיוּ']);
+  });
+});
+
+describe('withoutParagraphMarks (ADR-0001 amendment, 2026-11-14)', () => {
+  const clean = (s: string) => withoutParagraphMarks(s).replace(/\s+/g, ' ').trim();
+
+  it('removes the pilcrow and a standalone פ or ס, and nothing else', () => {
+    expect(clean('¶ Now when Jesus was risen')).toBe('Now when Jesus was risen');
+    expect(clean('יִשְׂרָאֵ֑ל פ וַיִּֽהְי֥וּ עָשָֽׂר׃ ס')).toBe('יִשְׂרָאֵ֑ל וַיִּֽהְי֥וּ עָשָֽׂר׃');
+    // a mark that touches the verse's last sign with no space
+    expect(clean('אֶחָֽד׃פ')).toBe('אֶחָֽד׃');
+    // the same letters inside a word, pointed or not, stay
+    expect(clean('פֶּה סֵ֖פֶר סוס')).toBe('פֶּה סֵ֖פֶר סוס');
+    expect(clean('the LORD’s house, 144,000.')).toBe('the LORD’s house, 144,000.');
+  });
+
+  it("keeps the text's words (ADR-0004: no word address moves)", () => {
+    for (const text of ['¶ Now when', 'יִשְׂרָאֵ֑ל פ וַיִּֽהְי֥וּ עָשָֽׂר׃ ס', 'אֶחָֽד׃פ', 'ס SAMECH']) {
+      expect(verseWords(withoutParagraphMarks(text))).toEqual(verseWords(text));
+    }
   });
 });

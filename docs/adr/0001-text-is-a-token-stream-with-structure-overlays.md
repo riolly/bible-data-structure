@@ -64,7 +64,7 @@ The list has one home in code, `src/model/corpus.ts`: `UsjElement` is a union ov
 
 The sources' `\w` attributes (`strong=` in KJV, BSB and WEB, `x-morph=` in RP) are not stored. Nothing checks them, ADR-0003 found WEB's Strong's numbers shifted, and plan step 12 adds checked tags as their own data. `splitChapters` drops every character style's attributes and keeps its marker and text, so no word, words stamp or edition stamp changed.
 
-### Verse text leaves out the pilcrow (2026-11-14, SDK review)
+### Verse text leaves out paragraph marks (2026-11-14, SDK review)
 
 KJV prints a pilcrow (`¶`) where a paragraph starts: `\v 9 ¶ Now when Jesus was risen`. 2,970 of its 31,218 verse units began with one, always as the first character, and no other pinned edition has any ([research/source-markup.md](../../research/source-markup.md)). The contract tells a caller to store the verse text as its quote (ADR-0005), so the mark landed in every stored quote of those verses.
 
@@ -72,4 +72,4 @@ KJV prints a pilcrow (`¶`) where a paragraph starts: `\v 9 ¶ Now when Jesus wa
 - The chapter document keeps the pilcrow, and so does the token stream, where it is a punctuation token with no word index. No word address moved, and every words stamp stayed the same.
 - A chapter stamp covers the verse text (ADR-0005 amendment, 2026-11-11), so the stamps of the 790 KJV chapters that hold a pilcrow changed, and KJV's text stamp with them. No other edition's did (README, Editions).
 - A fetched chapter goes through the same derivation, so a licensed edition that prints a pilcrow gets the same verse text.
-- WLC's standalone `פ` and `ס` (ADR-0004 rule 6) are paragraph marks too, and stay in its verse text for now: 3,072 verse units end with one and 88 hold one inside. Leaving them out is an open question.
+- WLC's standalone `פ` and `ס` are paragraph marks too (ADR-0004 rule 6), and verse text leaves them out the same way, decided later the same day. `withoutParagraphMarks` in `tokenize.ts` removes the pilcrow and whatever `verseWords` reads as a paragraph mark, so the two can't disagree. WLC had 3,162 such marks in 3,130 verse units: 3,072 units ended with one and 88 held one inside. The tokenizer's rules are unchanged, WLC's words stamp stayed the same, and the stamps of the 711 WLC chapters that hold a mark changed, and WLC's text stamp with them.

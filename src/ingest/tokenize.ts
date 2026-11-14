@@ -68,3 +68,14 @@ export function verseWords(text: string): string[] {
     .filter((t) => t.kind === 'word')
     .map((t) => t.text);
 }
+
+/**
+ * Verse text without the paragraph marks an edition prints as text: KJV's
+ * pilcrow, and the standalone פ or ס that `verseWords` reads as a paragraph
+ * mark (rule 6). Each becomes a space. The chapter document and the token
+ * stream keep them (ADR-0001 amendment, 2026-11-14). No rule above changes:
+ * a mark was never a word, so the text's words are the same.
+ */
+export function withoutParagraphMarks(text: string): string {
+  return text.replace(TOKEN_PATTERN, (token: string, mark?: string) => (mark === undefined ? token : ' ')).replace(/¶/g, ' ');
+}
