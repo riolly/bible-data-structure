@@ -43,7 +43,7 @@ import {
   type Token,
   type VerseText,
 } from '../model/corpus';
-import { tokenize } from './tokenize';
+import { tokenize, withoutParagraphMarks } from './tokenize';
 
 /**
  * A USJ node as usfm-grammar writes it, before `normalizeChapters` checks it
@@ -486,8 +486,8 @@ export function normalizeChapters(docs: readonly RawChapterDoc[], opts: Normaliz
   const kept: VerseText[] = [];
   const droppedVerses: { chapter: number; verse: number }[] = [];
   for (const row of verses) {
-    // the pilcrow marks a paragraph's start in print and is no part of the verse's words: a quote leaves it out (ADR-0001 amendment, 2026-11-14)
-    const v = { ...row, text: row.text.replace(/¶/g, ' ').replace(/\s+/g, ' ').trim() };
+    // a paragraph mark printed as text is no part of the verse's words: a quote leaves it out (ADR-0001 amendment, 2026-11-14)
+    const v = { ...row, text: withoutParagraphMarks(row.text).replace(/\s+/g, ' ').trim() };
     if (v.text !== '' || v.verse === 0 || opts.hasVerse === undefined) {
       kept.push(v);
       continue;
