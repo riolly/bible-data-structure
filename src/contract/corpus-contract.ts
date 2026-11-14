@@ -14,6 +14,7 @@ import { formatAddress, parseAddress, type Address, type VerseRef } from '../mod
 import { holdsVerse, verseNumbers, verseUnitOf, type VerseText } from '../model/corpus';
 import { PIVOT, refExists, type Mappings, type Ref } from '../model/mapping';
 import { lastVerse, type Scheme } from '../model/scheme';
+import { ContractError, type ContractErrorCode } from './contract';
 import type {
   Absent,
   AbsentReason,
@@ -35,9 +36,21 @@ import type {
   Word,
   WordsResult,
 } from './contract';
-import { dbReader, type AlignedOriginal, type ChapterUnits, type CorpusReader, type EditionRow, type ListedBook } from './reader';
+import { dbReader, type AlignedOriginal, type ChapterRead, type ChapterUnits, type CorpusReader, type EditionRow, type ListedBook } from './reader';
 import { parseReference, type BookRange } from './reference';
 import { RIGHTS, type RightsRecord } from './rights';
+
+const fail = (code: ContractErrorCode, message: string, cause?: unknown): ContractError =>
+  new ContractError(code, message, cause === undefined ? undefined : { cause });
+
+/** An address string as an `Address`, or `bad-address` with the parser's reason. */
+function parse(text: string): Address {
+  try {
+    return parseAddress(text);
+  } catch (e) {
+    throw fail('bad-address', e instanceof Error ? e.message : String(e), e);
+  }
+}
 
 export function corpusContract(db: SyncSqliteDb): BibleContract {
   return readerContract(dbReader(db));
@@ -67,7 +80,7 @@ export function readerContract(read: CorpusReader): BibleContract {
     const cached = editions.get(id);
     if (cached) return cached;
     const row = read.edition(id);
-    if (!row) throw new Error(`unknown edition "${id}"`);
+    if (!row) throw fail('unknown-edition', `unknown edition "${id}"`);
     const e = stampOf(row);
     editions.set(id, e);
     return e;
@@ -77,9 +90,9 @@ export function readerContract(read: CorpusReader): BibleContract {
 
   /** `JHN 3:16` or `JHN 3:16/kjv` → an address under the edition's scheme. */
   function ownAddress(e: EditionStamp, text: string, call: string): Address {
-    const a = parseAddress(text.includes('/') ? text : `${text}/${e.scheme}`);
+    const a = parse(text.includes('/') ? text : `${text}/${e.scheme}`);
     if (a.scheme !== e.scheme) {
-      throw new Error(`${call}: "${text}" names scheme ${a.scheme}, but ${e.id} uses ${e.scheme}. Use resolve for an address under another scheme`);
+      throw fail('bad-address', `${call}: "${text}" names scheme ${a.scheme}, but ${e.id} uses ${e.scheme}. Use resolve for an address under another scheme`);
     }
     return a;
   }
@@ -87,7 +100,7 @@ export function readerContract(read: CorpusReader): BibleContract {
   /** `JHN 3:16` or `JHN 3:16/kjv` → one verse ref under the edition's scheme. */
   function verseRef(e: EditionStamp, text: string, call: string): VerseRef {
     const a = ownAddress(e, text, call);
-    if (a.end || a.start.wordIndex !== undefined) throw new Error(`${call}: "${text}" is not one verse`);
+    if (a.end || a.start.wordIndex !== undefined) throw fail('bad-address', `${call}: "${text}" is not one verse`);
     return a.start;
   }
 
@@ -101,6 +114,16 @@ export function readerContract(read: CorpusReader): BibleContract {
   const noUnits: ChapterUnits = { stamp: '', verses: [] };
   const chapterKey = (e: EditionStamp, book: string, chapter: number) => `${e.id} ${book} ${chapter}`;
 
+  /** A chapter read, waited for. A read that fails, which only a fetch does, is `unavailable`. */
+  async function waitFor<T>(e: EditionStamp, book: string, chapter: number, reading: ChapterRead<T>): Promise<T | null> {
+    try {
+      return await reading;
+    } catch (cause) {
+      const why = cause instanceof Error ? cause.message : String(cause);
+      throw fail('unavailable', `${chapterKey(e, book, chapter)} could not be read: ${why}`, cause);
+    }
+  }
+
   /**
    * Read the chapters of the refs the edition's scheme has, each once and all
    * at once, into `got`. A ref the scheme lacks reads nothing.
@@ -111,7 +134,7 @@ export function readerContract(read: CorpusReader): BibleContract {
       const key = chapterKey(e, r.book, r.chapter);
       if (got.has(key) || !refExists(schemeOf(e), r)) continue;
       got.set(key, noUnits);
-      reads.push(Promise.resolve(read.chapter(e.id, r.book, r.chapter)).then((u) => got.set(key, u ?? noUnits)));
+      reads.push(waitFor(e, r.book, r.chapter, read.chapter(e.id, r.book, r.chapter)).then((u) => got.set(key, u ?? noUnits)));
     }
     await Promise.all(reads);
     return got;
@@ -358,9 +381,9 @@ export function readerContract(read: CorpusReader): BibleContract {
 
   function schemeById(id: string, call: string): Scheme {
     const s = schemes.get(id);
-    if (!s) throw new Error(`${call}: unknown scheme "${id}"`);
+    if (!s) throw fail('unknown-scheme', `${call}: unknown scheme "${id}"`);
     // the pivot only joins mappings: no address is written in it (ADR-0006)
-    if (id === PIVOT) throw new Error(`${call}: "${id}" is the pivot, not a scheme an address is written in`);
+    if (id === PIVOT) throw fail('unknown-scheme', `${call}: "${id}" is the pivot, not a scheme an address is written in`);
     return s;
   }
 
@@ -379,14 +402,17 @@ export function readerContract(read: CorpusReader): BibleContract {
 
     async chapter(id, book, chapter): Promise<ChapterResult> {
       const e = edition(id);
-      if (!Number.isInteger(chapter) || chapter < 1) throw new Error(`chapter: ${chapter} is not a chapter number`);
+      if (!Number.isInteger(chapter) || chapter < 1) throw fail('bad-address', `chapter: ${chapter} is not a chapter number`);
       if (lastVerse(schemeOf(e), book, chapter) === undefined) {
         return { kind: 'absent', edition: e, book, chapter, reason: 'scheme' };
       }
       // both reads start before either is awaited, so a reader that holds nothing fetches the chapter once
-      let [units, doc] = await Promise.all([read.chapter(e.id, book, chapter), read.chapterDoc(e.id, book, chapter)]);
+      let [units, doc] = await Promise.all([
+        waitFor(e, book, chapter, read.chapter(e.id, book, chapter)),
+        waitFor(e, book, chapter, read.chapterDoc(e.id, book, chapter)),
+      ]);
       // the reader may have replaced the chapter between the two reads: take the units of the document's copy
-      if (units && doc && units.stamp !== doc.stamp) units = await read.chapter(e.id, book, chapter);
+      if (units && doc && units.stamp !== doc.stamp) units = await waitFor(e, book, chapter, read.chapter(e.id, book, chapter));
       if (!units || !doc) return { kind: 'absent', edition: e, book, chapter, reason: 'text' };
       if (units.stamp !== doc.stamp) throw new Error(`chapter: ${e.id} ${book} ${chapter} changed while it was read`);
       const { stamp, verses } = units;
@@ -426,19 +452,19 @@ export function readerContract(read: CorpusReader): BibleContract {
       const to = edition(toId);
       const a = ownAddress(from, address, 'map');
       const { wordIndex, ...r } = a.start;
-      if (wordIndex !== undefined) throw new Error(`map: "${address}" is not one verse`);
+      if (wordIndex !== undefined) throw fail('bad-address', `map: "${address}" is not one verse`);
       const refs: Ref[] = [r];
       if (a.end) {
         // a range is allowed only as a bridge's own address, `JHN 1:5-6/kjv`: every number in it maps
         const unit = lookup(from, r, await load(from, [r]));
-        if (unit.kind !== 'bridge' || formatAddress(a) !== unit.address) throw new Error(`map: "${address}" is not one verse`);
+        if (unit.kind !== 'bridge' || formatAddress(a) !== unit.address) throw fail('bad-address', `map: "${address}" is not one verse`);
         for (let v = unit.verse + 1; v <= unit.lastVerse; v++) refs.push({ ...r, verse: v });
       }
       const asked = a.end ? formatAddress(a) : point(from, r);
       mappings ??= read.mappings(schemes);
       const targets: Ref[] = [];
       for (const ref of refs) {
-        if (!refExists(schemeOf(from), ref)) throw new Error(`map: ${from.scheme} has no ${point(from, ref)}`);
+        if (!refExists(schemeOf(from), ref)) throw fail('not-in-scheme', `map: ${from.scheme} has no ${point(from, ref)}`);
         targets.push(...mappings.map(from.scheme, to.scheme, ref));
       }
       const placed: Placed[] = [];
@@ -453,9 +479,9 @@ export function readerContract(read: CorpusReader): BibleContract {
 
     async resolve(id, address): Promise<ResolveResult> {
       const e = edition(id);
-      const a = parseAddress(address);
+      const a = parse(address);
       if (a.start.wordIndex !== undefined || a.end?.wordIndex !== undefined) {
-        throw new Error(`resolve: "${address}" is a word address`);
+        throw fail('bad-address', `resolve: "${address}" is a word address`);
       }
       const s = schemeById(a.scheme, 'resolve');
       const r: Ref = { book: a.start.book, chapter: a.start.chapter, verse: a.start.verse, segment: a.start.segment };
@@ -476,19 +502,19 @@ export function readerContract(read: CorpusReader): BibleContract {
 
     async words(id, address): Promise<WordsResult> {
       const e = edition(id);
-      const a = parseAddress(address.includes('/') ? address : `${address}/${e.scheme}`);
+      const a = parse(address.includes('/') ? address : `${address}/${e.scheme}`);
       if (a.scheme !== e.scheme) {
-        throw new Error(`words: "${address}" names scheme ${a.scheme}, but ${e.id} uses ${e.scheme}. Map it first`);
+        throw fail('bad-address', `words: "${address}" names scheme ${a.scheme}, but ${e.id} uses ${e.scheme}. Map it first`);
       }
       const { wordIndex, ...r } = a.start;
       const found = lookup(e, r, await load(e, [r]));
       // a range is allowed only as a bridge's own address, `JHN 1:5-6/kjv`
       if (a.end && (found.kind !== 'bridge' || formatAddress(a) !== found.address)) {
-        throw new Error(`words: "${address}" is a range`);
+        throw fail('bad-address', `words: "${address}" is a range`);
       }
       // a word number counts within one part (ADR-0004), so a verse printed in parts needs its letter
       if (wordIndex !== undefined && found.kind === 'parts') {
-        throw new Error(`words: ${found.address} is printed in parts; add the part's letter (${found.parts[0].address.replace(/\/.*/, '')}!${wordIndex + 1})`);
+        throw fail('bad-address', `words: ${found.address} is printed in parts; add the part's letter (${found.parts[0].address.replace(/\/.*/, '')}!${wordIndex + 1})`);
       }
       const units = found.kind === 'absent' ? [] : found.kind === 'parts' ? found.parts : [found];
       // a word number counts within the unit, a bridge's too (ADR-0004 v1.5)
@@ -498,7 +524,7 @@ export function readerContract(read: CorpusReader): BibleContract {
 
     async rights(id): Promise<RightsRecord> {
       const r = RIGHTS.get(id);
-      if (!r) throw new Error(`rights: no rights record for edition "${id}"`);
+      if (!r) throw fail('no-rights', `rights: no rights record for edition "${id}"`);
       // only for an edition this contract reads: a record alone doesn't make its chapters readable
       edition(id);
       return r;

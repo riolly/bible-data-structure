@@ -30,6 +30,7 @@ import { drizzle } from 'drizzle-orm/better-sqlite3';
 
 import type { BibleContract } from '../contract/contract';
 import { readerContract } from '../contract/corpus-contract';
+import type { CorpusReader } from '../contract/reader';
 import { LICENSED_EDITIONS } from '../contract/rights';
 import * as schema from '../db/corpus-schema';
 import { PIVOT } from '../model/mapping';
@@ -129,16 +130,22 @@ export function buildPack(
   }
 }
 
-/** A pack opened read-only: the app contract over it, and its SQLite handle for measuring the file. */
+/**
+ * A pack opened read-only with better-sqlite3: the app contract over it, its
+ * reader for a provider (`provider({ local: reader, ... })`), and its SQLite
+ * handle for measuring the file.
+ */
 export interface OpenPack {
   readonly sqlite: Database.Database;
+  readonly reader: CorpusReader;
   readonly contract: BibleContract;
 }
 
-/** Open the pack at `path` read-only. Close it with `sqlite.close()`. */
+/** Open the pack at `path` read-only. Close it with `sqlite.close()`. On another driver, use `packContract` (format.ts). */
 export function openPack(path: string): OpenPack {
   const sqlite = new Database(path, { readonly: true });
-  return { sqlite, contract: readerContract(packReader(drizzle({ client: sqlite, schema }))) };
+  const reader = packReader(drizzle({ client: sqlite, schema }));
+  return { sqlite, reader, contract: readerContract(reader) };
 }
 
 /** What `checkPack` read: the chapters and words it compared, and the time each pack chapter read took, in read order. */
