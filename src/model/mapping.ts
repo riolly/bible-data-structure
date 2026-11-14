@@ -8,7 +8,8 @@
  * reference in the pivot. Where an edition prints a verse as an unlettered
  * first part and lettered parts (Brenton's 1KI 2:35, then 35a to 35o), the
  * address without a letter names the unlettered part alone, and each part
- * maps by its own row or keeps its number (#69). A part letter no row uses
+ * maps by its own row or keeps its number (#69). When no lettered part of
+ * such a verse has a row, the parts take the verse's row. A part letter no row uses
  * follows its whole verse when rows divide that verse into other parts (#71).
  *
  * Moving an address from scheme A to scheme B goes A → pivot → B. There is no
@@ -128,9 +129,17 @@ export class Relation {
     }
   }
 
-  /** The row at a part's whole verse, unless that row is an unlettered first part's. */
+  /**
+   * The row at a part's whole verse. Where the verse has an unlettered first
+   * part, that row is the first part's own as soon as any lettered part has a
+   * row. With no row at a lettered part, the source renumbered the verse as
+   * one piece, so its lettered parts move with it (Brenton's PSA 144:13a goes
+   * to PSA 145:13 with 144:13).
+   */
   private wholeRow(r: Ref): (Ref | null)[] | undefined {
-    return this.firstParts.has(verseOf(r)) ? undefined : this.byFrom.get(refKey(whole(r)));
+    const wk = refKey(whole(r));
+    if (this.firstParts.has(verseOf(r)) && this.fromParts.get(verseOf(r))?.some((k) => k !== wk)) return undefined;
+    return this.byFrom.get(wk);
   }
 
   /**

@@ -187,6 +187,13 @@ describe('a verse printed as an unlettered first part and lettered parts (#69)',
     expect(rel.followsWhole(ref('1KI', 2, 35, 'c'))).toBe(false);
   });
 
+  it('moves the lettered units with the verse when only the verse has a row (Brenton PSA 144:13a)', () => {
+    const rel = new Relation([{ from: ref('1KI', 2, 35), to: ref('1KI', 2, 36) }], new Set(['1KI 2:35']));
+    expect(rel.forward(ref('1KI', 2, 35, 'a'))).toEqual([ref('1KI', 2, 36)]);
+    expect(rel.forward(ref('1KI', 2, 35))).toEqual([ref('1KI', 2, 36)]);
+    expect(rel.followsWhole(ref('1KI', 2, 35, 'a'))).toBe(false);
+  });
+
   it('gives a lettered unit with an absent row no counterpart', () => {
     const rel = new Relation([{ from: ref('1KI', 2, 35, 'a'), to: null }], new Set(['1KI 2:35']));
     expect(rel.forward(ref('1KI', 2, 35, 'a'))).toEqual([]);

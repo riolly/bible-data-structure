@@ -227,6 +227,17 @@ describe.skipIf(!native || !existsSync(CORPUS))('the app contract on the corpus 
     expect(m.verses[1].text).toMatch(/I have surely built thee an house to dwell in/);
   });
 
+  it('moves a lettered part with its verse when TVTMS renumbers the verse as one piece', async () => {
+    const own = (await c.verseText('Brenton', 'PSA 144:13a')).found;
+    expect(own.kind === 'verse' && own.text).toMatch(/πιστὸς Κύριος ἐν τοῖς λόγοις αὐτοῦ/);
+    const psa = await c.map('Brenton', 'PSA 144:13a', 'WEB');
+    expect([psa.kind, psa.verses.map((v) => v.address), psa.missing]).toEqual(['one', ['PSA 145:13/web'], []]);
+    expect(psa.verses[0].text).toMatch(/faithful in all his words/);
+    const jos = await c.map('Brenton', 'JOS 24:31a', 'KJV');
+    expect([jos.kind, jos.verses.map((v) => v.address), jos.missing]).toEqual(['one', ['JOS 24:30/kjv'], []]);
+    expect(addresses((await c.resolve('KJV', 'PSA 144:13a/brenton')).found)).toEqual(['verse PSA 145:13/kjv']);
+  });
+
   it("maps the parts of Brenton's unaligned Esther verses nowhere, like a verse the pivot lacks", async () => {
     const nowhere = await c.map('Brenton', 'EZR 14:1', 'KJV');
     expect([nowhere.kind, nowhere.missing]).toEqual(['absent', []]);
