@@ -112,6 +112,57 @@ describe('licensed chapters: hold, refresh and fetch', () => {
     expect(t.fetches).toEqual(['JHN 3', 'JHN 3']);
   });
 
+  it('a fetch that never answers fails its reads after the timeout, and the next read fetches again', async () => {
+    let calls = 0;
+    const fetchChapter: FetchChapter = async () => {
+      if (++calls === 1) await new Promise(() => {});
+      return { data: JHN_3, fetchedAt: '2026-11-13T00:00:00Z' };
+    };
+    const held = licensedChapters({ editions: EDITIONS, fetchChapter, schemeOf: () => SCHEME, now: () => Date.parse('2026-11-13T00:00:00Z'), fetchTimeoutMs: 20 });
+    const stuck = held.chapter('KJVAB', 'JHN', 3);
+    expect(held.chapter('KJVAB', 'JHN', 3)).toBe(stuck);
+    await expect(stuck).rejects.toThrow(/KJVAB JHN 3: the fetch gave no answer in 20 ms/);
+    expect((await held.chapter('KJVAB', 'JHN', 3))?.verses).toHaveLength(36);
+    expect(calls).toBe(2);
+  });
+
+  it('an answer that comes after the timeout does not replace the copy a later read holds', async () => {
+    const newer: ApiBibleChapter = { ...JHN_3, content: [...JHN_3.content, { type: 'text', text: ' ' }] };
+    let calls = 0;
+    let answerLate = () => {};
+    const fetchChapter: FetchChapter = async () => {
+      if (++calls === 1) {
+        await new Promise<void>((done) => (answerLate = done));
+        return { data: JHN_3, fetchedAt: '2026-11-13T00:00:00Z' };
+      }
+      return { data: newer, fetchedAt: '2026-11-13T00:00:00Z' };
+    };
+    const held = licensedChapters({ editions: EDITIONS, fetchChapter, schemeOf: () => SCHEME, now: () => Date.parse('2026-11-13T00:00:00Z'), fetchTimeoutMs: 20 });
+    await expect(held.chapter('KJVAB', 'JHN', 3)).rejects.toThrow(/gave no answer/);
+    const second = await held.chapter('KJVAB', 'JHN', 3);
+    answerLate();
+    await new Promise((done) => setTimeout(done, 5));
+    expect(held.chapter('KJVAB', 'JHN', 3)).toBe(second);
+    expect(calls).toBe(2);
+  });
+
+  it('a copy stamped after now is held from now, and refreshed once its days pass', async () => {
+    let clock = Date.parse('2026-11-13T00:00:00Z');
+    let calls = 0;
+    const ahead: FetchChapter = async () => (calls++, { data: JHN_3, fetchedAt: '2028-01-01T00:00:00Z' });
+    const held = licensedChapters({ editions: EDITIONS, fetchChapter: ahead, schemeOf: () => SCHEME, now: () => clock });
+    const read = await held.chapter('KJVAB', 'JHN', 3);
+    clock += 29 * day;
+    expect(held.chapter('KJVAB', 'JHN', 3)).toBe(read);
+    clock += 2 * day;
+    expect(held.chapter('KJVAB', 'JHN', 3)).toBeInstanceOf(Promise);
+    // the clock set back before the fetch: the held copy has no known age
+    await held.chapter('KJVAB', 'JHN', 3);
+    clock -= 40 * day;
+    expect(held.chapter('KJVAB', 'JHN', 3)).toBeInstanceOf(Promise);
+    expect(calls).toBe(3);
+  });
+
   it('a fetch that gives a copy past the refresh days fails the read', async () => {
     const t = make();
     await t.held.chapter('KJVAB', 'JHN', 3);

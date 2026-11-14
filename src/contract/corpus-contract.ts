@@ -12,7 +12,7 @@ import type { SyncSqliteDb } from '../db/corpus-read';
 import { verseWords } from '../ingest/tokenize';
 import { formatAddress, parseAddress, type Address, type VerseRef } from '../model/address';
 import { holdsVerse, verseNumbers, verseUnitOf, type VerseText } from '../model/corpus';
-import { refExists, type Mappings, type Ref } from '../model/mapping';
+import { PIVOT, refExists, type Mappings, type Ref } from '../model/mapping';
 import { lastVerse, type Scheme } from '../model/scheme';
 import type {
   Absent,
@@ -70,12 +70,18 @@ export function readerContract(read: CorpusReader): BibleContract {
 
   const schemeOf = (e: EditionStamp): Scheme => schemes.get(e.scheme)!;
 
-  /** `JHN 3:16` or `JHN 3:16/kjv` → one verse ref under the edition's scheme. */
-  function verseRef(e: EditionStamp, text: string, call: string): VerseRef {
+  /** `JHN 3:16` or `JHN 3:16/kjv` → an address under the edition's scheme. */
+  function ownAddress(e: EditionStamp, text: string, call: string): Address {
     const a = parseAddress(text.includes('/') ? text : `${text}/${e.scheme}`);
     if (a.scheme !== e.scheme) {
       throw new Error(`${call}: "${text}" names scheme ${a.scheme}, but ${e.id} uses ${e.scheme}. Use resolve for an address under another scheme`);
     }
+    return a;
+  }
+
+  /** `JHN 3:16` or `JHN 3:16/kjv` → one verse ref under the edition's scheme. */
+  function verseRef(e: EditionStamp, text: string, call: string): VerseRef {
+    const a = ownAddress(e, text, call);
     if (a.end || a.start.wordIndex !== undefined) throw new Error(`${call}: "${text}" is not one verse`);
     return a.start;
   }
@@ -348,6 +354,8 @@ export function readerContract(read: CorpusReader): BibleContract {
   function schemeById(id: string, call: string): Scheme {
     const s = schemes.get(id);
     if (!s) throw new Error(`${call}: unknown scheme "${id}"`);
+    // the pivot only joins mappings: no address is written in it (ADR-0006)
+    if (id === PIVOT) throw new Error(`${call}: "${id}" is the pivot, not a scheme an address is written in`);
     return s;
   }
 
@@ -399,11 +407,23 @@ export function readerContract(read: CorpusReader): BibleContract {
     async map(fromId, address, toId): Promise<MapResult> {
       const from = edition(fromId);
       const to = edition(toId);
-      const r = verseRef(from, address, 'map');
-      const asked = point(from, r);
-      if (!refExists(schemeOf(from), r)) throw new Error(`map: ${from.scheme} has no ${asked}`);
+      const a = ownAddress(from, address, 'map');
+      const { wordIndex, ...r } = a.start;
+      if (wordIndex !== undefined) throw new Error(`map: "${address}" is not one verse`);
+      const refs: Ref[] = [r];
+      if (a.end) {
+        // a range is allowed only as a bridge's own address, `JHN 1:5-6/kjv`: every number in it maps
+        const unit = lookup(from, r, await load(from, [r]));
+        if (unit.kind !== 'bridge' || formatAddress(a) !== unit.address) throw new Error(`map: "${address}" is not one verse`);
+        for (let v = unit.verse + 1; v <= unit.lastVerse; v++) refs.push({ ...r, verse: v });
+      }
+      const asked = a.end ? formatAddress(a) : point(from, r);
       mappings ??= read.mappings(schemes);
-      const targets = mappings.map(from.scheme, to.scheme, r);
+      const targets: Ref[] = [];
+      for (const ref of refs) {
+        if (!refExists(schemeOf(from), ref)) throw new Error(`map: ${from.scheme} has no ${point(from, ref)}`);
+        targets.push(...mappings.map(from.scheme, to.scheme, ref));
+      }
       const placed: Placed[] = [];
       place(to, targets, placed, await load(to, targets));
       const ordered = inOrder(placed).map((p) => p.l);
@@ -462,6 +482,8 @@ export function readerContract(read: CorpusReader): BibleContract {
     async rights(id): Promise<RightsRecord> {
       const r = RIGHTS.get(id);
       if (!r) throw new Error(`rights: no rights record for edition "${id}"`);
+      // only for an edition this contract reads: a record alone doesn't make its chapters readable
+      edition(id);
       return r;
     },
 

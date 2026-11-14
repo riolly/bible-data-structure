@@ -28,6 +28,7 @@ import { readLicensedChapter, type ApiBibleChapter, type ReadChapter } from './a
  * One chapter as fetched, with when it was fetched, or null when the edition
  * doesn't print it. `licensed` is the edition's record: a fetch that keeps
  * copies keeps them for its rights record's `refreshDays`, as the provider does.
+ * A fetch that hasn't settled after `fetchTimeoutMs` fails the reads that wait for it.
  */
 export type FetchChapter = (
   edition: string,
@@ -43,6 +44,8 @@ export interface LicensedChaptersOptions {
   readonly schemeOf: (edition: string) => Scheme;
   /** Milliseconds since the epoch. */
   readonly now: () => number;
+  /** Milliseconds a fetch may take before the reads waiting for it fail. Default: 60,000. */
+  readonly fetchTimeoutMs?: number;
 }
 
 export interface LicensedChapters {
@@ -65,8 +68,12 @@ export function licensedChapters(opts: LicensedChaptersOptions): LicensedChapter
   const held = new Map<string, Held>();
   const pending = new Map<string, Promise<ReadChapter | null>>();
 
-  const fresh = (e: LicensedEdition, fetchedAt: number) =>
-    e.rights.refreshDays === null || opts.now() - fetchedAt < e.rights.refreshDays * 86_400_000;
+  /** A copy fetched after now (the clock ran ahead when it was fetched) has no known age, so it isn't fresh. */
+  const fresh = (e: LicensedEdition, fetchedAt: number) => {
+    const age = opts.now() - fetchedAt;
+    return age >= 0 && (e.rights.refreshDays === null || age < e.rights.refreshDays * 86_400_000);
+  };
+  const timeoutMs = opts.fetchTimeoutMs ?? 60_000;
   /** Whether the edition's chapters are held at all (`RightsRecord.refreshDays`). */
   const keeps = (e: LicensedEdition) => e.rights.refreshDays !== 0;
 
@@ -95,20 +102,35 @@ export function licensedChapters(opts: LicensedChaptersOptions): LicensedChapter
 
   /** Fetch one chapter, once however many reads ask for it at the same time. */
   function fetchOne(key: string, id: string, e: LicensedEdition, book: string, chapter: number): Promise<ReadChapter | null> {
-    let p = pending.get(key);
-    if (p) return p;
-    p = (async () => {
+    const waiting = pending.get(key);
+    if (waiting) return waiting;
+    let timedOut = false;
+    const work = (async () => {
       const got = await opts.fetchChapter(id, book, chapter, e);
       const read = got ? await readLicensedChapter(id, e, opts.schemeOf(id), book, chapter, got.data) : null;
-      const fetchedAt = got ? Date.parse(got.fetchedAt) : opts.now();
-      if (!keeps(e)) return read;
+      // a copy stamped after now (the fetch's clock is ahead of ours) counts as fetched now
+      const fetchedAt = got ? Math.min(Date.parse(got.fetchedAt), opts.now()) : opts.now();
+      // an answer after the timeout is not held: a later read may hold a newer copy by now
+      if (!keeps(e) || timedOut) return read;
       if (got && !fresh(e, fetchedAt)) {
         throw new Error(`${key} is still missing after its fetch: the fetch gave a copy from ${got.fetchedAt}, older than ${e.rights.refreshDays} days`);
       }
       // a refresh replaces the held chapter here: a changed stamp (held.get(key)?.read?.stamp) would be reported here
       hold(key, e, { read, fetchedAt, edition: id, verses: read ? lastVerse(opts.schemeOf(id), book, chapter)! : 0 });
       return read;
-    })().finally(() => pending.delete(key));
+    })();
+    // a fetch that never settles must not block the chapter: after the timeout the next read fetches again
+    let timer: ReturnType<typeof setTimeout>;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        timedOut = true;
+        reject(new Error(`${key}: the fetch gave no answer in ${timeoutMs} ms`));
+      }, timeoutMs);
+    });
+    const p: Promise<ReadChapter | null> = Promise.race([work, timeout]).finally(() => {
+      clearTimeout(timer);
+      if (pending.get(key) === p) pending.delete(key);
+    });
     pending.set(key, p);
     return p;
   }

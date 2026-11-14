@@ -30,6 +30,8 @@ export interface CacheOptions {
   readonly dir: string;
   readonly now?: () => Date;
   readonly fetch?: typeof fetch;
+  /** Milliseconds a call to API.Bible may take before it fails. Default: 30,000. */
+  readonly timeoutMs?: number;
 }
 
 /** An HTTP error from API.Bible, with its status. */
@@ -68,21 +70,39 @@ async function cachedGet<T>(
 
   const keeps = rights.refreshDays !== 0;
 
-  const old = keeps ? await readFile(kept, 'utf8').then((s) => JSON.parse(s) as KeptResponse, () => null) : null;
-  if (old && now.getTime() - Date.parse(old.fetchedAt) < maxAge) {
-    return { data: dataOf<T>(old.body), fetchedAt: old.fetchedAt, fetched: false };
-  }
+  const old = keeps ? await readKept<T>(kept) : null;
+  // a copy stamped after now (the clock ran ahead when it was kept) has no known age: fetch again
+  const age = old ? now.getTime() - Date.parse(old.fetchedAt) : NaN;
+  if (old && age >= 0 && age < maxAge) return { data: old.data, fetchedAt: old.fetchedAt, fetched: false };
 
-  const res = await (opts.fetch ?? fetch)(`${API_BASE}/bibles/${bibleId}${path}`, { headers: { 'api-key': opts.key } });
-  if (!res.ok) throw new ApiBibleHttpError(`${edition} ${path.split('?')[0]}`, res.status);
+  const what = `${edition} ${path.split('?')[0]}`;
+  const res = await (opts.fetch ?? fetch)(`${API_BASE}/bibles/${bibleId}${path}`, {
+    headers: { 'api-key': opts.key },
+    signal: AbortSignal.timeout(opts.timeoutMs ?? 30_000),
+  });
+  if (!res.ok) throw new ApiBibleHttpError(what, res.status);
   const body = await res.text();
   const data = dataOf<T>(body);
+  if (data === undefined) throw new Error(`API.Bible ${what}: the response has no data`);
   const fresh: KeptResponse = { fetchedAt: now.toISOString(), body };
   if (!keeps) return { data, fetchedAt: fresh.fetchedAt, fetched: true };
   await mkdir(dirname(kept), { recursive: true });
-  await writeFile(`${kept}.tmp`, JSON.stringify(fresh));
-  await rename(`${kept}.tmp`, kept);
+  // a name of its own, so two writers of one chapter don't rename each other's file away
+  const tmp = `${kept}.${process.pid}.${crypto.randomUUID()}.tmp`;
+  await writeFile(tmp, JSON.stringify(fresh));
+  await rename(tmp, kept);
   return { data, fetchedAt: fresh.fetchedAt, fetched: true };
+}
+
+/** The kept copy at `file`, or null when there is none or it doesn't parse (a write cut short): the caller fetches again. */
+async function readKept<T>(file: string): Promise<{ data: T; fetchedAt: string } | null> {
+  try {
+    const { fetchedAt, body } = JSON.parse(await readFile(file, 'utf8')) as KeptResponse;
+    const data = dataOf<T>(body);
+    return data === undefined || Number.isNaN(Date.parse(fetchedAt)) ? null : { data, fetchedAt };
+  } catch {
+    return null;
+  }
 }
 
 export interface Cached<T> {

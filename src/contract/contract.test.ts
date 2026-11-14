@@ -489,4 +489,23 @@ describe.skipIf(!native)('the app contract on a verse bridge (fixtures/adversari
     const m = await c.map('FIX', 'JHN 1:6', 'FIX');
     expect([m.kind, m.verses.map((v) => `${v.kind} ${v.address}`)]).toEqual(['one', ['bridge JHN 1:5-6/kjv']]);
   });
+
+  it('map takes a bridge\'s own address, as chapter gives it, and no other range', async () => {
+    const ch = await c.chapter('FIX', 'JHN', 1);
+    const bridge = ch.kind === 'chapter' ? ch.verses.find((v) => v.kind === 'bridge')! : undefined!;
+    const m = await c.map('FIX', bridge.address, 'FIX');
+    expect([m.asked, m.kind, m.verses.map((v) => `${v.kind} ${v.address}`)]).toEqual(['JHN 1:5-6/kjv', 'one', ['bridge JHN 1:5-6/kjv']]);
+    expect((await c.map('FIX', 'JHN 1:5-6', 'FIX')).asked).toBe('JHN 1:5-6/kjv');
+    await expect(c.map('FIX', 'JHN 1:4-6', 'FIX')).rejects.toThrow(/not one verse/);
+    await expect(c.map('FIX', 'JHN 1:5!1', 'FIX')).rejects.toThrow(/not one verse/);
+  });
+
+  it('rights throws for an edition the contract does not read, though it has a record', async () => {
+    await expect(c.rights('KJV')).rejects.toThrow(/unknown edition "KJV"/);
+  });
+
+  it('no address is read under the pivot', async () => {
+    await expect(c.resolve('FIX', 'JHN 1:1/pivot')).rejects.toThrow(/pivot/);
+    await expect(c.passage('FIX', 'John 1:1', { scheme: 'pivot' })).rejects.toThrow(/pivot/);
+  });
 });
