@@ -165,24 +165,32 @@ describe('a verse printed as an unlettered first part and lettered parts (#69)',
   ];
   const mm = new Mappings(parts, new Map([[PIVOT, pv], ['brn', kgs], ['kjv', kjv1]]));
 
-  it('maps the unlettered part by its number, beside where the lettered parts go', () => {
+  it('maps the address without a letter to the unlettered unit only, both ways', () => {
     expect(mm.map('kjv', 'brn', ref('1KI', 2, 35))).toEqual([ref('1KI', 2, 35)]);
-    expect(mm.map('brn', 'kjv', ref('1KI', 2, 35))).toEqual([ref('1KI', 2, 35), ref('1KI', 4, 29), ref('1KI', 3, 1)]);
+    expect(mm.map('brn', 'kjv', ref('1KI', 2, 35))).toEqual([ref('1KI', 2, 35)]);
+    // each lettered part is a unit of its own, with its own row
     expect(mm.map('brn', 'kjv', ref('1KI', 2, 35, 'a'))).toEqual([ref('1KI', 4, 29)]);
   });
 
-  it('keeps the unlettered part when a lettered part lands on the same verse (TVTMS 1KI 12:24w)', () => {
+  it('keeps the unlettered unit when a lettered part lands on the same verse (TVTMS 1KI 12:24w)', () => {
     const w: MappingRow = { scheme: 'brn', from: ref('1KI', 2, 35, 'b'), to: ref('1KI', 2, 35), kind: 'CopiedFrom verse' };
     const mw = new Mappings([parts[0], w], new Map([[PIVOT, pv], ['brn', kgs], ['kjv', kjv1]]));
     expect(mw.map('kjv', 'brn', ref('1KI', 2, 35))).toEqual([ref('1KI', 2, 35, 'b'), ref('1KI', 2, 35)]);
   });
 
-  it('keeps a row at the whole verse as the first part row (ESG 3:13 to Hebrew EST 3:13)', () => {
+  it("reads a row at the verse without a letter as the unlettered unit's row (ESG 3:13 to Hebrew EST 3:13)", () => {
     const rel = new Relation([...parts, { from: ref('1KI', 2, 35), to: ref('1KI', 2, 36) }], new Set(['1KI 2:35']));
-    expect(rel.forward(ref('1KI', 2, 35))).toEqual([ref('1KI', 4, 29), ref('1KI', 3, 1), ref('1KI', 2, 36)]);
+    expect(rel.forward(ref('1KI', 2, 35))).toEqual([ref('1KI', 2, 36)]);
     expect(rel.backward(ref('1KI', 2, 35), () => true)).toEqual([]);
-    // a lettered part with no row follows the whole verse, not the first part row
-    expect(rel.forward(ref('1KI', 2, 35, 'c'))).toEqual([ref('1KI', 4, 29), ref('1KI', 3, 1), ref('1KI', 2, 36)]);
+    // a lettered unit with no row keeps its own address: it doesn't take the unlettered unit's row
+    expect(rel.forward(ref('1KI', 2, 35, 'c'))).toEqual([ref('1KI', 2, 35, 'c')]);
+    expect(rel.followsWhole(ref('1KI', 2, 35, 'c'))).toBe(false);
+  });
+
+  it('gives a lettered unit with an absent row no counterpart', () => {
+    const rel = new Relation([{ from: ref('1KI', 2, 35, 'a'), to: null }], new Set(['1KI 2:35']));
+    expect(rel.forward(ref('1KI', 2, 35, 'a'))).toEqual([]);
+    expect(rel.forward(ref('1KI', 2, 35))).toEqual([ref('1KI', 2, 35)]);
   });
 
   it('leaves verses whose lettered parts make up the whole verse as they were (kjv REV 13:1)', () => {

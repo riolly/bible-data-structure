@@ -5,9 +5,10 @@
  * (or part of one) in the pivot. Rows may be many-to-many, cross chapters and
  * books, and mark a verse `absent` (`to: null`) where the pivot has no
  * counterpart. The table is sparse: a verse with no row maps to the same
- * reference in the pivot. So does the unlettered first part of a verse an
- * edition prints before lettered parts (Brenton's 1KI 2:35, then 35a to 35o)
- * when only the lettered parts have rows (#69). A part letter no row uses
+ * reference in the pivot. Where an edition prints a verse as an unlettered
+ * first part and lettered parts (Brenton's 1KI 2:35, then 35a to 35o), the
+ * address without a letter names the unlettered part alone, and each part
+ * maps by its own row or keeps its number (#69). A part letter no row uses
  * follows its whole verse when rows divide that verse into other parts (#71).
  *
  * Moving an address from scheme A to scheme B goes A → pivot → B. There is no
@@ -99,7 +100,9 @@ export function unletteredFirstParts(s: Scheme): Set<string> {
  * `firstParts` holds the `from` side's verses printed as an unlettered first
  * part and lettered parts (`unletteredFirstParts`). There a row at the whole
  * verse is the first part's row (TVTMS `!0`, Brenton ESG 3:13 to Hebrew
- * EST 3:13), and without one the first part keeps its number.
+ * EST 3:13), and without one the first part keeps its number. The lettered
+ * parts are sibling units: they don't follow the first part, and it doesn't
+ * go where they go.
  */
 export class Relation {
   private readonly byFrom = new Map<string, (Ref | null)[]>();
@@ -130,31 +133,33 @@ export class Relation {
     return this.firstParts.has(verseOf(r)) ? undefined : this.byFrom.get(refKey(whole(r)));
   }
 
-  /** Whether `r` is a whole verse whose unlettered first part has no row (#69). */
-  private firstPartUnmapped(r: Ref): boolean {
-    return r.segment === '' && this.firstParts.has(verseOf(r)) && !this.byFrom.has(refKey(r));
-  }
-
-  /** Whether any row starts at this reference, its whole verse or one of its parts. */
+  /**
+   * Whether any row starts at this reference, its whole verse or one of its
+   * parts. An unlettered first part speaks only through its own row (#69).
+   */
   private speaksFor(r: Ref): boolean {
-    return this.byFrom.has(refKey(r)) || this.wholeRow(r) !== undefined ||
-      (r.segment === '' && this.fromParts.has(verseOf(r)) && !this.firstPartUnmapped(r));
+    if (this.byFrom.has(refKey(r))) return true;
+    if (this.firstParts.has(verseOf(r))) return false;
+    return this.wholeRow(r) !== undefined || (r.segment === '' && this.fromParts.has(verseOf(r)));
   }
 
   /**
    * Whether a part has no row of its own or at its whole verse while rows
    * divide its verse into other parts (#71). It then follows the whole verse.
+   * The lettered parts of a verse printed with an unlettered first part are
+   * units beside it, so they never follow it (#69).
    */
   followsWhole(r: Ref): boolean {
-    return r.segment !== '' && !this.byFrom.has(refKey(r)) && this.wholeRow(r) === undefined && this.fromParts.has(verseOf(r));
+    return r.segment !== '' && !this.firstParts.has(verseOf(r)) && !this.byFrom.has(refKey(r)) &&
+      this.wholeRow(r) === undefined && this.fromParts.has(verseOf(r));
   }
 
   /**
    * Where `r` goes. Empty means absent. A whole verse goes wherever its own
-   * rows and its parts' rows send it, plus its own number when its unlettered
-   * first part has no row. A part with no row of its own takes the row at its
-   * whole verse, or follows the whole verse when other parts have rows, or
-   * keeps its number.
+   * rows and its parts' rows send it. An unlettered first part goes where its
+   * own row sends it, or keeps its number: its lettered parts are other units
+   * (#69). A part with no row of its own takes the row at its whole verse, or
+   * follows the whole verse when other parts have rows, or keeps its number.
    */
   forward(r: Ref): Ref[] {
     const real = (list: (Ref | null)[]) => list.filter((t): t is Ref => t !== null);
@@ -163,10 +168,13 @@ export class Relation {
       if (own) return dedupe(real(own));
       return this.followsWhole(r) ? this.forward(whole(r)) : [r];
     }
+    if (this.firstParts.has(verseOf(r))) {
+      const own = this.byFrom.get(refKey(r));
+      return own ? dedupe(real(own)) : [r];
+    }
     const keys = this.fromParts.get(verseOf(r));
     if (!keys) return [r];
-    const targets = real(keys.flatMap((k) => this.byFrom.get(k)!));
-    return dedupe(this.firstPartUnmapped(r) ? [r, ...targets] : targets);
+    return dedupe(real(keys.flatMap((k) => this.byFrom.get(k)!)));
   }
 
   /**
@@ -180,7 +188,7 @@ export class Relation {
     else for (const k of this.toParts.get(verseOf(r)) ?? []) if (k !== refKey(r)) out.push(...this.byTo.get(k)!);
     if (this.speaksFor(r) || !exists(r)) return dropCoveredWholes(dedupe(out));
     // an unlettered first part is a unit of its own, which its lettered parts don't cover (#69)
-    if (this.firstPartUnmapped(r)) return dedupe([...dropCoveredWholes(dedupe(out)), r]);
+    if (r.segment === '' && this.firstParts.has(verseOf(r))) return dedupe([...dropCoveredWholes(dedupe(out)), r]);
     return dropCoveredWholes(dedupe([...out, r]));
   }
 }

@@ -306,7 +306,8 @@ describe('scheme-side part letters (#70)', () => {
     row('brn', ref('2ES', 7, 36), ref('2ES', 7, 35, 'aa')),
   ];
   const schemes = new Map([['brn', brn], ['lx', lx]]);
-  const keyed = (list: readonly MappingRow[]) => list.map((r) => `${r.scheme} ${refKey(r.from)} ${refKey(r.to!)}`);
+  const keyed = (list: readonly MappingRow[]) =>
+    list.map((r) => `${r.scheme} ${refKey(r.from)} ${r.to ? refKey(r.to) : `absent (${r.kind})`}`);
 
   it("reads TVTMS letters as ordinals over the parts an edition prints, and folds a piece to its part's letter", () => {
     // ESG 1:1: Brenton's unlettered part is TVTMS's a, so its letters were checked and don't line up
@@ -318,6 +319,14 @@ describe('scheme-side part letters (#70)', () => {
       'brn 1KI 2:46h 1KI 4:3',
       'brn 1KI 2:46k 1KI 4:21',
       'brn 1KI 2:46l 1KI 11:42',
+      // one printed part holds every part TVTMS names
+      'brn 1KI 8:53a 1KI 8:12',
+      'brn 1KI 8:53a 1KI 8:13',
+      // parts that can't be aligned map nowhere, like a verse the pivot lacks
+      'brn ESG 1:1b absent (TVTMS parts unaligned)',
+      'brn ESG 1:1c absent (TVTMS parts unaligned)',
+      'brn SIR 6:2a absent (TVTMS parts unaligned)',
+      'brn SIR 6:2b absent (TVTMS parts unaligned)',
       // no parts listed: TVTMS's letter stays, and a longer id moves to the whole verse
       'brn EXO 38:17l EXO 38:17l',
       'brn EXO 38:17 EXO 38:18',
@@ -328,8 +337,6 @@ describe('scheme-side part letters (#70)', () => {
       'brn 2ES 7:36 2ES 7:35!aa', // only changed rows merge: vul's .vrs repeats DAG 3:52's rows
     ]);
     expect(dropped.map((d) => `${refKey(d.row.from)}: ${d.reason}`)).toEqual([
-      '1KI 8:53a: TVTMS names 2 lettered parts, the scheme lists 1',
-      '1KI 8:53b: TVTMS names 2 lettered parts, the scheme lists 1',
       "ESG 1:1a: TVTMS's letters don't line up with the edition's text",
       "ESG 1:1b: TVTMS's letters don't line up with the edition's text",
       'SIR 6:2!c1: TVTMS names 3 lettered parts, the scheme lists 2',
@@ -393,12 +400,27 @@ describe.skipIf(!hasTvtms)('the pinned TVTMS file', () => {
     expect(keys(m.toPivot('lxx', ref('ESG', 10, 3, 'k')))).toEqual(['ESG 11:1']);
   });
 
+  it('folds every TVTMS part into the one part Brenton prints (1KI 8:53a)', () => {
+    expect(keys(m.toPivot('brenton', ref('1KI', 8, 53, 'a')))).toEqual(['1KI 8:12', '1KI 8:13']);
+    expect(keys(m.toPivot('brenton', ref('1KI', 8, 53)))).toEqual(['1KI 8:53']);
+  });
+
+  it('maps the parts of a dropped verse nowhere, and keeps its unlettered unit', () => {
+    for (const r of [ref('ESG', 1, 1, 'k'), ref('ESG', 4, 17, 'k'), ref('ESG', 8, 12, 'x')]) {
+      expect(m.toPivot('brenton', r), refKey(r)).toEqual([]);
+      expect(m.followsWhole('brenton', r), refKey(r)).toBe(false);
+    }
+    expect(keys(m.toPivot('brenton', ref('ESG', 1, 1)))).toEqual(['ESG 1:1']);
+    // the pivot verses those parts held reach no Brenton part (WEB's ESG 4:19 is pivot ESG 13:9)
+    for (const r of [ref('ESG', 13, 9), ref('ESG', 11, 3), ref('ESG', 16, 21)]) expect(m.fromPivot('brenton', r), refKey(r)).toEqual([]);
+  });
+
   /**
    * Brenton verses whose lettered-part rows are dropped: TVTMS names more
-   * parts than Brenton prints (1KI 8:53, ESG 4:17), or its letters don't
-   * line up with Brenton's text (ESG 1:1, ESG 8:12, UNALIGNED_PARTS).
+   * parts than Brenton prints (ESG 4:17), or its letters don't line up with
+   * Brenton's text (ESG 1:1, ESG 8:12, UNALIGNED_PARTS).
    */
-  const KNOWN_DROPPED: Record<string, string[]> = { brenton: ['1KI 8:53', 'ESG 1:1', 'ESG 4:17', 'ESG 8:12'] };
+  const KNOWN_DROPPED: Record<string, string[]> = { brenton: ['ESG 1:1', 'ESG 4:17', 'ESG 8:12'] };
 
   it('drops only the known verses whose TVTMS letters name no printed part', () => {
     const verses: Record<string, string[]> = {};

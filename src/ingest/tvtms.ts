@@ -22,7 +22,7 @@ import { join } from 'node:path';
 import { BOOK_BY_CODE } from '../model/books';
 import type { Block, Token, VerseText } from '../model/corpus';
 import { PROTESTANT, canonBookCodes } from '../model/canon';
-import { Relation, parseRefKey, refKey, unletteredFirstParts, type MappingRow, type Ref } from '../model/mapping';
+import { Relation, parseRefKey, ref, refKey, unletteredFirstParts, type MappingRow, type Ref } from '../model/mapping';
 import { parseAddress } from '../model/address';
 import { lastVerse, type Scheme } from '../model/scheme';
 import { ENG_TO_PIVOT, allVrsPivotRows, buildPivot } from './pivot';
@@ -713,9 +713,15 @@ export function compileMappings(
  * Brenton prints, read against its text. ESG 1:1: Brenton's unlettered part
  * is TVTMS's a (11:2, Mordecai's dream dated) and its b is TVTMS's b (11:3).
  * ESG 8:12: Brenton's a heads the letter, its b is 16:1, and its last part
- * x is 16:24 where TVTMS's last, u, is 16:21.
+ * x is 16:24 where TVTMS's last, u, is 16:21. Their lettered parts get absent
+ * rows (`UNALIGNED`), so `map('Brenton', 'ESG 1:1k', 'WEB')` returns `absent`
+ * with nothing missing, as for the 97 Brenton verses that map nowhere
+ * (`EZR 14:1`). Their unlettered units keep their own rows.
  */
 export const UNALIGNED_PARTS: ReadonlyMap<string, ReadonlySet<string>> = new Map([['brenton', new Set(['ESG 1:1', 'ESG 8:12'])]]);
+
+/** The kind of the absent row each printed part of a verse with dropped TVTMS part rows gets. */
+export const UNALIGNED = 'TVTMS parts unaligned';
 
 /** A TVTMS part letter as an ordinal over the whole alphabet: a = 1, z = 26, aa = 27. */
 const ordinal = (letters: string) => [...letters].reduce((n, c) => n * 26 + c.charCodeAt(0) - 96, 0);
@@ -734,9 +740,13 @@ export interface DroppedRow {
  * the schemes an edition prints, with the verses whose letters were read
  * against its text and don't line up. In those schemes, where the scheme
  * lists the verse's parts, the nth TVTMS letter becomes the nth lettered part
- * listed, and a piece of a part (`h1`) becomes that part's letter. A verse
- * whose rows name more parts than the scheme lists, or that doesn't line up,
- * loses its lettered-part rows: nothing says which part an ordinal names.
+ * listed, and a piece of a part (`h1`) becomes that part's letter. Where the
+ * scheme lists one lettered part, every TVTMS part folds into it (Brenton's
+ * 1KI 8:53a holds KJV 8:12 and 8:13). A verse whose rows name more parts than
+ * the scheme lists, or that doesn't line up, loses its lettered-part rows:
+ * nothing says which part an ordinal names. Each lettered part the scheme
+ * lists there gets an absent row of kind `TVTMS parts unaligned` instead, so
+ * it maps nowhere rather than following its verse (`UNALIGNED`).
  *
  * Elsewhere TVTMS's letters stay. A longer id there folds to its letter when
  * the scheme lists it, moves to the whole verse when the scheme lists no
@@ -762,6 +772,7 @@ export function foldSchemeSegments(
   const out: MappingRow[] = [];
   const dropped: DroppedRow[] = [];
   const seen = new Set<string>();
+  const unaligned = new Set<string>();
   for (const row of rows) {
     const seg = row.from.segment;
     const verse = verseOf(row);
@@ -773,8 +784,15 @@ export function foldSchemeSegments(
     if (letters && parts.length > 0 && printed.has(row.scheme)) {
       const n = named.get(`${row.scheme} ${verse}`)!;
       if (printed.get(row.scheme)!.has(verse)) reason = "TVTMS's letters don't line up with the edition's text";
+      else if (parts.length === 1) next = parts[0];
       else if (n > parts.length) reason = `TVTMS names ${n} lettered parts, the scheme lists ${parts.length}`;
       else next = parts[ordinal(letters) - 1];
+      const k = `${row.scheme} ${verse}`;
+      if (reason && !unaligned.has(k)) {
+        unaligned.add(k);
+        const { book, chapter, verse: v } = row.from;
+        for (const p of parts) out.push({ scheme: row.scheme, from: ref(book, chapter, v, p), to: null, kind: UNALIGNED, source: 'tvtms' });
+      }
     } else if (!/^[a-z]?$/.test(seg)) {
       const letter = /^([a-z])\d+$/.exec(seg)?.[1];
       if (letter && listed.includes(letter)) next = letter;

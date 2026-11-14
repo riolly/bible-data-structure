@@ -240,7 +240,21 @@ export function readerContract(read: CorpusReader): BibleContract {
     return { address: formatAddress(a), steps };
   }
 
-  /** The edition's units for steps under its own scheme, one read per chapter. A bridge appears once. */
+  /**
+   * One verse under the edition's own scheme, as `lookup` reads it: the
+   * address without a letter is the unlettered unit (Brenton's 1KI 2:35, not
+   * 35a to 35o), and a verse printed only in parts gives every part.
+   */
+  async function ownVerse(e: EditionStamp, r: Ref): Promise<Lookup[]> {
+    const l = lookup(e, r, await load(e, [r]));
+    return l.kind === 'parts' ? [...l.parts] : [l];
+  }
+
+  /**
+   * The edition's units for steps under its own scheme, one read per chapter:
+   * every unit that holds each verse number, lettered parts included. A
+   * bridge appears once.
+   */
   async function ownSteps(e: EditionStamp, steps: readonly Step[]): Promise<Lookup[]> {
     const got = await load(e, steps.map((step) => step.r));
     const chapters = new Map<number, ReturnType<typeof unitsByVerse>>();
@@ -439,7 +453,10 @@ export function readerContract(read: CorpusReader): BibleContract {
       const parts = await Promise.all(
         parseReference(reference).map(async (range): Promise<PassagePart> => {
           const { address, steps } = walk(s, range);
-          return { address, found: await (scheme === e.scheme ? ownSteps(e, steps) : otherSteps(e, scheme, steps)) };
+          if (scheme !== e.scheme) return { address, found: await otherSteps(e, scheme, steps) };
+          // one verse reads as resolve reads its address; a range takes every unit in it (#69)
+          const one = range.start.verse !== null && range.start.chapter === range.end.chapter && range.start.verse === range.end.verse;
+          return { address, found: await (one ? ownVerse(e, steps[0].r) : ownSteps(e, steps)) };
         }),
       );
       return { edition: e, reference, parts };
@@ -495,12 +512,8 @@ export function readerContract(read: CorpusReader): BibleContract {
         const end = { chapter: a.end.chapter, verse: a.end.verse };
         const { steps } = walk(s, { book: r.book, start: { chapter: r.chapter, verse: r.verse }, end });
         found = await (a.scheme === e.scheme ? ownSteps(e, steps) : otherSteps(e, a.scheme, steps));
-      } else if (a.scheme === e.scheme && r.segment === '') {
-        // a whole verse, as passage reads it: Brenton's 1KI 2:35 is its unlettered part and 35a to 35o (#69)
-        found = await ownSteps(e, [{ r, exists: refExists(s, r) }]);
       } else if (a.scheme === e.scheme) {
-        const l = lookup(e, r, await load(e, [r]));
-        found = l.kind === 'parts' ? [...l.parts] : [l];
+        found = await ownVerse(e, r);
       } else {
         found = await otherSteps(e, a.scheme, [{ r, exists: refExists(s, r) }]);
       }
