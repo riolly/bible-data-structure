@@ -42,9 +42,9 @@ describe('adaptApiBibleChapter: API.Bible JSON to the step 7 chapter document', 
     expect(doc.content[0]).toEqual({ type: 'chapter', marker: 'c', number: '3', sid: 'JHN 3' });
     const { verses, tokens, stats } = normalizeChapters([doc]);
     expect(verses.map((v) => v.verse)).toEqual(Array.from({ length: 36 }, (_, i) => i + 1));
-    // API.Bible's KJV prints the pilcrow, which our ebible KJV doesn't: a different edition
+    // API.Bible's KJV prints the pilcrow, as ebible's does: the verse text leaves it out and the token stays (ADR-0001 amendment, 2026-11-14)
     expect(verses.find((v) => v.verse === 16)!.text).toBe(
-      '¶ For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him should not perish, but have everlasting life.',
+      'For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him should not perish, but have everlasting life.',
     );
     expect(tokens.filter((t) => t.verse === 16).slice(0, 2).map((t) => [t.kind, t.text, t.wordIndex])).toEqual([
       ['punct', '¶', null],

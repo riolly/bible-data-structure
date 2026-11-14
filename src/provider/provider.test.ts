@@ -108,7 +108,7 @@ describe.skipIf(!native || !existsSync(CORPUS))('the provider: local and license
   it('verseText: a held chapter is not fetched again, and two calls at once fetch it once', async () => {
     const { p, fetches } = make();
     const [a, b] = await Promise.all([p.verseText('KJVAB', 'JHN 3:16'), p.verseText('KJVAB', 'JHN 3:17')]);
-    expect(a.found).toMatchObject({ address: 'JHN 3:16/kjv', text: expect.stringMatching(/^¶ For God so loved the world/) });
+    expect(a.found).toMatchObject({ address: 'JHN 3:16/kjv', text: expect.stringMatching(/^For God so loved the world/) });
     expect(b.found).toMatchObject({ address: 'JHN 3:17/kjv' });
     await p.verseText('KJVAB', 'JHN 3:18');
     expect(fetches).toEqual(['KJVAB JHN 3']);

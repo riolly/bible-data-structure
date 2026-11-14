@@ -486,7 +486,8 @@ export function normalizeChapters(docs: readonly RawChapterDoc[], opts: Normaliz
   const kept: VerseText[] = [];
   const droppedVerses: { chapter: number; verse: number }[] = [];
   for (const row of verses) {
-    const v = { ...row, text: row.text.replace(/\s+/g, ' ').trim() };
+    // the pilcrow marks a paragraph's start in print and is no part of the verse's words: a quote leaves it out (ADR-0001 amendment, 2026-11-14)
+    const v = { ...row, text: row.text.replace(/¶/g, ' ').replace(/\s+/g, ' ').trim() };
     if (v.text !== '' || v.verse === 0 || opts.hasVerse === undefined) {
       kept.push(v);
       continue;
