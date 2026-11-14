@@ -56,7 +56,8 @@ export interface RightsRecord {
   /**
    * The most verses of the edition that may be kept at once. Null for no
    * limit. The provider counts the chapters it holds in memory as kept
-   * (src/provider/licensed-chapters.ts) until API.Bible answers whether they
+   * (src/provider/licensed-chapters.ts), and `chapterFetcher` the chapters
+   * it keeps on disk (src/provider/api-bible-cache.ts), until API.Bible answers whether they
    * are (research/licensing.md, open questions). An app that keeps chapters
    * on a device counts those the same way.
    */

@@ -101,7 +101,7 @@ The attribution in each licensed edition's rights record (`src/contract/rights.t
 
 Open questions:
 
-- Whether a whole licensed Bible may be stored on a device. The terms allow offline storage with a 30-day refresh, the Express FAQ says "Caching is allowed and recommended", and the developer FAQ asks for "fewer than 500 consecutive verses". Ask API.Bible in writing. Until it answers, the provider counts the chapters it holds in memory as stored, and keeps NASB under Lockman's 1,000 verses (`keepLimit` in `src/contract/rights.ts`).
+- Whether a whole licensed Bible may be stored on a device. The terms allow offline storage with a 30-day refresh, the Express FAQ says "Caching is allowed and recommended", and the developer FAQ asks for "fewer than 500 consecutive verses". Ask API.Bible in writing. Until it answers, the provider counts the chapters it holds in memory as stored, and so does the Node cache for the chapters it keeps on disk (`src/provider/api-bible-cache.ts`). Each keeps NASB under Lockman's 1,000 verses (`keepLimit` in `src/contract/rights.ts`).
 - Whether API.Bible delivers Strong's numbers for NASB. Lockman licenses a Strong's-keyed NASB to Bible software such as Blue Letter Bible.
 - What file format a direct Lockman or Digital Bible Library license delivers.
 

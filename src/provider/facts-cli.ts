@@ -3,7 +3,8 @@
  * time (at most 200 verses a call, about 200 calls for a Bible), write its
  * facts to `src/provider/facts/<edition>.json`, and print how its chapters
  * differ from the `kjv` and `eng` schemes. The passages are kept in
- * `build/api-bible/` for 30 days, so a rerun makes no call.
+ * `build/api-bible/` until the facts file is written, so a rerun after a
+ * failed run spends no call on the passages it already has.
  */
 
 import { mkdir, writeFile } from 'node:fs/promises';
@@ -15,7 +16,7 @@ import { loadSchemes } from '../ingest/schemes';
 import { TVTMS } from '../ingest/sources';
 import { readTvtms } from '../ingest/tvtms';
 import type { ApiBibleNode } from './api-bible';
-import { ApiBibleHttpError, apiBibleKey, cachedBooks, cachedPassage, type CacheOptions } from './api-bible-cache';
+import { ApiBibleHttpError, apiBibleKey, cachedBooks, cachedPassage, withPassages, type CacheOptions } from './api-bible-cache';
 import { FACTS_DIR, editionFacts, type BookContent } from './edition-facts';
 
 const PASSAGE_ID = /^([0-9A-Z]{3})\.(\d+)\.(\d+)-\1\.(\d+)\.(\d+)$/;
@@ -52,23 +53,27 @@ async function main(edition: string, key: string) {
   const entry = LICENSED_EDITIONS.get(edition);
   if (!entry) throw new Error(`no API.Bible edition "${edition}"`);
   const opts: CacheOptions = { key, dir: join('build', 'api-bible') };
-  const books = (await cachedBooks(edition, opts)).data;
-  const contents: BookContent[] = [];
-  let calls = 0;
-  let oldest = '9999';
-  for (const b of books) {
-    const chapters = b.chapters.filter((c) => /^\d+$/.test(c.number)).map((c) => Number(c.number));
-    const got = await bookContent(edition, b.id, Math.max(...chapters), opts);
-    calls += got.calls;
-    if (got.oldest < oldest) oldest = got.oldest;
-    contents.push({ book: b.id, content: got.content });
-    process.stdout.write(`${b.id} `);
-  }
-  console.log(`\n${calls} passage calls`);
-  const meta = { edition, bibleId: entry.bibleId, fetched: oldest.slice(0, 10), tvtms: TVTMS.sha256 };
-  const facts = editionFacts(meta, entry.isTitle, contents, readTvtms());
-  await mkdir(FACTS_DIR, { recursive: true });
-  await writeFile(join(FACTS_DIR, `${edition}.json`), JSON.stringify(facts, null, 1) + '\n');
+  // the passages are deleted once the facts file is written (api-bible-cache.ts)
+  const facts = await withPassages(edition, opts, async () => {
+    const books = (await cachedBooks(edition, opts)).data;
+    const contents: BookContent[] = [];
+    let calls = 0;
+    let oldest = '9999';
+    for (const b of books) {
+      const chapters = b.chapters.filter((c) => /^\d+$/.test(c.number)).map((c) => Number(c.number));
+      const got = await bookContent(edition, b.id, Math.max(...chapters), opts);
+      calls += got.calls;
+      if (got.oldest < oldest) oldest = got.oldest;
+      contents.push({ book: b.id, content: got.content });
+      process.stdout.write(`${b.id} `);
+    }
+    console.log(`\n${calls} passage calls`);
+    const meta = { edition, bibleId: entry.bibleId, fetched: oldest.slice(0, 10), tvtms: TVTMS.sha256 };
+    const facts = editionFacts(meta, entry.isTitle, contents, readTvtms());
+    await mkdir(FACTS_DIR, { recursive: true });
+    await writeFile(join(FACTS_DIR, `${edition}.json`), JSON.stringify(facts, null, 1) + '\n');
+    return facts;
+  });
 
   const schemes = loadSchemes();
   for (const id of ['kjv', 'eng']) {
