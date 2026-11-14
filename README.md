@@ -14,14 +14,14 @@ Started 2026-11-09 from the research in [bible-codex](https://github.com/riolly/
    4. The full `.vrs` parser (`src/ingest/vrs.ts`) and mapping rows to an extend-only `pivot` scheme (`src/ingest/pivot.ts`). Done.
    5. TVTMS compiled per scheme (`src/ingest/tvtms.ts`). `build/mapping-diff.tsv` lists where it and the `.vrs` files disagree. Done.
 
-   Left open by this step, recorded in ADR-0006's amendments: the pivot home of the additions to Esther is undecided. Some libpalaso mapping lines name ESG verses missing from the same file's counts; `src/ingest/pivot.test.ts` reports them.
+   The pivot has no home for the additions to Esther. ADR-0008's amendment closes that question until a target edition prints a deuterocanonical book. Some libpalaso mapping lines name ESG verses missing from the same file's counts, and `src/ingest/pivot.test.ts` reports them.
 3. **Test against texts that disagree.** Import KJV, BSB, a Bible with deuterocanonical books, OSHB Hebrew, a Greek New Testament and, if licensable, the Septuagint. Make the trouble-spot fixtures in research/README.md pass.
    1. Licensing verdicts per source in [research/licensing.md](research/licensing.md). Every text below is public domain except SBLGNT (CC BY 4.0). Done.
    2. Each source lists the books it must have, and may carry counted text fixes. WLC (OSHB's Hebrew, from upstream since ADR-0007) and SBLGNT ingest under `org`. ADR-0004 v1.2 records that Hebrew and Greek tokenize under the v1.1 rules unchanged. Done.
    3. Derived schemes (ADR-0002 amendment): `rp` for Robinson-Pierpont 2018, `web` for the World English Bible with deuterocanon, and `brenton` for Brenton's Greek Septuagint, and `bsb` for the BSB's order of Philippians 1:16-17 (ADR-0006 amendment, text tests). Done.
    4. Trouble-spot fixtures and `src/ingest/trouble-spots.test.ts`. Every spot but the Greek additions to Daniel and Esther passes. Done.
 
-   Left open by this step: 100 verses in chapters a derived scheme changes map nowhere, Brenton's 97 and WEB's 3. TVTMS's text tests run per edition and don't decide them (ADR-0006 amendment, text tests). There is no Catholic or Orthodox canon yet, so the deuterocanonical books have no canon order.
+   100 verses in chapters a derived scheme changes map nowhere, Brenton's 97 and WEB's 3. TVTMS's text tests run per edition and don't decide them (ADR-0006 amendment, text tests), and `src/ingest/tvtms.test.ts` pins the count. There is no Catholic or Orthodox canon, so the deuterocanonical books have no canon order. Both are out of scope, and ADR-0008's amendment names what reopens them.
 4. **Design app projections.** Replaced on 2026-11-10 by steps 5 to 15, after a review of the model against licensed translations. The scope they assume is in [ADR-0008](docs/adr/0008-scope-and-support-levels.md).
 5. **Record the scope and the support levels.** The scope and the Full and Reading levels are in [ADR-0008](docs/adr/0008-scope-and-support-levels.md). CONTEXT.md has the terms Full edition, Reading edition, rights record and provider, and CLAUDE.md the new product principle. Done.
 6. **Make a clean checkout build.** Each text source is pinned by its edition stamp, not its zip hash, and the download falls back to our copy in the `sources` release on this repo (ADR-0005, step 6 amendment). A clean checkout ran `ingest:download` and `ingest` to the end. Done.
@@ -42,14 +42,13 @@ Started 2026-11-09 from the research in [bible-codex](https://github.com/riolly/
 
     So the KJV adds about 27 MB to the hub, 18 MB of it the `word_alignment` rows, and the BSB about 49 MB, 40 MB of it those rows. The hub's 52.9 MB is `original_word`. Making `verse_text`, `original_word` and `word_alignment` WITHOUT ROWID took the BSB pack from 145.1 MB to 117.6 MB, and leaving out the schemes outside ADR-0008 (LXX, Vulgate, Brenton, RSO, RSC, WEB, RP) saved 3.1 MB more. A chapter read makes three queries (four for chapter 1), each a drizzle prepared statement built once per DB (`prepared` in `src/db/corpus-read.ts`). When drizzle built the SQL on every call, the same reads took 3.2 to 3.6 ms at the median. Building the contract over the KJV+BSB pack takes about 77 ms and the first `map` about 47 ms, down from 165 ms and 128 ms when drizzle mapped every scheme and mapping row to an object. Done.
 14. **Anchor user marks to a verse.** The rules are in ADR-0005's step 14 amendment (2026-11-13), and apps build the storage. No edition is Full yet, so no app can make a word mark. Done.
-15. **Decide what stays in the build.** The Brenton, WEB and Robinson-Pierpont tests stay while they pass. When a step above breaks one, delete it instead of fixing it.
+15. **Decide what stays in the build.** The Brenton, WEB and Robinson-Pierpont tests stay while they pass. When a step above breaks a test that only one of them needs, delete it instead of fixing it. A wrong answer from shared code is fixed (ADR-0008 amendment). Done.
 
 Steps only a person can do:
 
 - Upload the zip of every new edition to our copy of the pinned sources (step 6) with `gh release upload sources`. The download keeps each zip in `src/ingest/sources/mirror/`. The `sources` release holds the seven current editions.
-- Ask API.Bible in writing whether converting its JSON content to our own chapter document for display counts as a change under section 4.1 of its terms. Until it answers, converted licensed chapters stay on this machine (step 10).
-- Ask API.Bible in writing whether NASB and NLT may be stored whole on a device, and whether our server may cache chapters for our app.
-- Ask the Lockman Foundation for terms on NASB files with Strong's numbers. That license moves NASB from Reading to Full.
+- Send the letter to API.Bible in [research/licensing-questions.md](research/licensing-questions.md). It asks whether converting its JSON content to our own chapter document counts as a change under section 4.1 of its terms, whether NASB and NLT may be stored whole on a device, and whether our server may cache chapters. Until it answers, converted licensed chapters stay on this machine (step 10).
+- Send the letter to the Lockman Foundation in the same file. It asks for terms on NASB files with Strong's numbers. That license moves NASB from Reading to Full.
 
 ## Use from an app
 
@@ -69,7 +68,7 @@ const chapter = await bible.chapter('KJV', 'JHN', 3);
 const hebrew = await bible.map('KJV', 'PSA 51:1', 'WLC');
 ```
 
-For licensed editions, wrap the pack in a provider with the app's own fetch: `provider({ local: packReader(db), fetchChapter })`. On a Node server, `chapterFetcher` from `bible-data-structure/node` is that fetch, through the kept responses. A call that can't answer rejects with a `ContractError`, and its `code` says whether the address was bad, the edition unknown or a fetch failed (`src/contract/contract.ts`).
+For licensed editions, wrap the pack in a provider with the app's own fetch: `provider({ local: packReader(db), fetchChapter })`. On a Node server, `chapterFetcher` from `bible-data-structure/node` is that fetch, through the kept responses, which it bounds by the rights record's refresh days and keep limit (`src/provider/api-bible-cache.ts`). A call that can't answer rejects with a `ContractError`, and its `code` says whether the address was bad, the edition unknown or a fetch failed (`src/contract/contract.ts`).
 
 What the app's `tsconfig.json` needs, checked from a scratch app on 2026-11-14:
 

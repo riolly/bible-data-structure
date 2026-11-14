@@ -99,13 +99,19 @@ API.Bible plans ([Express Licensing FAQs][ab-express], updated 2026-10-01, and t
 
 The attribution in each licensed edition's rights record (`src/contract/rights.ts`) is the `copyright` field API.Bible returned with NASB 1995 John 3, NLT Numbers 1 and NIV John 3 on 2026-11-13, word for word. API.Bible sends it with every chapter, so an app can also show the field it received.
 
-Open questions:
+Answered on 2026-11-14:
 
-- Whether a whole licensed Bible may be stored on a device. The terms allow offline storage with a 30-day refresh, the Express FAQ says "Caching is allowed and recommended", and the developer FAQ asks for "fewer than 500 consecutive verses". Ask API.Bible in writing. Until it answers, the provider counts the chapters it holds in memory as stored, and keeps NASB under Lockman's 1,000 verses (`keepLimit` in `src/contract/rights.ts`).
-- Whether API.Bible delivers Strong's numbers for NASB. Lockman licenses a Strong's-keyed NASB to Bible software such as Blue Letter Bible.
-- What file format a direct Lockman or Digital Bible Library license delivers.
+- API.Bible does not deliver Strong's numbers for NASB. Its chapter endpoint takes `content-type` and five `include-` parameters ([chapters guide][ab-chapters]), and none asks for word data. The NASB 1995 John 3 and Psalm 119 responses fetched on 2026-11-13 hold `chapter`, `para`, `verse`, `char` and `note` nodes with the attributes `number`, `style`, `sid`, `verseId`, `verseOrgIds`, `caller`, `id` and `vid`. None is a Strong's number or a lemma. A Full NASB (ADR-0008) therefore needs files from Lockman.
+- A Digital Bible Library license delivers a text release bundle: a zip with one USX file per book, `metadata.xml`, `styles.xml`, `versification.vrs` and `license.xml` ([DBL entry reference][dbl-bundle]). USX is the XML form of USFM, which the ingest's parser reads (ADR-0001), and the `.vrs` file is the edition's own scheme.
+
+Waiting on a written answer. The letters are in [licensing-questions.md](licensing-questions.md):
+
+- Whether a whole licensed Bible may be stored on a device. The terms allow offline storage with a 30-day refresh, the Express FAQ says "Caching is allowed and recommended", and the developer FAQ asks for "fewer than 500 consecutive verses". Ask API.Bible in writing. Until it answers, the provider counts the chapters it holds in memory as stored, and so does the Node cache for the chapters it keeps on disk (`src/provider/api-bible-cache.ts`). Each keeps NASB under Lockman's 1,000 verses (`keepLimit` in `src/contract/rights.ts`).
+- What file format a direct Lockman license delivers, and whether its words carry Strong's numbers. Lockman licenses a Strong's-keyed NASB to Bible software such as Blue Letter Bible.
 
 [lockman]: https://www.lockman.org/permission-to-quote-copyright-trademark-information/
+[ab-chapters]: https://docs.api.bible/guides/chapters
+[dbl-bundle]: https://app.thedigitalbiblelibrary.org/static/docs/entryref/text/index.html
 [esv]: https://api.esv.org/
 [ab-terms]: https://api.bible/terms-and-conditions
 [ab-express]: https://care.api.bible/article/405-express-licensing-faqs

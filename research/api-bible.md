@@ -52,7 +52,7 @@ Every marker in the samples is on our supported list (ADR-0001, step 7 amendment
 
 ## Whole editions, for their schemes
 
-`GET /v1/bibles/{bibleId}/passages/{start}-{end}` returns at most 200 verses from `start` and names the range it returned in `data.id` (`PSA.1.1-PSA.18.21`). A start past a chapter's end begins at the next chapter, and an end past the book's end is fine, so `bun run api-bible:facts NASB95` walks each book from `BOOK.1.1` to `BOOK.<last>.999`. A Bible takes 196 calls. The passages stay in `build/api-bible/` and the counts go to `src/provider/facts/<edition>.json` (ADR-0006, licensed editions amendment).
+`GET /v1/bibles/{bibleId}/passages/{start}-{end}` returns at most 200 verses from `start` and names the range it returned in `data.id` (`PSA.1.1-PSA.18.21`). A start past a chapter's end begins at the next chapter, and an end past the book's end is fine, so `bun run api-bible:facts NASB95` walks each book from `BOOK.1.1` to `BOOK.<last>.999`. A Bible takes 196 calls. The passages stay in `build/api-bible/` until the run has written the facts file (`src/provider/api-bible-cache.ts`), and the counts go to `src/provider/facts/<edition>.json` (ADR-0006, licensed editions amendment).
 
 Collected 2026-11-12:
 

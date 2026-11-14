@@ -205,9 +205,9 @@ Adopted in ADR-0002 (Canon shape): the canon tables, order and status on the ent
 - Books with no USFM code (Ethiopian broader NT, Josippon, 3 Corinthians) get a code only when an edition needs one. Prefer a code already used in Paratext practice (`3CO`, `1CL` from the CrossWire table) over inventing one, and record the source.
 - Seed English names from the USFM spec (CC BY 4.0) and other languages from public-domain editions' `\toc1`, `\toc2`, `\toc3`. Keep each edition's own `\toc` values as edition data, separate from `book_name`.
 
-### What to decide next
+### Left for a wider scope
 
-Decided in ADR-0002: only the `protestant` canon is filled in, the code override is per-source config, and `book` keeps no display column. Still open:
+Decided in ADR-0002: only the `protestant` canon is filled in, the code override is per-source config, and `book` keeps no display column. The three questions below only matter for a Catholic or Orthodox canon or a deuterocanonical book. Both are out of scope (ADR-0008), and that ADR's amendment of 2026-11-14 names the event that reopens each one:
 
 1. **Status values.** Is `canonical | readable | appendix` enough, or does the Ethiopian narrower and broader split need a fourth value instead of two canons?
 2. **With the versification research:** schemes for the three Esther layouts (Vulgate chapters 11-16, Nova Vulgata lettered verses, WEB Catholic merged verses), Daniel 13-14 versus `SUS`/`BEL`, Baruch 6 versus `LJE`, and Psalm 151 inside `PSA` versus `PS2`.

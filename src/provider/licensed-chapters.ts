@@ -27,7 +27,8 @@ import { readLicensedChapter, type ApiBibleChapter, type ReadChapter } from './a
 /**
  * One chapter as fetched, with when it was fetched, or null when the edition
  * doesn't print it. `licensed` is the edition's record: a fetch that keeps
- * copies keeps them for its rights record's `refreshDays`, as the provider does.
+ * copies keeps them for its rights record's `refreshDays` and under its
+ * `keepLimit`, as the provider does, counting verses with `keptVerses` over `scheme`, the edition's scheme.
  * A fetch that hasn't settled after `fetchTimeoutMs` fails the reads that wait for it.
  */
 export type FetchChapter = (
@@ -35,7 +36,11 @@ export type FetchChapter = (
   book: string,
   chapter: number,
   licensed: LicensedEdition,
+  scheme: Scheme,
 ) => Promise<{ readonly data: ApiBibleChapter; readonly fetchedAt: string } | null>;
+
+/** What a keep limit counts for a printed chapter: the verses the edition's scheme gives it. */
+export const keptVerses = (scheme: Scheme, book: string, chapter: number): number => lastVerse(scheme, book, chapter) ?? 0;
 
 export interface LicensedChaptersOptions {
   readonly editions: ReadonlyMap<string, LicensedEdition>;
@@ -106,7 +111,7 @@ export function licensedChapters(opts: LicensedChaptersOptions): LicensedChapter
     if (waiting) return waiting;
     let timedOut = false;
     const work = (async () => {
-      const got = await opts.fetchChapter(id, book, chapter, e);
+      const got = await opts.fetchChapter(id, book, chapter, e, opts.schemeOf(id));
       const read = got ? await readLicensedChapter(id, e, opts.schemeOf(id), book, chapter, got.data) : null;
       // a copy stamped after now (the fetch's clock is ahead of ours) counts as fetched now
       const fetchedAt = got ? Math.min(Date.parse(got.fetchedAt), opts.now()) : opts.now();
@@ -116,7 +121,7 @@ export function licensedChapters(opts: LicensedChaptersOptions): LicensedChapter
         throw new Error(`${key} is still missing after its fetch: the fetch gave a copy from ${got.fetchedAt}, older than ${e.rights.refreshDays} days`);
       }
       // a refresh replaces the held chapter here: a changed stamp (held.get(key)?.read?.stamp) would be reported here
-      hold(key, e, { read, fetchedAt, edition: id, verses: read ? lastVerse(opts.schemeOf(id), book, chapter)! : 0 });
+      hold(key, e, { read, fetchedAt, edition: id, verses: read ? keptVerses(opts.schemeOf(id), book, chapter) : 0 });
       return read;
     })();
     // a fetch that never settles must not block the chapter: after the timeout the next read fetches again
