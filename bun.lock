@@ -5,17 +5,17 @@
     "": {
       "name": "bible-data-structure",
       "dependencies": {
-        "better-sqlite3": "12.11.1",
         "bible-passage-reference-parser": "4.0.0",
         "drizzle-orm": "1.0.0-rc.4-5d5b77c",
         "fflate": "0.8.2",
-        "usfm-grammar": "3.2.0",
       },
       "devDependencies": {
         "@types/better-sqlite3": "^7.6.13",
         "@types/node": "^24.0.0",
+        "better-sqlite3": "12.11.1",
         "tsx": "^4.23.0",
         "typescript": "~6.0.3",
+        "usfm-grammar": "3.2.0",
         "vitest": "^4.1.9",
       },
     },
