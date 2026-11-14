@@ -289,8 +289,12 @@ describe.skipIf(!native || !existsSync(CORPUS))('the app contract on the corpus 
       'GEN 1:1!7/org H776 the earth',
     ]);
     // OSHB's own word ids, lemma and morphology
-    expect(w.words[0]).toMatchObject({ kind: 'word', text: 'בְּרֵאשִׁ֖ית'.normalize('NFC'), original: { owId: '01xeN', lemma: 'b/7225', morph: 'HR/Ncfsa' } });
+    expect(w.words[0]).toMatchObject({ kind: 'word', text: 'בְּרֵאשִׁ֖ית', original: { owId: '01xeN', lemma: 'b/7225', morph: 'HR/Ncfsa' } });
     noRowIds(w);
+    // Hebrew as OSHB wrote it, not NFC (ADR-0004 v1.6): a patah, then a hiriq, on the lamed of Jerusalem
+    const jerusalem = '\u05D9\u05B0\u05E8\u05D5\u05BC\u05E9\u05C1\u05B8\u05DC\u05B7\u05B4\u0597\u05DD';
+    expect((await c.words('WLC', 'JOS 10:1!6')).words.map((x) => [x.text, x.original?.owId])).toEqual([[jerusalem, '06YgF']]);
+    expect((await c.verseText('WLC', 'JOS 10:1')).found).toMatchObject({ text: expect.stringContaining(jerusalem) });
   });
 
   it('words: the Greek words of an English verse, from MACULA Greek', async () => {
@@ -318,7 +322,7 @@ describe.skipIf(!native || !existsSync(CORPUS))('the app contract on the corpus 
     const gen = await c.words('WLC', 'GEN 8:17');
     const at = gen.words.findIndex((x) => x.kind === 'ketiv');
     expect(gen.words[at]).toMatchObject({ address: 'GEN 8:17!14/org', text: 'הוצא', strongs: ['H3318'], original: { gloss: null } });
-    expect(gen.words[at + 1]).toMatchObject({ kind: 'qere', address: null, text: 'הַיְצֵ֣א'.normalize('NFC'), strongs: ['H3318'], original: { gloss: 'bring out' } });
+    expect(gen.words[at + 1]).toMatchObject({ kind: 'qere', address: null, text: 'הַיְצֵ֣א', strongs: ['H3318'], original: { gloss: 'bring out' } });
     const rut = await c.words('WLC', 'RUT 3:5');
     expect(rut.words.map((x) => `${x.kind} ${x.address ?? '-'}`)).toEqual([
       ...[1, 2, 3, 4, 5].map((n) => `word RUT 3:5!${n}/org`),

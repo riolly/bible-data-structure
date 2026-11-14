@@ -23,6 +23,7 @@
 
 import type { Reading, Token } from '../model/corpus';
 import { OSIS_BOOKS } from '../model/osis';
+import { storedText } from './text-form';
 import { tokenize } from './tokenize';
 
 /** Upstream file name (without `.xml`, an OSIS name) → USFM book code: the 39 books up to Malachi. */
@@ -38,7 +39,7 @@ export interface OshbWord {
   readonly lemma: string;
   /** OSHB's morphology code, `/` between morphemes (`HC/Vqw3ms`). */
   readonly morph: string;
-  /** The word as tokenized: NFC, without morpheme breaks. */
+  /** The word as tokenized: as OSHB wrote it (ADR-0004 v1.6), without morpheme breaks. */
   readonly text: string;
 }
 
@@ -93,7 +94,7 @@ const wordText = (inner: string, where: string) => {
 };
 
 const words = (text: string) =>
-  tokenize(text.normalize('NFC'), { paragraphMarks: true })
+  tokenize(storedText(text), { paragraphMarks: true })
     .filter((t) => t.kind === 'word')
     .map((t) => t.text);
 
@@ -112,9 +113,9 @@ const ONE_WORD = /^\p{L}[\p{L}\p{M}]*$/u;
 function oshbWord(attrs: string, text: string, where: string): OshbWord {
   const [id, lemma, morph] = [attr(attrs, 'id'), attr(attrs, 'lemma'), attr(attrs, 'morph')];
   if (!id || !lemma || !morph) throw new Error(`${where}: a word without an id, lemma or morph: ${text}`);
-  const nfc = text.normalize('NFC');
-  if (!ONE_WORD.test(nfc)) throw new Error(`${where}: word ${id} "${text}" is not one word token`);
-  return { id, lemma, morph, text: nfc };
+  const stored = storedText(text);
+  if (!ONE_WORD.test(stored)) throw new Error(`${where}: word ${id} "${text}" is not one word token`);
+  return { id, lemma, morph, text: stored };
 }
 
 /**
@@ -125,7 +126,7 @@ function oshbWord(attrs: string, text: string, where: string): OshbWord {
  */
 function placeWritten(groups: readonly OshbWord[][], verseWords: readonly string[] | null, where: string): OshbWrittenWord[] {
   if (verseWords) {
-    const joined = groups.map((g) => (g.length === 1 ? g[0].text : g.map((w) => w.text).join('').normalize('NFC')));
+    const joined = groups.map((g) => (g.length === 1 ? g[0].text : storedText(g.map((w) => w.text).join(''))));
     if (joined.length !== verseWords.length || joined.some((w, i) => w !== verseWords[i])) {
       throw new Error(`${where}: the verse's words are not its <w> elements`);
     }
@@ -300,5 +301,5 @@ function qere(note: string, where: string): { text: string; owIds: readonly stri
     } else if (SEG_TEXT[segType] !== undefined && seg === SEG_TEXT[segType]) text += seg;
     else throw new Error(`${where}: unknown <seg type="${segType}"> in a qere`);
   }
-  return { text: text.replace(/\s+/g, ' ').trim().normalize('NFC'), owIds, qere: qereWords };
+  return { text: storedText(text.replace(/\s+/g, ' ').trim()), owIds, qere: qereWords };
 }

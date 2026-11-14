@@ -19,6 +19,7 @@ import { readFileSync } from 'node:fs';
 
 import type { OriginalWord, Token } from '../model/corpus';
 import type { OshbReading, OshbVerse, OshbWord } from './oshb-xml';
+import { storedText } from './text-form';
 
 /** A word MACULA's text has where ours differs, accepted as the same word. Each must occur once. */
 export interface MaculaException {
@@ -41,7 +42,7 @@ export const GREEK_EXCEPTIONS: readonly MaculaException[] = [
 /** One MACULA word: its morphemes' columns, in order (Greek words have one). */
 export interface MaculaWord {
   readonly id: string;
-  /** The morphemes' text joined, NFC. */
+  /** The morphemes' text joined, in stored form (`storedText`). */
   readonly text: string;
   readonly rows: readonly Readonly<Record<string, string>>[];
 }
@@ -77,13 +78,13 @@ export function readMacula(path: string): Map<string, MaculaWord[]> {
     const ref = cells[refAt];
     if (last && last.ref === ref) {
       last.word.rows.push(row);
-      (last.word as { text: string }).text = (last.word.text + row.text).normalize('NFC');
+      (last.word as { text: string }).text = storedText(last.word.text + row.text);
       continue;
     }
     const bang = ref.indexOf('!');
     if (bang < 0) throw new Error(`${path}:${i + 1}: ref "${ref}" has no word number`);
     const verse = ref.slice(0, bang);
-    const word = { id: cells[idAt], text: row.text.normalize('NFC'), rows: [row] };
+    const word = { id: cells[idAt], text: storedText(row.text), rows: [row] };
     const list = verses.get(verse) ?? verses.set(verse, []).get(verse)!;
     // Word numbers rise, with gaps: MACULA Hebrew skips the number of a ketiv it doesn't read (GEN 8:17!14).
     const n = Number(ref.slice(bang + 1));

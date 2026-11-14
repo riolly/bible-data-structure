@@ -302,7 +302,7 @@ export const reading = sqliteTable(
     wordIndex: integer('word_index').notNull(),
     wordCount: integer('word_count').notNull(),
     kind: text('kind', { enum: ['qere'] }).notNull(),
-    /** The reading's own text, pointed, NFC. */
+    /** The reading's own text, pointed, as the source wrote it (ADR-0004 v1.6). */
     text: text('text').notNull(),
     /** The source's ids of the reading's words, space-separated, in order: what an alignment points at (ADR-0003). */
     owIds: text('ow_ids').notNull(),

@@ -131,3 +131,23 @@ describe('only the supported markers (ADR-0001 amendment)', () => {
     expect(() => normalizeChapters([{ chapter: 2, content: [{ type: 'chapter', marker: 'c', number: '1' }] }])).toThrow(/chapter/);
   });
 });
+
+describe('normalizeChapters: Hebrew as the source wrote it, other scripts NFC (ADR-0004 v1.6)', () => {
+  const chapter = (text: string): RawChapterDoc[] => [
+    { chapter: 1, content: [{ type: 'chapter', marker: 'c', number: '1' }, { type: 'para', marker: 'p', content: [{ type: 'verse', marker: 'v', number: '1' }, text] }] },
+  ];
+  // JOS 10:1 word 6 in the pinned OSHB: a patah, then a hiriq, on the lamed
+  const jerusalem = 'יְרוּשָׁלִַ֗ם';
+
+  it('keeps the Hebrew point order in the word and the verse text', () => {
+    const { tokens: t, verses: v } = normalizeChapters(chapter(`${jerusalem} ׃`));
+    expect(t.map((x) => x.text)).toEqual([jerusalem, '׃']);
+    expect(v[0].text).toBe(`${jerusalem} ׃`);
+  });
+
+  it('still composes Greek', () => {
+    const { tokens: t, verses: v } = normalizeChapters(chapter('ἐν ἀρχῇ'.normalize('NFD')));
+    expect(t.map((x) => x.text)).toEqual(['ἐν', 'ἀρχῇ'].map((s) => s.normalize('NFC')));
+    expect(v[0].text).toBe('ἐν ἀρχῇ'.normalize('NFC'));
+  });
+});
