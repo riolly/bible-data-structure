@@ -78,7 +78,7 @@ The parser's book names and abbreviations are its own data, under the same MIT l
 
 Status: researched 2026-11-10 from publisher pages. These texts are fetched under a license and never committed. The API.Bible clauses were read twice. The rest was read once and needs a second check before a decision rests on it.
 
-| Translation | Route for a free app from a registered organization | Limit that shapes the design |
+| Translation | Route for a free app | Limit that shapes the design |
 |---|---|---|
 | NASB 1995, NASB 2020, AMP | API.Bible standard license. YouVersion Platform lists them (listing not rechecked). A direct Lockman license for files | Without a license, at most 1,000 verses, quoted or stored in an electronic retrieval system, as long as they aren't a whole book and are at most 50% of the work they appear in ([Lockman][lockman], checked 2026-11-10) |
 | NLT, The Message | API.Bible. Tyndale's permissions page sends app makers there (read from a Tyndale-hosted mirror) | Exact text, punctuation and capitalization included |
@@ -94,6 +94,11 @@ API.Bible [terms][ab-terms], updated 2026-09-03:
 - Section 10.2: content removed within 72 hours of termination.
 - Section 9.2: no AI training without written consent from API.Bible and the publisher.
 - Section 3.3: web apps report usage through FUMS.
+- Section 2, definition 6: "User" or "You" means "any individual or entity", and section 17.1 lists "individual" among the designations a developer gives. The owner is an individual, not a registered organization, so the API.Bible routes above hold (read 2026-11-14).
+- Section 9.6: "Each individual or legal entity is strictly limited to a single free-tier account or application." Starter therefore covers one app.
+- Section 9.3 and the Non-Commercial Agreement: a non-commercial app has "no ads, revenue, paid-subscriptions, or in-app purchases".
+
+Whether Lockman or Crossway license files to an individual is not known. The Lockman letter in [licensing-questions.md](licensing-questions.md) asks.
 
 API.Bible plans ([Express Licensing FAQs][ab-express], updated 2026-10-01, and the [developer FAQ][ab-faq]): Starter is free, non-commercial, three copyrighted Bibles and 5,000 calls a month. Pro for a non-commercial app is $29 a month, all eligible copyrighted Bibles and 150,000 calls a month.
 
