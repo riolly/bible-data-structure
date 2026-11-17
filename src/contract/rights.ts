@@ -53,15 +53,6 @@ export interface RightsRecord {
   readonly refreshDays: number | null;
   /** The most verses an app may let a reader copy, share or print at once. Null for no limit. */
   readonly copyLimit: number | null;
-  /**
-   * The most verses of the edition that may be kept at once. Null for no
-   * limit, which API.Bible's editions have (research/licensing.md, answered
-   * on 2026-11-17). The provider counts the chapters it holds in memory as
-   * kept (src/provider/licensed-chapters.ts), and `chapterFetcher` the
-   * chapters it keeps on disk (src/provider/api-bible-cache.ts). An app that
-   * keeps chapters on a device counts those the same way.
-   */
-  readonly keepLimit: number | null;
   readonly aiUse: AiUse;
   /** The credit an app must show with the text. Null when none is required. */
   readonly attribution: string | null;
@@ -77,7 +68,6 @@ const publicDomain = (edition: string, licenseUrl: string, conditions: string[] 
   offline: 'full',
   refreshDays: null,
   copyLimit: null,
-  keepLimit: null,
   aiUse: 'allowed',
   attribution: null,
   conditions,
@@ -125,14 +115,12 @@ const apiBible = (
     refreshDays: 30,
     // section 12: no printing of more than 100 verses
     copyLimit: 100,
-    // API.Bible, 2026-11-17: a whole Bible may be kept (research/licensing.md)
-    keepLimit: null,
     aiUse,
     attribution,
     conditions: [
       ...conditions,
       'Show the text unchanged in structure and content (API.Bible terms, section 4.1): wording, punctuation, capitalization, verse and paragraph structure, footnotes, headings and attribution. Layout and font may change.',
-      'Keep chapters in a protected local store, never in the app binary (section 12). Update or remove a kept chapter when it changes at API.Bible, remove kept chapters within 24 hours when API.Bible asks, and within 72 hours if the API.Bible license ends (section 10.2).',
+      'A whole Bible may be kept, with no cap (API.Bible, 2026-11-17, research/licensing.md). Keep chapters in a protected local store, never in the app binary (section 12). Update or remove a kept chapter when it changes at API.Bible, remove kept chapters within 24 hours when API.Bible asks, and within 72 hours if the API.Bible license ends (section 10.2).',
       'A server cache serves our own app only, never a public feed or a third party. The API key stays on the server.',
       'An app with any web part reports FUMS for each display, with the token from the fetch that delivered the chapter (section 3.3). A native app with no web view is exempt.',
     ],

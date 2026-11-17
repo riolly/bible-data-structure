@@ -6,13 +6,9 @@
  * and fetched again. With 0 refresh days no response is kept. Starter allows
  * 5,000 calls a month, so every read goes through here.
  *
- * Kept chapters obey the rights record as the provider's in-memory holder
- * does (licensed-chapters.ts). Writing a chapter deletes the edition's other
- * kept chapters past their refresh days, then the ones fetched longest ago
- * until the edition's kept verses are within its `keepLimit`. The chapter
- * just written stays even when it alone is over the limit. The passages that
- * `api-bible:facts` fetches are deleted once its run has written the facts
- * file (`withPassages`). `books.json` holds no verse text and has no bound.
+ * Writing a chapter deletes the edition's other kept chapters past their
+ * refresh days. The passages that `api-bible:facts` fetches are deleted once
+ * its run has written the facts file (`withPassages`). `books.json` holds no verse text and has no bound.
  *
  * Deletion touches only `<BOOK>.<chapter>.json` and `passages/*.json` in the
  * edition's own directory, and a file already gone is not an error, so two
@@ -27,9 +23,8 @@ import { mkdir, readdir, readFile, rename, rm, unlink, writeFile } from 'node:fs
 import { dirname, join } from 'node:path';
 
 import { LICENSED_EDITIONS, type RightsRecord } from '../contract/rights';
-import type { Scheme } from '../model/scheme';
 import { CHAPTER_QUERY, type ApiBibleChapter } from './api-bible';
-import { keptVerses, type FetchChapter } from './licensed-chapters';
+import type { FetchChapter } from './licensed-chapters';
 
 const API_BASE = 'https://rest.api.bible/v1';
 
@@ -125,45 +120,22 @@ async function cachedGet<T>(
 }
 
 /** A kept chapter's file name: `JHN.3.json`. Temp files and `books.json` don't match. */
-const CHAPTER_FILE = /^([0-9A-Z]{3})\.(\d+)\.json$/;
+const CHAPTER_FILE = /^[0-9A-Z]{3}\.\d+\.json$/;
 
 /**
- * Bound an edition's kept chapters after `written` was kept at `now`: delete
- * the others past their refresh days (or unreadable, or stamped after now),
- * then the ones fetched longest ago until the edition's kept verses, counted
- * with `keptVerses`, are within `rights.keepLimit`. `written` stays.
+ * After `written` was kept at `now`, delete the edition's other kept chapters
+ * past their refresh days, unreadable, or stamped after now.
  */
-async function boundChapters(bibleDir: string, written: string, scheme: Scheme, rights: RightsRecord, now: Date): Promise<void> {
+async function dropStaleChapters(bibleDir: string, written: string, rights: RightsRecord, now: Date): Promise<void> {
   const names = await readdir(bibleDir).catch((e: NodeJS.ErrnoException) => {
     if (e.code === 'ENOENT') return [];
     throw e;
   });
-  const others: { file: string; fetchedAt: string; verses: number }[] = [];
-  let total = 0;
   for (const name of names) {
-    const m = CHAPTER_FILE.exec(name);
-    if (!m) continue;
+    if (name === written || !CHAPTER_FILE.test(name)) continue;
     const file = join(bibleDir, name);
-    const verses = keptVerses(scheme, m[1], Number(m[2]));
-    if (name === written) {
-      total += verses;
-      continue;
-    }
     const k = await readKept(file);
-    if (!k || !fresh(k.fetchedAt, now, rights)) {
-      await remove(file);
-      continue;
-    }
-    others.push({ file, fetchedAt: k.fetchedAt, verses });
-    total += verses;
-  }
-  const limit = rights.keepLimit;
-  if (limit === null) return;
-  others.sort((a, b) => Date.parse(a.fetchedAt) - Date.parse(b.fetchedAt));
-  for (const o of others) {
-    if (total <= limit) break;
-    await remove(o.file);
-    total -= o.verses;
+    if (!k || !fresh(k.fetchedAt, now, rights)) await remove(file);
   }
 }
 
@@ -187,22 +159,18 @@ export interface Cached<T> {
 
 export type CachedChapter = Cached<ApiBibleChapter>;
 
-/**
- * One chapter of a licensed edition, from the kept response or a fresh fetch.
- * `scheme` is the edition's scheme, which counts the verses of its kept chapters.
- */
+/** One chapter of a licensed edition, from the kept response or a fresh fetch. */
 export async function cachedChapter(
   edition: string,
   book: string,
   chapter: number,
-  scheme: Scheme,
   opts: CacheOptions,
   rights: RightsRecord = apiBibleEdition(edition).rights,
 ): Promise<CachedChapter> {
   const file = `${book}.${chapter}.json`;
   const bibleDir = join(opts.dir, apiBibleEdition(edition).bibleId);
   return cachedGet(edition, `/chapters/${book}.${chapter}?${CHAPTER_QUERY}`, file, opts, rights, true, (now) =>
-    boundChapters(bibleDir, file, scheme, rights, now),
+    dropStaleChapters(bibleDir, file, rights, now),
   );
 }
 
@@ -213,9 +181,9 @@ export async function cachedChapter(
  */
 export const chapterFetcher =
   (opts: CacheOptions): FetchChapter =>
-  async (edition, book, chapter, licensed, scheme) => {
+  async (edition, book, chapter, licensed) => {
     try {
-      const { data, fetchedAt } = await cachedChapter(edition, book, chapter, scheme, opts, licensed.rights);
+      const { data, fetchedAt } = await cachedChapter(edition, book, chapter, opts, licensed.rights);
       return { data, fetchedAt };
     } catch (e) {
       if (e instanceof ApiBibleHttpError && e.status === 404) return null;

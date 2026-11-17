@@ -23,7 +23,7 @@ const key = apiBibleKey();
 
 async function main(key: string) {
   const scheme = loadSchemes().get(licensed!.scheme)!;
-  const got = await cachedChapter(edition, book, Number(chapter), scheme, { key, dir: join('build', 'api-bible') });
+  const got = await cachedChapter(edition, book, Number(chapter), { key, dir: join('build', 'api-bible') });
   const read = await readLicensedChapter(edition, licensed!, scheme, book, Number(chapter), got.data);
   const units = read.verses;
   console.log(`${edition} ${book} ${chapter}: ${got.fetched ? 'fetched' : 'kept'} ${got.fetchedAt}`);

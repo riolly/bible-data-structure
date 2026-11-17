@@ -117,7 +117,7 @@ Answered on 2026-11-17 by API.Bible support, in writing (the reply is quoted in 
 - A web app, or a native app with a web view, reports FUMS for each display, with the token from the fetch that delivered the chapter. A native app with no web view is exempt.
 - Moving to an organization keeps the app, its key and its Express license if the existing account's registration changes from individual to the organization. A new account under the organization goes through Express Licensing again.
 
-So no rights record has a keep limit any more. NASB's was Lockman's 1,000 stored verses, which this answer replaces for chapters received through API.Bible. The Lockman letter asks Lockman to confirm it.
+So the rights record lost its keep limit (added in #62 and #80 for Lockman's 1,000 stored verses), and the provider and the Node cache keep every chapter they fetch until its refresh days pass. An edition that caps storage, such as the ESV's 500 verses, brings the limit back. The Lockman letter asks Lockman to confirm that its cap doesn't apply to chapters received through API.Bible.
 
 Waiting on a written answer. The letter is in [licensing-questions.md](licensing-questions.md):
 
