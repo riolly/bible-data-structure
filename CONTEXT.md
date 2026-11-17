@@ -42,7 +42,7 @@ sha256 over one chapter's stored document and its verse text (`chapter_doc.stamp
 The upstream URL plus the edition stamp its text must give (`src/ingest/sources.ts`). A zip rebuilt with the same text passes, and another stamp stops the download. Updating a pin is a new edition. TVTMS, which has no edition stamp, is pinned by the sha256 of its file. (ADR-0005 amendment)
 
 **Full edition**:
-An edition we hold as files, that passes the ingest checks, and whose every word that translates an original word has a Strong's number. Supplied words (`\add`) and words the tag source marks as having no original counterpart need none. Word taps, part-verse marks and whole-Bible offline use need it. Computed from the checks and the rights record, never set by hand. (ADR-0008)
+An edition we hold as files, that passes the ingest checks, and whose every word that translates an original word has a Strong's number. Supplied words (`\add`) and words the tag source marks as having no original counterpart need none. Word taps and part-verse marks need it. Computed from the checks and the rights record, never set by hand. (ADR-0008)
 
 **Reading edition**:
 An edition that passes the numbering and markup checks but isn't Full. It connects to the original language verse by verse through the pivot. (ADR-0008)

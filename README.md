@@ -47,8 +47,7 @@ Started 2026-11-09 from the research in [bible-codex](https://github.com/riolly/
 Steps only a person can do:
 
 - Upload the zip of every new edition to our copy of the pinned sources (step 6) with `gh release upload sources`. The download keeps each zip in `src/ingest/sources/mirror/`. The `sources` release holds the seven current editions.
-- Send the letter to API.Bible in [research/licensing-questions.md](research/licensing-questions.md). It asks whether converting its JSON content to our own chapter document counts as a change under section 4.1 of its terms, whether NASB and NLT may be stored whole on a device, and whether our server may cache chapters. Until it answers, converted licensed chapters stay on this machine (step 10).
-- Send the letter to the Lockman Foundation in the same file. It asks for terms on NASB files with Strong's numbers. That license moves NASB from Reading to Full.
+- Send the letter to the Lockman Foundation in [research/licensing-questions.md](research/licensing-questions.md). It asks for terms on NASB files with Strong's numbers. That license moves NASB from Reading to Full. API.Bible answered its letter on 2026-11-17 (research/licensing.md): converted chapters may leave this machine, and an app or our server may keep a whole licensed Bible with a 30-day refresh.
 
 ## Use from an app
 
