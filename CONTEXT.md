@@ -42,7 +42,7 @@ sha256 over one chapter's stored document and its verse text (`chapter_doc.stamp
 The upstream URL plus the edition stamp its text must give (`src/ingest/sources.ts`). A zip rebuilt with the same text passes, and another stamp stops the download. Updating a pin is a new edition. TVTMS, which has no edition stamp, is pinned by the sha256 of its file. (ADR-0005 amendment)
 
 **Full edition**:
-An edition we hold as files, that passes the ingest checks, and whose every word that translates an original word has a Strong's number. Supplied words (`\add`) and words the tag source marks as having no original counterpart need none. Word taps, part-verse marks and whole-Bible offline use need it. Computed from the checks and the rights record, never set by hand. (ADR-0008)
+An edition we hold as files, that passes the ingest checks, and whose every word that translates an original word has a Strong's number. Supplied words (`\add`) and words the tag source marks as having no original counterpart need none. Word taps and part-verse marks need it. Computed from the checks and the rights record, never set by hand. (ADR-0008)
 
 **Reading edition**:
 An edition that passes the numbering and markup checks but isn't Full. It connects to the original language verse by verse through the pivot. (ADR-0008)
@@ -52,7 +52,7 @@ _Avoid_: partial edition, lite edition
 An edition the first apps read: the English editions in ADR-0008's support table (BSB, KJV, NASB, NLT, NIV, CSB, NKJV, ESV) and the hub texts WLC and SBLGNT. A model feature lands when a contract call or a fixture from one of them needs it. (ADR-0008)
 
 **Rights record**:
-One record per edition saying what its license allows: the route (provider), offline use (`none`, `cache` or `full`), refresh days, copy limit, keep limit, AI use and attribution. The type and the records of the seven local editions and the three licensed ones are in `src/contract/rights.ts`. (ADR-0008)
+One record per edition saying what its license allows: the route (provider), offline use (`none`, `cache` or `full`), refresh days, copy limit, AI use and attribution. The type and the records of the seven local editions and the three licensed ones are in `src/contract/rights.ts`. (ADR-0008)
 
 **Pack**:
 The file an app ships for a set of editions, built from `build/corpus.db` by `bun run pack` (`src/pack/pack.ts`). It is a SQLite file with the corpus tables, and the app contract reads it through `packReader` (`src/pack/format.ts`), which inflates its chapter documents. It holds the editions it names, the hub editions WLC and SBLGNT, the schemes of ADR-0008's target editions with their mappings, and no token or block rows: a word address is read from the verse text (ADR-0004, step 13 amendment). An app ships one pack with all its local editions, so the hub is in it once. The corpus DB never ships.

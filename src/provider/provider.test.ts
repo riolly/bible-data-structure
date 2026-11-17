@@ -51,7 +51,6 @@ const testRights = (edition: string): RightsRecord => ({
   offline: 'cache',
   refreshDays: 30,
   copyLimit: null,
-  keepLimit: null,
   aiUse: 'allowed',
   attribution: null,
   conditions: [],
@@ -201,8 +200,6 @@ describe.skipIf(!native || !existsSync(CORPUS))('the provider: local and license
       expect(await p.rights(id)).toMatchObject({ edition: id, route: 'api.bible', offline: 'cache', refreshDays: 30, copyLimit: 100 });
       expect((await p.rights(id)).attribution).toMatch(/Copyright|copyright/);
     }
-    // Lockman's 1,000 stored verses (research/licensing.md)
-    expect(await Promise.all(['NASB95', 'NLT', 'NIV', 'KJV'].map(async (id) => (await p.rights(id)).keepLimit))).toEqual([1000, null, null, null]);
     expect((await p.rights('NASB95')).aiUse).toBe('no-training');
     expect((await p.rights('NLT')).aiUse).toBe('no-training');
     expect((await p.rights('NIV')).aiUse).toBe('none');

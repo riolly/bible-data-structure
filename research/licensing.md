@@ -109,9 +109,18 @@ Answered on 2026-11-14:
 - API.Bible does not deliver Strong's numbers for NASB. Its chapter endpoint takes `content-type` and five `include-` parameters ([chapters guide][ab-chapters]), and none asks for word data. The NASB 1995 John 3 and Psalm 119 responses fetched on 2026-11-13 hold `chapter`, `para`, `verse`, `char` and `note` nodes with the attributes `number`, `style`, `sid`, `verseId`, `verseOrgIds`, `caller`, `id` and `vid`. None is a Strong's number or a lemma. A Full NASB (ADR-0008) therefore needs files from Lockman.
 - A Digital Bible Library license delivers a text release bundle: a zip with one USX file per book, `metadata.xml`, `styles.xml`, `versification.vrs` and `license.xml` ([DBL entry reference][dbl-bundle]). USX is the XML form of USFM, which the ingest's parser reads (ADR-0001), and the `.vrs` file is the edition's own scheme.
 
-Waiting on a written answer. The letters are in [licensing-questions.md](licensing-questions.md):
+Answered on 2026-11-17 by API.Bible support, in writing (the reply is quoted in [licensing-questions.md](licensing-questions.md)). It holds for the NASB 1995, the NLT and the NIV alike:
 
-- Whether a whole licensed Bible may be stored on a device. The terms allow offline storage with a 30-day refresh, the Express FAQ says "Caching is allowed and recommended", and the developer FAQ asks for "fewer than 500 consecutive verses". Ask API.Bible in writing. Until it answers, the provider counts the chapters it holds in memory as stored, and so does the Node cache for the chapters it keeps on disk (`src/provider/api-bible-cache.ts`). Each keeps NASB under Lockman's 1,000 verses (`keepLimit` in `src/contract/rights.ts`).
+- Converting the JSON into our chapter document is a layout change, not a change under section 4.1, as long as the wording, punctuation, capitalization, verse and paragraph structure, footnotes, headings and attribution stay as sent. `src/provider/api-bible.ts` asks for notes and titles and keeps every word. A marker it doesn't support keeps its text and is counted in `unsupported`, so a new count there is a style to check. Converted chapters may leave this machine.
+- An app may keep a whole Bible on the device. There is no cap. Each chapter is refreshed at least every 30 days, updated or removed when it changes on API.Bible's side, removed within 24 hours when API.Bible asks, and kept in a protected local store, never in the app binary. The developer FAQ's "fewer than 500 consecutive verses" limits one request or one displayed passage, not storage. A chapter request stays under it.
+- Our server may cache the chapters it fetched and serve them to our app under the same conditions. Only the server's calls count against the monthly allowance. The cache serves our app alone, never a public feed or a third party, and the API key stays on the server.
+- A web app, or a native app with a web view, reports FUMS for each display, with the token from the fetch that delivered the chapter. A native app with no web view is exempt.
+- Moving to an organization keeps the app, its key and its Express license if the existing account's registration changes from individual to the organization. A new account under the organization goes through Express Licensing again.
+
+So the rights record lost its keep limit (added in #62 and #80 for Lockman's 1,000 stored verses), and the provider and the Node cache keep every chapter they fetch until its refresh days pass. An edition that caps storage, such as the ESV's 500 verses, brings the limit back. The Lockman letter asks Lockman to confirm that its cap doesn't apply to chapters received through API.Bible.
+
+Waiting on a written answer. The letter is in [licensing-questions.md](licensing-questions.md):
+
 - What file format a direct Lockman license delivers, and whether its words carry Strong's numbers. Lockman licenses a Strong's-keyed NASB to Bible software such as Blue Letter Bible.
 
 [lockman]: https://www.lockman.org/permission-to-quote-copyright-trademark-information/
