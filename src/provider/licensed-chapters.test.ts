@@ -162,6 +162,17 @@ describe('licensed chapters: hold, refresh and fetch', () => {
     expect(calls).toBe(3);
   });
 
+  it('holding a chapter drops the held chapters past their refresh days', async () => {
+    // a top-level element outside the supported list, so `unsupported` names the held John 3
+    const odd = { ...JHN_3, content: [...JHN_3.content, { type: 'tag', name: 'table', items: [] }] } as ApiBibleChapter;
+    const t = make(new Map([['JHN 3', odd], ['JHN 4', JHN_4]]));
+    await t.held.chapter('KJVAB', 'JHN', 3);
+    expect([...t.held.unsupported().keys()]).toEqual(['KJVAB JHN 3']);
+    t.later(31 * day);
+    await t.held.chapter('KJVAB', 'JHN', 4);
+    expect([...t.held.unsupported().keys()]).toEqual([]);
+  });
+
   it('a fetch that gives a copy past the refresh days fails the read', async () => {
     const t = make();
     await t.held.chapter('KJVAB', 'JHN', 3);

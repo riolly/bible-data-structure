@@ -6,7 +6,9 @@
  * (`ChapterRead` in src/contract/reader.ts), so the contract awaits it.
  *
  * With 0 refresh days nothing is held: every read fetches, and the chapter
- * goes only to the reads that waited for that fetch.
+ * goes only to the reads that waited for that fetch. Holding a chapter drops
+ * every held chapter past its refresh days, so a long-running server keeps
+ * none past them.
  *
  * Chapter 0, the front matter, and a chapter outside the edition's scheme
  * are never fetched. Reads of one chapter at the same time share one fetch.
@@ -55,6 +57,7 @@ interface Held {
   /** Null when the edition doesn't print the chapter. */
   readonly read: ReadChapter | null;
   readonly fetchedAt: number;
+  readonly edition: LicensedEdition;
 }
 
 export function licensedChapters(opts: LicensedChaptersOptions): LicensedChapters {
@@ -86,7 +89,8 @@ export function licensedChapters(opts: LicensedChaptersOptions): LicensedChapter
         throw new Error(`${key} is still missing after its fetch: the fetch gave a copy from ${got.fetchedAt}, older than ${e.rights.refreshDays} days`);
       }
       // a refresh replaces the held chapter here: a changed stamp (held.get(key)?.read?.stamp) would be reported here
-      held.set(key, { read, fetchedAt });
+      held.set(key, { read, fetchedAt, edition: e });
+      for (const [k, h] of held) if (!fresh(h.edition, h.fetchedAt)) held.delete(k);
       return read;
     })();
     // a fetch that never settles must not block the chapter: after the timeout the next read fetches again

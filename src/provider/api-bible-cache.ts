@@ -8,7 +8,8 @@
  *
  * Writing a chapter deletes the edition's other kept chapters past their
  * refresh days. The passages that `api-bible:facts` fetches are deleted once
- * its run has written the facts file (`withPassages`). `books.json` holds no verse text and has no bound.
+ * its run has written the facts file (`withPassages`). `books.json` holds no
+ * verse text and is kept with no refresh limit.
  *
  * Deletion touches only `<BOOK>.<chapter>.json` and `passages/*.json` in the
  * edition's own directory, and a file already gone is not an error, so two
@@ -19,7 +20,7 @@
  */
 
 import { existsSync } from 'node:fs';
-import { mkdir, readdir, readFile, rename, rm, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, open, readdir, readFile, rename, rm, unlink, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 
 import { LICENSED_EDITIONS, type RightsRecord } from '../contract/rights';
@@ -124,7 +125,8 @@ const CHAPTER_FILE = /^[0-9A-Z]{3}\.\d+\.json$/;
 
 /**
  * After `written` was kept at `now`, delete the edition's other kept chapters
- * past their refresh days, unreadable, or stamped after now.
+ * past their refresh days, stamped after now, or with no `fetchedAt`. It
+ * reads only the start of each file, so a whole kept Bible stays cheap to sweep.
  */
 async function dropStaleChapters(bibleDir: string, written: string, rights: RightsRecord, now: Date): Promise<void> {
   const names = await readdir(bibleDir).catch((e: NodeJS.ErrnoException) => {
@@ -134,8 +136,21 @@ async function dropStaleChapters(bibleDir: string, written: string, rights: Righ
   for (const name of names) {
     if (name === written || !CHAPTER_FILE.test(name)) continue;
     const file = join(bibleDir, name);
-    const k = await readKept(file);
-    if (!k || !fresh(k.fetchedAt, now, rights)) await remove(file);
+    const fetchedAt = await readFetchedAt(file);
+    if (fetchedAt === null || !fresh(fetchedAt, now, rights)) await remove(file);
+  }
+}
+
+/** `KeptResponse.fetchedAt` from the first bytes of a kept file, which `JSON.stringify` writes first. Null when absent, or the file is gone. */
+async function readFetchedAt(file: string): Promise<string | null> {
+  const f = await open(file).catch(() => null);
+  if (!f) return null;
+  try {
+    const { buffer, bytesRead } = await f.read({ buffer: Buffer.alloc(64), position: 0 });
+    const m = /^\{"fetchedAt":"([^"]+)"/.exec(buffer.toString('utf8', 0, bytesRead));
+    return m && !Number.isNaN(Date.parse(m[1])) ? m[1] : null;
+  } finally {
+    await f.close();
   }
 }
 
